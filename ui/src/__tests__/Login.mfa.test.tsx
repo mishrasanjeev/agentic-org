@@ -59,7 +59,7 @@ describe("Login with two-factor sign-in", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify and sign in" }));
 
     await waitFor(() => expect(completeMfa).toHaveBeenCalledWith("c-123", "123456"));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/dashboard"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/dashboard/insights"));
   }, 20000);
 
   it("returns to the password form when the challenge has expired", async () => {

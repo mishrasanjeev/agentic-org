@@ -147,3 +147,18 @@ async def test_late_data_shows_from_03_00_local_until_yesterday_is_rolled() -> N
     rolled = datetime(2026, 11, 3, 2, 10, tzinfo=zone).astimezone(UTC)
     assert await rollup_late(_Session(rolled), tenant, zone, late.astimezone(UTC)) is False
     assert date(2026, 11, 2) == (late - timedelta(days=1)).date()
+
+
+def test_the_debug_reference_comes_from_the_root_span() -> None:
+    from types import SimpleNamespace
+
+    from core.insights.evidence import debug_ref
+
+    root = SimpleNamespace(parent_span_id=None, attributes={"agent.thread_id": "thread-9", "agent.id": "a1"})
+    child = SimpleNamespace(parent_span_id="s1", attributes={"agent.thread_id": "other"})
+    assert debug_ref([child, root], None) == {"agent_id": "a1", "thread_id": "thread-9"}
+    # The run's own agent stands in when the span does not name one; no thread, no reference.
+    no_agent = SimpleNamespace(parent_span_id=None, attributes={"agent.thread_id": "t"})
+    assert debug_ref([no_agent], "a7") == {"agent_id": "a7", "thread_id": "t"}
+    assert debug_ref([SimpleNamespace(parent_span_id=None, attributes={})], "a7") is None
+    assert debug_ref([], "a7") is None

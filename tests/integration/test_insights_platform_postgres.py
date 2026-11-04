@@ -187,6 +187,20 @@ async def test_functions_return_cross_tenant_aggregates_to_a_nobypassrls_role(mo
             "last_active_day", "reconciled_nights", "last_rollup_status",
         }
 
+        # Today (still being rolled) and yesterday (not yet due to reconcile) do not reset the streak;
+        # a day older than that which never reconciled does.
+        async with admin.begin() as conn:
+            await _rollup(conn, tenant_b, end + timedelta(days=1), "rolled")
+            await _rollup(conn, tenant_b, end + timedelta(days=2), "rolled")
+        async with runtime.connect() as conn:
+            streaks = [
+                tuple((await conn.execute(text(
+                    "SELECT reconciled_nights, last_rollup_status FROM public.insights_platform_tenants(:f,:t) "
+                    "WHERE tenant_id=:b"), {"f": start, "t": end + timedelta(days=days), "b": tenant_b})).one())
+                for days in (1, 2, 3)
+            ]
+        assert streaks == [(3, "reconciled"), (3, "reconciled"), (0, "rolled")]
+
         # A mismatch on the latest night resets the streak.
         async with admin.begin() as conn:
             await _rollup(conn, tenant_a, base + timedelta(days=2), "mismatch")

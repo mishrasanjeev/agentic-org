@@ -376,6 +376,9 @@ async def evaluate(
         result.outcomes.append(outcome)
         if not dry_run:
             _meter(stage, rule.detector, rule.action, mode)
+            from core.insights.runtime_counters import count_guardrail_event
+
+            count_guardrail_event(scope.tenant_id, stage, rule.detector, rule.action, mode)
             logger.info(
                 "guardrail_outcome",
                 correlation_id=scope.correlation_id,

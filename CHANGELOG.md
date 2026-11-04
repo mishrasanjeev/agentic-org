@@ -1,5 +1,117 @@
 # Changelog
 
+## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
+
+- The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,
+  with the tool and connector, error code, latency and attempt; never the parameters or the result). The
+  Engineering view gains **Tool calls** (per tool: calls, failures, refusals, replays, success rate, p95 latency)
+  and the connectors explorer shows each connector's calls, success rate and p95 latency for the last seven days.
+  Developers may now open the connectors explorer.
+- The Compliance view gains **Guardrail outcomes** (by stage, detector, action and mode) and **Security events**
+  (failed sign-ins, rate-limit and scope denials, session revocations, API-key use and webhook signature failures,
+  with a spike flag when a kind's last day is three standard deviations above its previous 30 days).
+- The counters are written only while Insights is on for the organisation and never fail or slow the request they
+  count.
+- Migration v6z115 lets gateway calls be stored without a workflow step or a stored agent, adds `connector_name`,
+  `run_id`, `attempt` and `replayed` to `tool_calls`, and adds `guardrail_events` and `security_events_daily`
+  (forced row-level security). Downgrade refuses while gateway tool calls exist.
+
+## Unreleased - Insights performance, browser journeys, remaining exports and self-observability
+
+- **Performance on a million runs**: `scripts/seed_perf_tenant.py` seeds a local synthetic tenant with 1,000,000
+  runs (it refuses any non-local database) and `scripts/insights_perf_bench.py` times every landing view and
+  explorer. Locally the slowest view answers in 0.74 s and the slowest explorer in 0.45 s at p95
+  (`docs/insights/phase4-perf-local.json`). Insights reads now plan every statement for its own parameters; a
+  prepared statement's generic plan could not prune the monthly run partitions and took the runs explorer from
+  0.3 s to 9 s on its sixth request.
+- **Browser journeys**: twelve Playwright journeys (`ui/tests/browser/insights.spec.ts`) cover each role's landing
+  view with a WCAG 2.2 AA scan, a drill to one run, CSV, XLSX and JSON downloads, the view PDF and a weekly
+  schedule; the deploy workflow runs them.
+- **Exports**: a chart downloads as PDF as well as PNG and SVG; decision tiles have their own export menu; the
+  Value waterfall is a chart card with the same menu; the Platform view's daily figures download as CSV, XLSX or
+  JSON (`GET /api/v1/platform/insights/export`, audited as `platform.insights.export.read`).
+- **The dashboard's own health**: Prometheus histograms for metric, view and explorer answer times, export jobs by
+  kind and outcome, and the last successful rollup sweep; a synthetic check kind `insights_landing` that fails a
+  landing view slower than its budget (1.5 s by default); and **Dashboard operations** on the Platform view: export
+  jobs by status, the failure rate, the oldest open job and tenants whose rollup is more than two hours late.
+- The Report Scheduler keeps an Insights prefill until the form closes.
+- Migration v6z114 adds `insights_platform_operations` (aggregates only, owned by the platform aggregate role,
+  column grants on `insights_exports` status and creation time) and the `insights_landing` synthetic check kind.
+
+## Unreleased - Legacy dashboards retired into Insights
+
+- `/dashboard` now opens each role's landing page: Insights for the roles that have a view, the workbench or the
+  agents list for the rest, and the commerce runtime for merchants.
+- The CEO, CFO, CHRO, COO, CBO, Cost, Partner and Observatory dashboard pages are removed. Their addresses redirect
+  to the matching Insights view (CEO to Executive, CFO to Finance, CHRO to HR, COO to Operations, CBO to Back
+  office, Cost to the cost explorer, Partner to the Partner view) and the Observatory to the audit explorer for
+  administrators and auditors, otherwise to the audit log.
+- The CMO dashboard becomes **Marketing operations** (`/dashboard/marketing-ops`, with ABM at
+  `/dashboard/marketing-ops/abm`): its working panels stay, the KPI cards move to the Marketing view. The old
+  addresses redirect and keep their query.
+- Observability becomes **Monitoring** (`/dashboard/monitoring`): workload and synthetic checks; a run's trace is on
+  its Insights run page, where administrators can also open the run debugger. The scope dashboard becomes the
+  enforcement summary inside the enforcement audit log.
+- The navigation, the natural-language bar, the Companies page, alert links and cost drills point at the new homes;
+  the budget hint now says when no budget alert is set. The Report Scheduler stays the scheduling page.
+
+## Unreleased - Insights Partner view, client pack, saved views and what changed
+
+- **Partner view** (administrators, CFO, COO, auditor) for a CA firm's client companies: active clients with each
+  one's health (its recorded score less 25 per overdue deadline and 5 per filing waiting), runs and run success in
+  the period, open deadlines, filings waiting and the balance outstanding; deadlines not yet filed; filings waiting
+  for approval by type; what the firm invoiced, received and is owed, per currency. No revenue is estimated.
+- **Partner client pack** (administrators and the CFO): a ZIP with one PDF per client company (summary, open
+  deadlines, the period's invoices), `partner.xlsx` (clients, deadlines, filings, billing, filters, definitions) and
+  a signed manifest, from Downloads.
+- **Saved views** on every landing view and explorer: save the current filters under a name, optionally shared
+  with everyone who may open that view; open one from the list; delete your own (administrators may delete a shared
+  one). `GET/POST /api/v1/insights/saved-views`, `PATCH/DELETE /api/v1/insights/saved-views/{id}`.
+- **What changed since you last looked** on the landing views: agents added, agent status changes, approvals
+  decided and failed runs within your domains, alerts for your role and (administrators and auditors)
+  configuration changes, each linking to the rows (`GET /api/v1/insights/changes`; the visit is recorded with
+  `POST /api/v1/insights/changes/seen`).
+- Migration v6z113 adds `saved_views` and `insights_user_state` (forced row-level security) and the
+  `partner_pack` export kind.
+
+## Unreleased - Insights Domain and Back-office views, entity pages and search
+
+- Domain leads and analysts land on a new **My domain** view (runs, success and straight-through rates, latency,
+  run confidence, approvals and feedback, limited to their assigned domain; nothing when no domain is assigned) and
+  open the agents, runs, approvals, cost and quality explorers for that domain. Administrators get a
+  **Back office** view: overdue compliance deadlines (and those due in 30 days), the period's transaction findings
+  by severity, and approvals and runs of the backoffice, legal, risk, corporate and comms agents.
+- New metrics: `runs.confidence` (mean confidence, runs below their agent's floor), `quality.feedback`,
+  `backoffice.deadlines`, `backoffice.txn_findings`. The Finance, HR and Operations views carry the cards the legacy
+  CxO dashboards had (success and straight-through rates, agents by status); the Executive view shows confidence.
+- **Entity pages** (Level 3) for one agent, workflow, connector, company, person or cost centre
+  (`GET /api/v1/insights/entities/{kind}/{id}`): facts, metric cards scoped to the entity, its timeline from the audit
+  log and links to the explorers filtered to it and to its management page. Explorer rows and the run page open
+  them. Who may open each kind follows the explorers; an entity outside the caller's tenant or domains is 404.
+- **Search**: Ctrl/Cmd-K on Insights pages finds agents, workflows, connectors, companies, people and cost centres by
+  name, and a run by its id (`GET /api/v1/insights/search?q=`), among what the caller may open. Breadcrumbs on the
+  explorer, run and entity pages.
+
+## Unreleased - Insights Phase 4 foundation
+
+- The platform view's reconciled-nights count no longer resets every day: today's rollup (still being rolled) and
+  yesterday's (not yet due to reconcile) are skipped, so the Phase 1 gate of 14 reconciled nights can show as
+  met. A day older than that which never reconciled still ends the streak, as do a mismatch and a gap. Migration
+  v6z112 replaces `insights_platform_tenants` in place.
+- The metrics API takes `filter[dim]=a,b` on run metrics (agent, agent type, domain, entry point, task type,
+  environment, status) and two `group_by` dimensions at once (`group_by[]` also accepted); grouped rows carry each
+  dimension's value. Inline exports and background export jobs take the same filters and record them. A filter
+  never widens a domain-limited caller.
+- The legacy partner dashboard (`GET /api/v1/companies/partner-dashboard`) is enforced on the server for the roles
+  its page admits (admin, CFO, COO, auditor); other roles get 403.
+- Tests: tenant isolation across every Insights view, metric, explorer, export format, value summary, alerts list,
+  run evidence, run bundle and background job kind (download and sign-off included), both directions, under a
+  NOBYPASSRLS role; English and Hindi parity for every Insights namespace; every explorer the UI links to exists
+  in the registry (`ui/src/lib/insights/explorerKeys.generated.json`, written by
+  `scripts/generate_insights_metric_keys.py`).
+- `docs/api-reference.md` has an Insights section: views, metrics, filters and grouping, exports, explorers, run
+  evidence, background jobs and sign-off, value, alerts and BI access.
+
 ## Unreleased - Scheduled Insights reports
 
 - The Report Scheduler schedules an Insights view (PDF), the finance pack or the period evidence pack for a period

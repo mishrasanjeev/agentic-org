@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
 import { buildCsv } from "@/lib/csv";
+import EnforcementSummary from "@/components/EnforcementSummary";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -154,6 +155,8 @@ export default function EnforceAuditLog() {
           <Button variant="outline" onClick={exportCSV}>Download CSV</Button>
         </div>
       </div>
+
+      <EnforcementSummary />
 
       {/* Filter Controls */}
       <div className="flex gap-4 items-center flex-wrap">

@@ -1077,14 +1077,14 @@ bypass permissions.
 | Configure voice | [Voice Agents](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
 | Configure browser automation | [RPA Scripts](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
 | Investigate run evidence | [Audit Log](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
-| Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
+| Inspect run timelines | [Insights runs](https://app.agenticorg.ai/dashboard/insights/explore/runs) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
 | Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
-| Review recorded agent cost in USD (no sidebar entry) | [Cost Dashboard](https://app.agenticorg.ai/dashboard/costs) | [Billing and support](/docs/billing-and-support) |
+| Review recorded agent cost | [Insights Finance view](https://app.agenticorg.ai/dashboard/insights?view=finance) | [Billing and support](/docs/billing-and-support) |
 
 #### When you get stuck
 
@@ -2379,7 +2379,7 @@ Audience: Operators and auditors. Reviewed: 2026-10-11.
 
 #### What evidence you should inspect
 
-Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observability**, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Insights** run pages, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
 
 ![Illustrative audit workspace](/screenshots/audit.webp)
 
@@ -2399,7 +2399,7 @@ Do not infer that an absent event means no action occurred. Confirm the view's s
 
 #### Understand screen limits
 
-Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
+The **Audit Log** and, for administrators and auditors, the Insights **Security and audit** explorer read audit history (the Observatory screen is retired; its address opens one of these). Neither is an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
 
 In a tenant that keeps spend rate cards, commitments, invoices, reconciliations or spend jobs, the Audit Log hides those audit rows from every reader who is not a human administrator or auditor, including domain roles and machine credentials, even after spend intelligence is turned off. This is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, on by default; `false` shows them to every reader as before. Where the deployment turns on the tamper-evident audit chain (`AGENTICORG_AUDIT_CHAIN_ENABLED`, off by default), audit rows are linked into a hash chain, and a reader with audit access can read the chain status and verify the links through `GET /api/v1/audit/chain` and `GET /api/v1/audit/chain/verify`.
 
@@ -2474,19 +2474,19 @@ Audience: Administrators and operators. Reviewed: 2026-10-11.
 
 #### Inspect run timelines and workload
 
-The administrator-only **Observability** screen (`/dashboard/observability`) has Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. Traces and Workload are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), a third **Checks** tab lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), a run recorded while it was on offers **Step through** to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+Run timelines live in **Insights**: the **Runs** explorer (`/dashboard/insights/explore/runs`) lists recorded runs, and each run's page shows its span waterfall, the first failure and its records. The administrator-only **Monitoring** screen (`/dashboard/monitoring`, which replaces the Observability screen; the old address redirects there) has Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), Monitoring has a **Checks** tab that lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), an administrator can open the debugger on a run's Insights page (for a run recorded while it was on) to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
 
 ```flow
-Open Observability | Sign in as an authorized administrator and select the intended company.
+Open Insights | Sign in as an authorized administrator and select the intended company.
 Check recording state | Read the tracing/timeline status before interpreting an empty run list.
-Find a run | Filter recent runs by agent, then open one run to inspect parent/child spans and events.
-Compare workload | Review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
+Find a run | Filter the Runs explorer by agent or status, then open one run to inspect parent/child spans and events.
+Compare workload | On Monitoring, review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
 Follow the correlation | Use run/correlation identifiers to inspect audit details and the downstream system separately.
 ```
 
 #### Traces and timelines
 
-The list requests up to 50 recent stored runs and can filter by agent ID. A run detail displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
+The Runs explorer pages through the period's runs and filters by agent, status and other columns. A run's page displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
 
 Before a platform owner changes `AGENTICORG_TRACING_ENABLED` or `AGENTICORG_TRACING_TIMELINE_ENABLED`, agree on an approved OTLP endpoint and protocol, sampling, data classification, storage and retention. Both controls default to off; strict production-like environments require a valid exporter endpoint when tracing is enabled. Confirm the effective retention setting with the platform owner before relying on historical timelines. Never send sensitive payloads to an unapproved telemetry collector.
 
@@ -2794,7 +2794,7 @@ published on or after 21 October 2026. See [Licensing and commercial use](/docs/
 agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). Free personal
 use of the software does not mean free hosting or providers.
 
-Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
+Administrators and CFOs read recorded agent cost on the Insights **Finance** view (`/dashboard/insights?view=finance`) and its cost explorer. It is the platform's own record, not a provider invoice.
 
 The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.
 
@@ -3197,7 +3197,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 
 #### What is not in phase 1
 
-- **No spend screen.** Phase 1 is API-only. The app's existing cost views, such as the Cost Dashboard at `/dashboard/costs` (administrators and CFOs; it has no sidebar entry), read the existing cost ledgers, not these usage records.
+- **No spend screen.** Phase 1 is API-only. The Insights Finance view and its cost explorer read spend metering rollups when metering is on for the tenant, otherwise the cost ledgers (the old Cost Dashboard address now opens the Finance view).
 - **No spend dashboards, budgets, alerts, forecasts, statements or month close.** These belong to later phases; freezing closed months and statements belong to phase 2. Spend intelligence does not block or throttle a call because of its spend.
 - **Some usage is not metered:** the embedding backfill command and seed data, the voice runtime's own speech-to-text and text-to-speech outside the speech store, and the tool gateway's own completion path.
 - **No batch flag on records.** Reconciliation re-prices every group as non-batch usage.

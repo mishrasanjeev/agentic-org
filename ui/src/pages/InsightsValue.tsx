@@ -15,7 +15,7 @@ import { Link, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
-import InsightChart from "@/components/insights/InsightChart";
+import ChartCard from "@/components/insights/ChartCard";
 import { errorStatus, insightsApi, readErrorDetail, type MetricResponse, type ReportingSettings } from "@/lib/insights/api";
 import { isIsoDate, presetRange, RANGE_PRESETS, todayIn, type RangePreset } from "@/lib/insights/dates";
 import { formatMoney, formatPercent, MISSING } from "@/lib/insights/format";
@@ -250,7 +250,13 @@ function ValueBody({
               </div>
             </dl>
             <div className="lg:col-span-2">
-              <InsightChart metric={metric} kind="waterfall" currency={currency} />
+              {/* A card: the chart's text summary, its data table and its export (money saved for this period). */}
+              <ChartCard
+                metric={metric}
+                kind="waterfall"
+                currency={currency}
+                filters={{ from: data.period.from, to: data.period.to, compare: "none" }}
+              />
             </div>
           </div>
         ) : (

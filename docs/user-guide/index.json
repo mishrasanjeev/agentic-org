@@ -182,7 +182,7 @@
       "reviewed": "2026-10-11",
       "sources": [
         "ui/src/pages/IndustryPacks.tsx",
-        "ui/src/pages/CFODashboard.tsx",
+        "ui/src/pages/InsightsDashboard.tsx",
         "ui/src/pages/CompanyDashboard.tsx"
       ]
     },
@@ -237,7 +237,7 @@
       "reviewed": "2026-10-11",
       "sources": [
         "ui/src/pages/Audit.tsx",
-        "ui/src/pages/Observatory.tsx",
+        "ui/src/pages/InsightsExplorer.tsx",
         "docs/PRODUCT_STATUS.md"
       ]
     },
@@ -263,7 +263,8 @@
       "audience": "Administrators and operators",
       "reviewed": "2026-10-11",
       "sources": [
-        "ui/src/pages/Observability.tsx",
+        "ui/src/pages/Monitoring.tsx",
+        "ui/src/pages/InsightsRun.tsx",
         "api/v1/observability.py",
         "observability/workload.py",
         "observability/timeline.py"
@@ -617,7 +618,7 @@
       "audience": "Finance and treasury operations",
       "sources": [
         "core/agents/finance/recon_agent.py",
-        "ui/src/pages/CFODashboard.tsx",
+        "ui/src/pages/InsightsDashboard.tsx",
         "ui/src/pages/WorkflowCreate.tsx"
       ]
     },

@@ -46,9 +46,10 @@ MIN_PRODUCTION_SHADOW_ACCURACY = Decimal("0.600")
 # How far back the agents explorer looks for each agent's last run.
 IDLE_WINDOW_DAYS = 90
 RUNS_LINK = "/dashboard/insights/runs"
-AGENT_LINK = "/dashboard/agents"
+# Entity pages (Level 3); each links on to the record's own management page.
+AGENT_LINK = "/dashboard/insights/agents"
 APPROVALS_LINK = "/dashboard/approvals"
-CONNECTOR_LINK = "/dashboard/connectors"
+CONNECTOR_LINK = "/dashboard/insights/connectors"
 NO_DOMAIN_HINT = "No domain is assigned to you, so there is nothing to show here."
 
 
@@ -405,7 +406,10 @@ async def explore_workflows(ctx: ExploreContext) -> ExploreData:
             "steps_completed": r.steps_completed,
             "steps_total": r.steps_total,
             "past_timeout": bool(r.late),
-            "links": {"workflow_run": f"/dashboard/workflows/{r[1]}/runs/{r[0]}"},
+            "links": {
+                "workflow_run": f"/dashboard/workflows/{r[1]}/runs/{r[0]}",
+                "workflow": f"/dashboard/insights/workflows/{r[1]}",
+            },
         }
         for r in found
     ]
@@ -762,6 +766,10 @@ async def explore_quality(ctx: ExploreContext) -> ExploreData:
 _HEALTH_ORDER = {"unhealthy": 3, "degraded": 2, "unknown": 1, "healthy": 0}
 
 
+# The connectors explorer's call figures cover this many days (a snapshot of now).
+CONNECTOR_CALL_DAYS = 7
+
+
 async def explore_connectors(ctx: ExploreContext) -> ExploreData:
     from sqlalchemy import select
 
@@ -806,8 +814,10 @@ async def explore_connectors(ctx: ExploreContext) -> ExploreData:
     for (ids,) in agent_rows:
         for cid in ids or []:
             dependents[str(cid)] += 1
+    calls = await _connector_calls(m)
     rows: list[dict[str, Any]] = []
     for c in connectors:
+        used = calls.get(str(c.name))
         found = configs.get(str(c.name), [])
         health = None
         last_check = c.health_check_at
@@ -827,18 +837,52 @@ async def explore_connectors(ctx: ExploreContext) -> ExploreData:
                 "sync_failing": any(cfg.sync_error for cfg in found),
                 "last_health_check": last_check,
                 "dependent_agents": dependents.get(str(c.id), 0),
+                "calls_7d": used["calls"] if used else 0,
+                "success_rate_7d": used["success_rate"] if used else None,
+                "p95_ms_7d": used["p95_ms"] if used else None,
                 "links": {"connector": f"{CONNECTOR_LINK}/{c.id}"},
             }
         )
     return ExploreData(
         rows,
-        "connectors+connector_configs",
+        "connectors+connector_configs+tool_calls",
         "measured",
         hint=(
-            "Call counts, success rate and latency per connector need tool-call records, which are not "
-            "written yet; health comes from each connector's last health check."
+            "Health comes from each connector's last health check; calls, success rate and p95 latency are the "
+            "last seven days of tool calls through the tool gateway, recorded while Insights is on."
         ),
     )
+
+
+async def _connector_calls(m: Any) -> dict[str, dict[str, Any]]:
+    """Per connector name, the last seven days of gateway tool calls: count, success rate (%) and p95 latency."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import case, func, select
+
+    from core.models.tool_call import ToolCall as T
+
+    since = datetime.now(UTC) - timedelta(days=CONNECTOR_CALL_DAYS)
+    rows = (
+        await m.session.execute(
+            select(
+                T.connector_name,
+                func.count(),
+                func.sum(case((T.status.in_(("success", "replayed")), 1), else_=0)),
+                func.percentile_cont(0.95).within_group(T.latency_ms),
+            )
+            .where(T.tenant_id == m.tenant_id, T.called_at >= since, T.connector_name.is_not(None))
+            .group_by(T.connector_name)
+        )
+    ).all()
+    return {
+        str(name): {
+            "calls": int(n or 0),
+            "success_rate": round(100.0 * int(ok or 0) / int(n), 1) if n else None,
+            "p95_ms": round(float(p95), 1) if p95 is not None else None,
+        }
+        for name, n, ok, p95 in rows
+    }
 
 
 # ------------------------------------------------------------------ audit log

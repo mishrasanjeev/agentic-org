@@ -750,8 +750,18 @@ test.describe("Client Health Score", () => {
 });
 
 // ==========================================================================
-//  Partner Dashboard (Phase 2)
+//  Partner view (Phase 2). The Partner dashboard is retired: /dashboard/partner
+//  now opens the Insights partner view, which holds the client, deadline,
+//  filing and billing figures.
 // ==========================================================================
+
+const PARTNER_VIEW_URL = /\/dashboard\/insights\?(.*&)?view=partner/;
+const PARTNER_TILES = [
+  "Active client companies",
+  "Compliance deadlines",
+  "Filings waiting for approval",
+  "Invoiced to clients",
+];
 
 test.describe("Partner Dashboard", () => {
   test.beforeEach(async ({ page }) => {
@@ -759,7 +769,7 @@ test.describe("Partner Dashboard", () => {
     await authenticate(page);
   });
 
-  test("loads at /dashboard/partner", async ({ page }) => {
+  test("/dashboard/partner redirects to the Insights partner view", async ({ page }) => {
     const response = await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
@@ -767,7 +777,9 @@ test.describe("Partner Dashboard", () => {
     expect(status).toBeLessThan(500);
 
     if (status < 400) {
+      await expect(page).toHaveURL(PARTNER_VIEW_URL, { timeout: 15000 });
       await page.waitForLoadState("networkidle").catch(() => {});
+      await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 15000 });
       const body = (await page.locator("body").textContent()) || "";
       expect(body).not.toContain("Application error");
       expect(body).not.toContain("Cannot GET");
@@ -775,41 +787,37 @@ test.describe("Partner Dashboard", () => {
   });
 
   test("shows aggregate KPI cards", async ({ page }) => {
-    // Sync on /partner-dashboard so we don't assert against the "Loading
-    // partner dashboard…" skeleton.
-    const dashboardLoaded = page.waitForResponse(
+    // Sync on the partner view's data so we don't assert against the
+    // loading skeleton.
+    const viewLoaded = page.waitForResponse(
       (r) =>
-        r.url().includes("/api/v1/partner-dashboard") &&
+        r.url().includes("/api/v1/insights/views/partner") &&
         r.request().method() === "GET",
       { timeout: 30000 },
     );
     await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
-    await dashboardLoaded;
-    await expect(
-      page.getByText(/Loading partner dashboard/i),
-    ).toHaveCount(0, { timeout: 15000 });
+    await viewLoaded;
+    await expect(page).toHaveURL(PARTNER_VIEW_URL);
 
-    // Partner dashboard should show KPI cards with metrics
-    const kpiLabels = ["Total Clients", "Active", "Filings Due", "Health Score", "Revenue"];
+    // The partner view shows a tile per client, deadline, filing and billing figure
     let foundKPIs = 0;
-    for (const label of kpiLabels) {
+    for (const label of PARTNER_TILES) {
       const el = page.getByText(label, { exact: false }).first();
       if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
         foundKPIs++;
       }
     }
     // Should find at least 2 KPI cards
-    const body = (await page.locator("body").textContent()) || "";
-    const hasKPIs = foundKPIs >= 2 || body.includes("Total Clients") || body.includes("Active");
-    expect(hasKPIs).toBeTruthy();
+    expect(foundKPIs).toBeGreaterThanOrEqual(2);
   });
 
   test("shows client health table", async ({ page }) => {
     await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
+    await expect(page).toHaveURL(PARTNER_VIEW_URL, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
 
     // Look for a table or list of clients with health indicators
@@ -826,12 +834,14 @@ test.describe("Partner Dashboard", () => {
     await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
+    await expect(page).toHaveURL(PARTNER_VIEW_URL, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // Upcoming deadlines section
+    // Compliance deadlines and filings waiting for approval
     const body = (await page.locator("body").textContent()) || "";
     const hasDeadlines =
       body.includes("Deadline") ||
+      body.includes("deadline") ||
       body.includes("Due") ||
       body.includes("Filing") ||
       body.includes("Upcoming");
@@ -1317,7 +1327,7 @@ test.describe("CompanyDetail Tab Content", () => {
 });
 
 // ==========================================================================
-//  Partner Dashboard Details
+//  Partner view details (the Insights partner view)
 // ==========================================================================
 
 test.describe("Partner Dashboard Details", () => {
@@ -1326,19 +1336,19 @@ test.describe("Partner Dashboard Details", () => {
     await authenticate(page);
   });
 
-  test("shows a well-formed revenue card without a hardcoded amount", async ({ page }) => {
-    await page.goto(`${APP}/dashboard/partner`, {
+  test("shows a well-formed billing card without a hardcoded amount", async ({ page }) => {
+    await page.goto(`${APP}/dashboard/insights?view=partner`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
 
+    await expect(page.getByText("Invoiced to clients").first()).toBeVisible();
     const body = (await page.locator("body").textContent()) || "";
-    await expect(page.getByText(/Revenue/i).first()).toBeVisible();
     expect(body).not.toMatch(/\bundefined\b|\bNaN\b/);
   });
 
   test("shows 7 client rows in health table", async ({ page }) => {
-    await page.goto(`${APP}/dashboard/partner`, {
+    await page.goto(`${APP}/dashboard/insights?view=partner`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -1366,7 +1376,7 @@ test.describe("Partner Dashboard Details", () => {
   });
 
   test("no undefined or NaN values", async ({ page }) => {
-    await page.goto(`${APP}/dashboard/partner`, {
+    await page.goto(`${APP}/dashboard/insights?view=partner`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -1438,7 +1448,8 @@ test.describe("Compliance Alerts Configuration", () => {
 });
 
 // ==========================================================================
-//  CxO Dashboard Nav Links in Layout Sidebar
+//  CxO dashboards retired: the sidebar points to Insights, and the old CxO
+//  URLs open the matching Insights view (or Marketing operations for CMO)
 // ==========================================================================
 
 test.describe("CxO Dashboard Nav Links in Layout", () => {
@@ -1447,115 +1458,92 @@ test.describe("CxO Dashboard Nav Links in Layout", () => {
     await authenticate(page);
   });
 
-  test("sidebar contains CxO dashboard links", async ({ page }) => {
+  test("sidebar shows Insights and no retired CxO dashboard links", async ({ page }) => {
     await page.goto(`${APP}/dashboard`, {
       waitUntil: "domcontentloaded",
     });
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // The Layout sidebar should contain links for CxO dashboards.
-    // Depending on the user role, not all 6 may be visible.
-    const cxoLabels = [
+    await expect(page.locator('nav a:has-text("Insights"):visible').first()).toBeVisible({ timeout: 15000 });
+
+    const retiredLabels = [
       "CEO Dashboard",
       "Finance Dashboard",
       "CHRO Dashboard",
       "Marketing Dashboard",
       "COO Dashboard",
       "CBO Dashboard",
+      "Partner Dashboard",
     ];
-
-    let foundCount = 0;
-    for (const label of cxoLabels) {
-      // Try both nav-scoped and general link locators
-      const navLink = page.locator(`nav a:has-text("${label}")`).first();
-      const anyLink = page.locator(`a:has-text("${label}")`).first();
-      if (
-        (await navLink.isVisible({ timeout: 2000 }).catch(() => false)) ||
-        (await anyLink.isVisible({ timeout: 1000 }).catch(() => false))
-      ) {
-        foundCount++;
-      }
+    for (const label of retiredLabels) {
+      await expect(page.locator(`nav a:has-text("${label}")`)).toHaveCount(0);
     }
-
-    // Fallback: check that the page body references at least one CxO dashboard
-    const body = (await page.locator("body").textContent()) || "";
-    const hasCxoRef =
-      body.includes("CEO") ||
-      body.includes("CFO") ||
-      body.includes("Dashboard");
-
-    // At minimum, the user should see at least one CxO link or reference
-    expect(foundCount >= 1 || hasCxoRef).toBeTruthy();
   });
 
-  test("CEO Dashboard nav link navigates correctly", async ({ page }) => {
-    await page.goto(`${APP}/dashboard`, {
+  test("Insights nav link opens the Insights page", async ({ page }) => {
+    await page.goto(`${APP}/dashboard/agents`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    const ceoLink = page.locator('nav a:has-text("CEO Dashboard")').first();
-    if (await ceoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await ceoLink.click();
-      await page.waitForLoadState("networkidle").catch(() => {});
-      expect(page.url()).toContain("/dashboard/ceo");
-      await expect(page.getByText("CEO Dashboard").first()).toBeVisible({
-        timeout: 15000,
-      });
-    }
-  });
-
-  test("Finance Dashboard nav link navigates to CFO page", async ({ page }) => {
-    await page.goto(`${APP}/dashboard`, {
-      waitUntil: "domcontentloaded",
+    const insightsLink = page.locator('nav a:has-text("Insights"):visible').first();
+    await expect(insightsLink).toBeVisible({ timeout: 15000 });
+    await insightsLink.click();
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({
+      timeout: 15000,
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
-
-    const cfoLink = page.locator('nav a:has-text("Finance Dashboard")').first();
-    if (await cfoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await cfoLink.click();
-      await page.waitForLoadState("networkidle").catch(() => {});
-      expect(page.url()).toContain("/dashboard/cfo");
-      await expect(page.getByText("CFO Dashboard").first()).toBeVisible({
-        timeout: 15000,
-      });
-    }
   });
 
-  test("Marketing Dashboard nav link navigates to CMO page", async ({ page }) => {
-    await page.goto(`${APP}/dashboard`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForLoadState("networkidle").catch(() => {});
-
-    const cmoLink = page.locator('nav a:has-text("Marketing Dashboard")').first();
-    if (await cmoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await cmoLink.click();
-      await page.waitForLoadState("networkidle").catch(() => {});
-      expect(page.url()).toContain("/dashboard/cmo");
-      await expect(page.getByText("CMO Dashboard").first()).toBeVisible({
-        timeout: 15000,
-      });
-    }
-  });
-
-  test("sidebar CxO links have correct active state highlighting", async ({ page }) => {
+  test("/dashboard/cfo opens the Insights finance view", async ({ page }) => {
     await page.goto(`${APP}/dashboard/cfo`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
+    // Admin and CFO are redirected; other roles get the access-denied page.
+    if (page.url().includes("/dashboard/access-denied")) return;
+    await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=finance/, { timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({
+      timeout: 15000,
+    });
+  });
 
-    // The Finance Dashboard link should have an active/highlighted class
-    const cfoLink = page.locator('a:has-text("Finance Dashboard")').first();
-    if (await cfoLink.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const className = (await cfoLink.getAttribute("class")) || "";
+  test("Marketing operations nav link opens the marketing operations page", async ({ page }) => {
+    await page.goto(`${APP}/dashboard/insights`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+
+    const marketingLink = page.locator('nav a:has-text("Marketing operations"):visible').first();
+    if (await marketingLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await marketingLink.click();
+      await page.waitForLoadState("networkidle").catch(() => {});
+      expect(page.url()).toContain("/dashboard/marketing-ops");
+      await expect(page.getByRole("heading", { name: "Marketing operations" }).first()).toBeVisible({
+        timeout: 15000,
+      });
+    }
+  });
+
+  test("Insights nav link has active state highlighting after the /dashboard/cfo redirect", async ({ page }) => {
+    await page.goto(`${APP}/dashboard/cfo`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForLoadState("networkidle").catch(() => {});
+    if (page.url().includes("/dashboard/access-denied")) return;
+
+    // The Insights link should have an active/highlighted class
+    const insightsLink = page.locator('nav a:has-text("Insights"):visible').first();
+    if (await insightsLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      const className = (await insightsLink.getAttribute("class")) || "";
       // Accept any active-state styling: bg-primary, bg-accent, active, aria-current, etc.
       const hasActiveStyle =
         className.includes("bg-primary") ||
         className.includes("bg-accent") ||
         className.includes("active") ||
         className.includes("selected");
-      const ariaCurrent = await cfoLink.getAttribute("aria-current");
+      const ariaCurrent = await insightsLink.getAttribute("aria-current");
       expect(hasActiveStyle || ariaCurrent === "page").toBeTruthy();
     }
   });

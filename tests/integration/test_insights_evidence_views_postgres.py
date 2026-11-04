@@ -72,6 +72,10 @@ BASE_TABLES = (
     "insights_alerts",
     # Exports read the tenant's PII masking setting (v6z110 release).
     "governance_config",
+    # The runtime counters the Compliance and Engineering views read (v6z115).
+    "tool_calls",
+    "guardrail_events",
+    "security_events_daily",
 )
 
 pytestmark = [

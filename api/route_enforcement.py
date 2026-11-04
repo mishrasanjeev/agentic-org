@@ -369,6 +369,11 @@ def _deny(request: Request, status: int, detail: str, **ctx: Any) -> None:
     if _enforcement_mode() == "log":
         logger.warning("route_enforcement_log_only", extra={"path": request.url.path, "detail": detail, **ctx})
         return
+    from core.insights.runtime_counters import count_security_event
+
+    count_security_event(
+        getattr(request.state, "tenant_id", None), "rate_limited" if status == 429 else "scope_denied"
+    )
     raise HTTPException(status_code=status, detail=detail)
 
 

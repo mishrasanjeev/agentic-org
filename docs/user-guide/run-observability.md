@@ -1,18 +1,18 @@
 ## Inspect run timelines and workload
 
-The administrator-only **Observability** screen (`/dashboard/observability`) has Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. Traces and Workload are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), a third **Checks** tab lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), a run recorded while it was on offers **Step through** to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+Run timelines live in **Insights**: the **Runs** explorer (`/dashboard/insights/explore/runs`) lists recorded runs, and each run's page shows its span waterfall, the first failure and its records. The administrator-only **Monitoring** screen (`/dashboard/monitoring`, which replaces the Observability screen; the old address redirects there) has Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), Monitoring has a **Checks** tab that lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), an administrator can open the debugger on a run's Insights page (for a run recorded while it was on) to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
 
 ```flow
-Open Observability | Sign in as an authorized administrator and select the intended company.
+Open Insights | Sign in as an authorized administrator and select the intended company.
 Check recording state | Read the tracing/timeline status before interpreting an empty run list.
-Find a run | Filter recent runs by agent, then open one run to inspect parent/child spans and events.
-Compare workload | Review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
+Find a run | Filter the Runs explorer by agent or status, then open one run to inspect parent/child spans and events.
+Compare workload | On Monitoring, review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
 Follow the correlation | Use run/correlation identifiers to inspect audit details and the downstream system separately.
 ```
 
 ## Traces and timelines
 
-The list requests up to 50 recent stored runs and can filter by agent ID. A run detail displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
+The Runs explorer pages through the period's runs and filters by agent, status and other columns. A run's page displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
 
 Before a platform owner changes `AGENTICORG_TRACING_ENABLED` or `AGENTICORG_TRACING_TIMELINE_ENABLED`, agree on an approved OTLP endpoint and protocol, sampling, data classification, storage and retention. Both controls default to off; strict production-like environments require a valid exporter endpoint when tracing is enabled. Confirm the effective retention setting with the platform owner before relying on historical timelines. Never send sensitive payloads to an unapproved telemetry collector.
 

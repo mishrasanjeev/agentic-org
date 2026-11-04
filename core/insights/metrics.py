@@ -67,7 +67,8 @@ NEEDS_YOU_APPROVALS = 5
 PAUSED_AGENT_DAYS = 7
 APPROVALS_LINK = "/dashboard/approvals"
 AGENTS_LINK = "/dashboard/agents"
-COSTS_LINK = "/dashboard/costs"
+# Budget and spend items drill to the cost explorer (the legacy Cost page is retired).
+COSTS_LINK = "/dashboard/insights/explore/cost"
 UNATTRIBUTED = "unattributed"
 
 # Run statuses that are not an outcome yet: a person still has to act.
@@ -84,6 +85,8 @@ DEBUG_ENTRYPOINT = "debug"
 RUN_GROUPS: tuple[str, ...] = ("agent", "agent_type", "domain", "entrypoint", "task_type", "environment", "status")
 # An internal grouping by agent type and task type together (core/insights/value.py).
 AGENT_TASK_GROUP = "agent_task"
+# Separates the two values of a two-dimension grouping inside one group key.
+GROUP_SEPARATOR = "\x1f"
 
 NO_RUNS_HINT = (
     "No agent runs are recorded for this period. Runs are recorded as agents run; "
@@ -192,8 +195,19 @@ class MetricContext:
     # Domains the caller's run metrics are limited to; None = every domain.
     domains: list[str] | None = None
     group_by: str | None = None
+    # A second grouping dimension (run metrics only; set only with ``group_by``).
+    group_by_2: str | None = None
+    # Run dimensions limited to these values (``filter[dim]``; run metrics only).
+    filters: dict[str, tuple[str, ...]] = field(default_factory=dict)
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
     cache: dict[Any, Any] = field(default_factory=dict)
+
+    @property
+    def grouping(self) -> str | tuple[str, str] | None:
+        """``group_by``, or the pair of dimensions when a second one is set."""
+        if self.group_by is not None and self.group_by_2 is not None:
+            return (self.group_by, self.group_by_2)
+        return self.group_by
 
     @property
     def zone(self) -> ZoneInfo:
@@ -205,10 +219,17 @@ class MetricContext:
 
 
 async def apply_statement_timeout(session: Any) -> None:
-    """Bound every statement of the current transaction (the Insights reads) to ``STATEMENT_TIMEOUT``."""
+    """Bound every statement of the current transaction (the Insights reads) to ``STATEMENT_TIMEOUT``.
+
+    It also plans every statement for its own parameters (``plan_cache_mode = force_custom_plan``, transaction
+    local). The driver prepares statements, and after five runs Postgres may switch a prepared statement to a
+    generic plan that cannot prune ``run_facts``' monthly partitions by tenant and date: on a tenant with a
+    million runs a month the runs explorer went from 0.3 s to 9 s on its sixth request.
+    """
     from sqlalchemy import text
 
     await session.execute(text("SELECT set_config('statement_timeout', :v, true)"), {"v": STATEMENT_TIMEOUT})
+    await session.execute(text("SELECT set_config('plan_cache_mode', 'force_custom_plan', true)"))
 
 
 # ------------------------------------------------------------------ helpers
@@ -314,23 +335,34 @@ class RunData:
         return quality_of(row["data_quality"] for row in self.rows if row["runs"])
 
 
-def _group_expr(table: Any, group: str | None) -> Any:
-    from sqlalchemy import String, cast, func, literal
+def _group_expr(table: Any, group: str | tuple[str, str] | None) -> Any:
+    from sqlalchemy import func, literal
 
+    if isinstance(group, tuple):
+        first, second = group
+        return func.concat(
+            _group_value(table, first), literal(GROUP_SEPARATOR), _group_value(table, second)
+        ).label("grp")
     if group is None:
         return literal("").label("grp")
+    return _group_value(table, group).label("grp")
+
+
+def _group_value(table: Any, group: str) -> Any:
+    from sqlalchemy import String, cast, func, literal
+
     if group == AGENT_TASK_GROUP:
         # Internal (money saved): "agent_type|task_type", never offered as an API grouping.
         return func.concat(
             func.coalesce(table.agent_type, literal(UNATTRIBUTED)),
             literal("|"),
             func.coalesce(table.task_type, literal("")),
-        ).label("grp")
+        )
     if group == "agent":
-        return func.coalesce(cast(table.agent_id, String), table.agent_ref, literal(UNATTRIBUTED)).label("grp")
+        return func.coalesce(cast(table.agent_id, String), table.agent_ref, literal(UNATTRIBUTED))
     if group not in RUN_GROUPS:
         raise ValueError(f"unknown run group {group!r}")
-    return func.coalesce(getattr(table, group), literal(UNATTRIBUTED)).label("grp")
+    return func.coalesce(getattr(table, group), literal(UNATTRIBUTED))
 
 
 def _filters(ctx: MetricContext, table: Any, *, domain_filter: bool) -> list[Any]:
@@ -340,10 +372,25 @@ def _filters(ctx: MetricContext, table: Any, *, domain_filter: bool) -> list[Any
         clauses.append(table.company_id == ctx.company_id)
     if domain_filter and ctx.domains is not None:
         clauses.append(table.domain.in_(list(ctx.domains)))
+    for dim, values in sorted(ctx.filters.items()):
+        clauses.append(_filter_clause(table, dim, values))
     return clauses
 
 
-def _daily_query(ctx: MetricContext, days: list[date], group: str | None, domain_filter: bool) -> Any:
+def _filter_clause(table: Any, dim: str, values: tuple[str, ...]) -> Any:
+    """``dim`` is one of ``values``; ``agent`` matches the agent id or the raw agent reference."""
+    from sqlalchemy import String, cast, or_
+
+    if dim not in RUN_GROUPS:
+        raise ValueError(f"unknown run filter {dim!r}")
+    if dim == "agent":
+        return or_(cast(table.agent_id, String).in_(values), table.agent_ref.in_(values))
+    return getattr(table, dim).in_(values)
+
+
+def _daily_query(
+    ctx: MetricContext, days: list[date], group: str | tuple[str, str] | None, domain_filter: bool
+) -> Any:
     from sqlalchemy import func, select
 
     from core.models.insights import InsightsDaily as D
@@ -360,7 +407,9 @@ def _daily_query(ctx: MetricContext, days: list[date], group: str | None, domain
     )
 
 
-def _raw_query(ctx: MetricContext, days: list[date], group: str | None, domain_filter: bool) -> Any:
+def _raw_query(
+    ctx: MetricContext, days: list[date], group: str | tuple[str, str] | None, domain_filter: bool
+) -> Any:
     from sqlalchemy import Date, and_, cast, func, select
 
     from core.models.insights import RunFact as F
@@ -465,7 +514,7 @@ def closed_at(day: date, zone: ZoneInfo) -> datetime:
 
 
 async def run_data(
-    ctx: MetricContext, period: Period, *, group: str | None = None, domain_filter: bool = True
+    ctx: MetricContext, period: Period, *, group: str | tuple[str, str] | None = None, domain_filter: bool = True
 ) -> RunData:
     """Run sums for ``period``: rolled closed days from ``insights_daily``, the rest from ``run_facts``.
 
@@ -479,7 +528,7 @@ async def run_data(
 
     from core.models.insights import InsightsRollupState as S
 
-    key = ("runs", period.start, period.end, group, domain_filter)
+    key = ("runs", period.start, period.end, group, domain_filter, tuple(sorted(ctx.filters.items())))
     if key in ctx.cache:
         return ctx.cache[key]
     today = ctx.today
@@ -608,12 +657,26 @@ def _by_group(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     return grouped
 
 
+def _group_parts(ctx: MetricContext, grp: str) -> dict[str, str]:
+    """The dimension values inside one group key (one or two dimensions)."""
+    if ctx.group_by_2 is None:
+        return {str(ctx.group_by): grp}
+    first, _, second = grp.partition(GROUP_SEPARATOR)
+    return {str(ctx.group_by): first, ctx.group_by_2: second}
+
+
 async def _group_labels(ctx: MetricContext, groups: Iterable[str]) -> dict[str, str]:
+    """A display label per group key: agent ids named, two dimensions joined with " · "."""
     groups = list(groups)
-    if ctx.group_by != "agent":
-        return {g: g for g in groups}
-    names = await agent_names(ctx, groups)
-    return {g: names.get(g, g) for g in groups}
+    parts = {g: _group_parts(ctx, g) for g in groups}
+    names: dict[str, str] = {}
+    if "agent" in (ctx.group_by, ctx.group_by_2):
+        names = await agent_names(ctx, [p["agent"] for p in parts.values()])
+    labels: dict[str, str] = {}
+    for g, values in parts.items():
+        shown = [names.get(v, v) if dim == "agent" else v for dim, v in values.items()]
+        labels[g] = " · ".join(shown)
+    return labels
 
 
 async def _run_series(
@@ -654,20 +717,23 @@ async def _run_series(
     group_rows = []
     for grp, rows in _by_group(data.rows).items():
         value = measure(totals(rows))
-        group_rows.append({"group": labels.get(grp, grp), "value": value})
+        row: dict[str, Any] = {"group": labels.get(grp, grp), "value": value}
+        if ctx.group_by_2 is not None:
+            row["groups"] = _group_parts(ctx, grp)
+        group_rows.append(row)
     group_rows.sort(key=lambda r: (-(r["value"] or 0), r["group"]))
     return series, group_rows
 
 
 async def _run_metric(ctx: MetricContext, measure: Any, *, fill_zero: bool, empty: Any = None) -> dict[str, Any]:
-    data = await run_data(ctx, ctx.period, group=ctx.group_by)
+    data = await run_data(ctx, ctx.period, group=ctx.grouping)
     if not any(row["runs"] for row in data.rows):
         hint = NO_RUNS_HINT if not data.skipped_days else _skipped_hint(ctx, data)
         return no_data(data.source, hint or NO_RUNS_HINT)
     value = measure(totals(data.rows))
     out: dict[str, Any] = {"value": value, "source": data.source, "data_quality": data.quality()}
     if ctx.compare is not None:
-        previous = await run_data(ctx, ctx.compare, group=ctx.group_by)
+        previous = await run_data(ctx, ctx.compare, group=ctx.grouping)
         out["compare_value"] = measure(totals(previous.rows)) if any(r["runs"] for r in previous.rows) else None
     series, group_rows = await _run_series(ctx, data, measure, fill_zero=fill_zero)
     out["series"] = series
@@ -728,6 +794,28 @@ async def resolve_runs_straight_through_rate(ctx: MetricContext) -> dict[str, An
     return await _run_metric(ctx, _straight_through, fill_zero=False)
 
 
+def _confidence(t: dict[str, Any]) -> float | None:
+    """Mean confidence (0 to 100) of the runs that reported one."""
+    return pct(t["confidence_sum"], t["confidence_n"])
+
+
+async def resolve_runs_confidence(ctx: MetricContext) -> dict[str, Any]:
+    out = await _run_metric(
+        ctx,
+        _confidence,
+        fill_zero=False,
+        empty="No run in this period reported a confidence score.",
+    )
+    if out.get("data_quality") == "no_data" or ctx.group_by is not None:
+        return out
+    t = totals((await run_data(ctx, ctx.period)).rows)
+    out["rows"] = [
+        {"label": "below_floor", "value": int(t["below_floor"])},
+        {"label": "scored_runs", "value": int(t["confidence_n"])},
+    ]
+    return out
+
+
 async def resolve_runs_latency(ctx: MetricContext) -> dict[str, Any]:
     out = await _run_metric(
         ctx,
@@ -737,7 +825,7 @@ async def resolve_runs_latency(ctx: MetricContext) -> dict[str, Any]:
     )
     if out.get("data_quality") == "no_data":
         return out
-    data = await run_data(ctx, ctx.period, group=ctx.group_by)
+    data = await run_data(ctx, ctx.period, group=ctx.grouping)
     t = totals(data.rows)
     p95, over = percentile_estimate(t["buckets"], 0.95)
     if over:

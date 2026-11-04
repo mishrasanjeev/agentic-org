@@ -85,7 +85,8 @@ describe("Layout Insights entry", () => {
   });
 
   it("is never offered to roles outside Insights", async () => {
-    mockRole = "analyst";
+    // Analysts and domain leads have the Domain view now; a viewer has no Insights role.
+    mockRole = "viewer";
     statusAnswers(true);
     renderLayout();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());

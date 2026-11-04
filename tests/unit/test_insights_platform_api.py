@@ -35,7 +35,7 @@ USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000d1")
 ADMIN_SCOPES = list(ROLE_SCOPES["admin"])
 # A claims_extra value that removes the claim.
 _ABSENT = object()
-PATHS = ("/summary", "/tenants", "/posture")
+PATHS = ("/summary", "/tenants", "/posture", "/export")
 POSTURE = {
     "computed_at": "2026-11-01T00:00:00+00:00",
     "ok": True,
@@ -99,6 +99,11 @@ class PlatformSession:
                  "cost_usd": Decimal("1.500000")},
                 {"day": date(2026, 10, 31), "tenants_active": 1, "runs": 4, "failed": 0, "tokens": 100,
                  "cost_usd": Decimal("0.250000")},
+            ])
+        if "insights_platform_operations" in sql:
+            return _Result(rows=[
+                {"exports_queued": 1, "exports_running": 0, "exports_ready": 6, "exports_failed": 2,
+                 "exports_expired": 0, "oldest_open_minutes": 12, "tenants_late": 1, "max_lag_hours": Decimal("3.5")},
             ])
         if "insights_platform_tenants" in sql:
             return _Result(rows=[
@@ -406,9 +411,17 @@ def test_summary_shape_totals_and_audit(app) -> None:
         "cost_usd": 1.75,
     }
     assert body["reconciled_gate_nights"] == 14
+    assert body["operations"] == {
+        "exports": {"queued": 1, "running": 0, "ready": 6, "failed": 2, "expired": 0},
+        "export_failure_rate": 0.25,
+        "oldest_open_minutes": 12,
+        "tenants_late": 1,
+        "max_lag_hours": 3.5,
+        "late_after_hours": 2,
+    }
     # The functions are called with bound dates, never interpolated.
     function_calls = [params for sql, params in calls if "insights_platform" in sql]
-    assert function_calls == [{"p_from": date(2026, 10, 30), "p_to": date(2026, 10, 31)}] * 2
+    assert function_calls == [{"p_from": date(2026, 10, 30), "p_to": date(2026, 10, 31)}] * 3
     assert len(audits) == 1
     entry = audits[0]
     assert entry.event_type == "platform.insights.summary.read" and entry.tenant_id == OPERATOR_TENANT
@@ -473,6 +486,25 @@ def test_platform_range_defaults_and_bounds() -> None:
     assert platform.platform_range(start, start + timedelta(days=92), today=today)[1] == start + timedelta(days=92)
     with pytest.raises(platform.PlatformRangeError):
         platform.platform_range(start, start + timedelta(days=93), today=today)
+
+
+@pytest.mark.asyncio
+async def test_operations_without_jobs_or_rollups_have_no_rates() -> None:
+    from core.insights import platform
+
+    class Empty:
+        async def execute(self, statement, params=None):
+            return _Result(rows=[] if "operations" in str(statement) else None)
+
+    ops = await platform.platform_operations(Empty(), date(2026, 10, 1), date(2026, 10, 2))
+    assert ops == {
+        "exports": {"queued": 0, "running": 0, "ready": 0, "failed": 0, "expired": 0},
+        "export_failure_rate": None,
+        "oldest_open_minutes": None,
+        "tenants_late": 0,
+        "max_lag_hours": None,
+        "late_after_hours": 2,
+    }
 
 
 def test_totals_without_runs_have_no_failure_rate() -> None:
@@ -547,7 +579,8 @@ def test_routes_are_registered_with_their_metadata(app) -> None:
     assert set(meta) == {f"/platform/insights{p}" for p in PATHS}
     for path, m in meta.items():
         assert m["scope"] == "platform.insights.read" and m["auth_required"] and m["tenant_required"], path
-        assert m["rate_limit"] == "reporting-read" and m["idempotency"] == "read-only", path
+        expected_rate = "reporting-export" if path.endswith("/export") else "reporting-read"
+        assert m["rate_limit"] == expected_rate and m["idempotency"] == "read-only", path
         assert m["audit_event"] == f"platform.insights.{path.rsplit('/', 1)[1]}.read", path
     for route in insights_platform.router.routes:
         names = {d.call.__name__ for d in route.dependant.dependencies}
@@ -555,3 +588,26 @@ def test_routes_are_registered_with_their_metadata(app) -> None:
     assert SCOPE_FAMILIES["platform"] == ("agenticorg:admin", "agenticorg:admin")
     assert required_scopes_for("platform.insights.read", "GET") == ("agenticorg:admin",)
     assert "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
+
+
+def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> None:
+    import csv
+    import io
+    import json
+
+    with _client(app) as client:
+        daily = client.get("/api/v1/platform/insights/export",
+                           params={"dataset": "daily", "format": "csv", "from": "2026-10-30", "to": "2026-10-31"})
+        tenants = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "json"})
+        workbook = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "xlsx"})
+        refused = client.get("/api/v1/platform/insights/export", params={"dataset": "runs", "format": "csv"})
+        audits = client.sessions["user"].added
+    assert daily.status_code == 200 and "platform-daily" in daily.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(daily.content.decode("utf-8-sig"))))
+    assert [r["runs"] for r in rows] == ["10", "4"]
+    body = json.loads(tenants.content)
+    assert [r["tenant_name"] for r in body["rows"]][0] == "Synthetic Traders"
+    assert workbook.content[:2] == b"PK"
+    assert refused.status_code == 422
+    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 3
+    assert audits[0].details["row_count"] == 2 and audits[0].details["dataset"] == "daily"

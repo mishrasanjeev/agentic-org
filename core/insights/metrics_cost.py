@@ -42,7 +42,6 @@ from typing import Any
 
 from core.config import settings
 from core.insights.metrics import (
-    COSTS_LINK,
     TOP_ROWS,
     UNATTRIBUTED,
     MetricContext,
@@ -673,7 +672,7 @@ async def resolve_cost_budgets(ctx: MetricContext) -> dict[str, Any]:
     if not rows:
         return no_data(
             envelope["source"],
-            f"No budget alert is set. Add one to track spend against a limit ({COSTS_LINK}).",
+            "No budget alert is set for this organisation, so spend is not tracked against a limit.",
             **{k: v for k, v in envelope.items() if k != "source"},
         )
     flagged = [row for row in rows if row["state"] != "ok"]

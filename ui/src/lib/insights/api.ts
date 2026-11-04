@@ -17,13 +17,16 @@ export type InsightsViewKey =
   | "marketing"
   | "commerce"
   | "compliance"
-  | "engineering";
+  | "engineering"
+  | "back_office"
+  | "domain"
+  | "partner";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
 export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";
 export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
-export type ExportFormat = "csv" | "xlsx" | "json";
+export type ExportFormat = "csv" | "xlsx" | "json" | "pdf";
 
 export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "executive",
@@ -34,6 +37,9 @@ export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "commerce",
   "compliance",
   "engineering",
+  "back_office",
+  "domain",
+  "partner",
 ];
 export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
 

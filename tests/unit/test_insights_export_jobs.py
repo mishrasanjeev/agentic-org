@@ -191,8 +191,13 @@ def test_the_migration_follows_v6z109_and_matches_the_model() -> None:
     ]
     assert children == [path.name]
     source = path.read_text(encoding="utf-8")
-    for values in (EXPORT_KINDS, EXPORT_STATUSES, EXPORT_FORMATS):
+    v6z110_kinds = tuple(k for k in EXPORT_KINDS if k != "partner_pack")
+    for values in (v6z110_kinds, EXPORT_STATUSES, EXPORT_FORMATS):
         assert ",".join(f"'{v}'" for v in values) in source
+    # v6z113 widens the kind check to the partner client pack.
+    later = (path.parent / "v6_z113_insights_saved_views.py").read_text(encoding="utf-8")
+    assert '_KINDS = _KINDS_V6Z110 + ",\'partner_pack\'"' in later
+    assert f'_KINDS_V6Z110 = "{",".join(repr(k) for k in v6z110_kinds)}"' in later
     assert set(export_jobs.FORMATS_BY_KIND) == set(EXPORT_KINDS)
     assert "FORCE ROW LEVEL SECURITY" in source
 
@@ -247,3 +252,23 @@ def test_storage_uses_the_configured_bucket_when_no_fake_is_active(monkeypatch) 
         storage.get("t/a.csv")
     storage.delete("t/a.csv")  # already gone: no error
     assert set(buckets) == {"exports-real"}
+
+
+def test_a_metric_job_takes_two_run_groupings_and_filters() -> None:
+    clean = export_jobs.validate(
+        "metric",
+        "csv",
+        {"key": "runs.volume", "group_by": ["agent", "status"], "filter": {"domain": "finance,hr"}},
+        ADMIN,
+    )
+    assert clean["group_by"] == ["agent", "status"] and clean["filter"] == {"domain": ["finance", "hr"]}
+    # A job stored before two-level grouping (one dimension as a string) still validates.
+    assert export_jobs.validate("metric", "csv", {"key": "runs.volume", "group_by": "domain"}, ADMIN)["group_by"] == [
+        "domain"
+    ]
+    assert _refused("metric", "csv", {"key": "cost.spend", "filter": {"domain": "finance"}}, ADMIN).error == (
+        "filter_not_allowed"
+    )
+    assert _refused("metric", "csv", {"key": "runs.volume", "filter": "domain=finance"}, ADMIN).error == (
+        "invalid_filter"
+    )

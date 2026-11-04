@@ -14,6 +14,13 @@ from core.insights.registry import METRICS, UNITS, VIEW_ROLES, VIEWS, Thresholds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V1_KEYS = {
+    "partner.clients",
+    "partner.filings",
+    "partner.billing",
+    "runs.confidence",
+    "quality.feedback",
+    "backoffice.deadlines",
+    "backoffice.txn_findings",
     "agents.by_status",
     "runs.volume",
     "runs.success_rate",
@@ -49,12 +56,16 @@ V1_KEYS = {
     "compliance.dsar_completion_time",
     "compliance.attestations_expiring",
     "compliance.change_log",
+    "compliance.security_events",
+    "compliance.guardrail_events",
     "engineering.gateway_issues",
     "engineering.slow_spans",
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
+    "engineering.tool_usage",
 }
 EXECUTIVE = {
+    "runs.confidence",
     "agents.by_status",
     "runs.volume",
     "runs.success_rate",
@@ -67,6 +78,9 @@ EXECUTIVE = {
     "value.hours_saved",
 }
 FINANCE = {
+    "agents.by_status",
+    "runs.success_rate",
+    "runs.straight_through_rate",
     "cost.spend",
     "cost.per_run",
     "cost.by_agent",
@@ -80,6 +94,8 @@ FINANCE = {
     "value.roi",
 }
 OPERATIONS = {
+    "runs.straight_through_rate",
+    "agents.by_status",
     "workflows.runs",
     "workflows.stalled",
     "runs.success_rate",
@@ -88,7 +104,35 @@ OPERATIONS = {
     "connectors.unhealthy",
     "runs.volume",
 }
-HR = {"runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"}
+HR = {
+    "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "hr.pt_returns",
+    "agents.by_status",
+}
+BACK_OFFICE = {
+    "backoffice.deadlines",
+    "backoffice.txn_findings",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "runs.volume",
+    "runs.success_rate",
+}
+PARTNER = {"partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"}
+DOMAIN = {
+    "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "runs.latency",
+    "runs.confidence",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "quality.feedback",
+    "agents.by_status",
+}
 MARKETING = {
     "marketing.leads",
     "marketing.content_drafts",
@@ -99,6 +143,8 @@ MARKETING = {
 COMMERCE = {"commerce.orders", "commerce.webhook_failures", "commerce.funnel"}
 COMPLIANCE = {key for key in V1_KEYS if key.startswith("compliance.")}
 ENGINEERING = {
+    "runs.confidence",
+    "quality.feedback",
     "runs.success_rate",
     "runs.latency",
     "runs.volume",
@@ -106,6 +152,7 @@ ENGINEERING = {
     "engineering.slow_spans",
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
+    "engineering.tool_usage",
 }
 
 
@@ -124,6 +171,9 @@ def test_views_show_exactly_their_metrics() -> None:
         "commerce",
         "compliance",
         "engineering",
+        "back_office",
+        "domain",
+        "partner",
     }
     assert set(VIEWS["executive"].keys) == EXECUTIVE
     assert set(VIEWS["finance"].keys) == FINANCE
@@ -131,8 +181,11 @@ def test_views_show_exactly_their_metrics() -> None:
     assert set(VIEWS["hr"].keys) == HR
     assert set(VIEWS["marketing"].keys) == MARKETING
     assert set(VIEWS["commerce"].keys) == COMMERCE
-    assert set(VIEWS["compliance"].keys) == COMPLIANCE and len(COMPLIANCE) == 7
+    assert set(VIEWS["compliance"].keys) == COMPLIANCE and len(COMPLIANCE) == 9
     assert set(VIEWS["engineering"].keys) == ENGINEERING
+    assert set(VIEWS["back_office"].keys) == BACK_OFFICE
+    assert set(VIEWS["domain"].keys) == DOMAIN
+    assert set(VIEWS["partner"].keys) == PARTNER
     for view in VIEWS.values():
         for key in view.keys:
             assert key in METRICS, key
@@ -152,21 +205,40 @@ def test_view_roles() -> None:
         "commerce": frozenset({"admin", "merchant"}),
         "compliance": frozenset({"admin", "auditor"}),
         "engineering": frozenset({"admin", "developer"}),
+        "back_office": frozenset({"admin"}),
+        "domain": frozenset({"admin", "domain_lead", "analyst"}),
+        "partner": frozenset({"admin", "cfo", "coo", "auditor"}),
     }
-    every = ["executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"]
+    every = [
+        "executive",
+        "finance",
+        "operations",
+        "hr",
+        "marketing",
+        "commerce",
+        "compliance",
+        "engineering",
+        "back_office",
+        "domain",
+        "partner",
+    ]
     assert registry.allowed_views("admin", is_admin=True) == every
     assert registry.allowed_views("", is_admin=True) == every
-    assert registry.allowed_views("cfo", is_admin=False) == ["finance"]
-    assert registry.allowed_views("coo", is_admin=False) == ["operations"]
+    assert registry.allowed_views("cfo", is_admin=False) == ["finance", "partner"]
+    assert registry.allowed_views("coo", is_admin=False) == ["operations", "partner"]
     assert registry.allowed_views("chro", is_admin=False) == ["hr"]
     assert registry.allowed_views("cmo", is_admin=False) == ["marketing"]
     assert registry.allowed_views("merchant", is_admin=False) == ["commerce"]
-    assert registry.allowed_views("auditor", is_admin=False) == ["compliance"]
+    assert registry.allowed_views("auditor", is_admin=False) == ["compliance", "partner"]
     assert registry.allowed_views("developer", is_admin=False) == ["engineering"]
     # A role claim of "admin" without the admin scope is not an administrator.
     assert registry.allowed_views("admin", is_admin=False) == []
-    for role in ("analyst", "domain_lead", ""):
-        assert registry.allowed_views(role, is_admin=False) == [], role
+    for role in ("analyst", "domain_lead"):
+        assert registry.allowed_views(role, is_admin=False) == ["domain"], role
+    assert registry.allowed_views("", is_admin=False) == []
+    # The Domain view keeps the caller's own domains; Back office reads its five domains.
+    assert registry.VIEW_DOMAINS["domain"] is None
+    assert registry.VIEW_DOMAINS["back_office"] == ("backoffice", "legal", "risk", "corporate", "comms")
     # The Compliance view is the auditor's (no domain limit); Engineering keeps the developer's domain.
     assert registry.VIEW_DOMAINS["compliance"] is None and registry.VIEW_DOMAINS["engineering"] is None
 
@@ -352,3 +424,60 @@ async def test_a_period_with_a_partial_today_compares_complete_days_only() -> No
     out = await registry.resolve(metric, today_only)
     assert out["compare"]["basis"] == "complete_days" and out["compare"]["current_value"] is None
     assert out["compare_value"] is None
+
+
+def test_grouping_and_filters_are_parsed_against_the_metric() -> None:
+    volume, spend = METRICS["runs.volume"], METRICS["cost.spend"]
+    assert registry.parse_grouping(volume, []) == (None, None)
+    assert registry.parse_grouping(volume, [" agent ", "status", "agent"]) == ("agent", "status")
+    assert registry.parse_grouping(spend, ["agent"]) == ("agent", None)
+    for metric, values in ((spend, ["agent", "domain"]), (volume, ["agent", "status", "domain"]), (volume, ["x"])):
+        with pytest.raises(registry.MetricQueryError) as refused:
+            registry.parse_grouping(metric, values)
+        assert refused.value.error == "group_by_not_allowed"
+
+    assert registry.parse_filters(volume, {"domain": "finance, hr,finance", "status": ["failed", "refused"]}) == {
+        "domain": ("finance", "hr"),
+        "status": ("failed", "refused"),
+    }
+    for metric, raw, error in (
+        (spend, {"domain": "finance"}, "filter_not_allowed"),
+        (volume, {"tenant_id": "x"}, "filter_not_allowed"),
+        (volume, {"domain": " , "}, "invalid_filter"),
+        (volume, {"domain": ",".join(str(i) for i in range(registry.MAX_FILTER_VALUES + 1))}, "invalid_filter"),
+        (volume, {"domain": "x" * (registry.MAX_FILTER_VALUE_LENGTH + 1)}, "invalid_filter"),
+    ):
+        with pytest.raises(registry.MetricQueryError) as refused:
+            registry.parse_filters(metric, raw)
+        assert refused.value.error == error
+
+
+def test_only_run_metrics_take_filters_and_they_take_every_run_dimension() -> None:
+    filtered = {key for key, metric in METRICS.items() if metric.filters}
+    assert filtered == {
+        "runs.volume",
+        "runs.success_rate",
+        "runs.straight_through_rate",
+        "runs.latency",
+        "runs.confidence",
+    }
+    for key in filtered:
+        assert METRICS[key].filters == RUN_GROUPS
+        assert METRICS[key].describe()["filters"] == list(RUN_GROUPS)
+
+
+def test_ui_explorer_keys_file_matches_the_registry_and_server_links_name_real_explorers() -> None:
+    import re
+
+    from core.insights.explore_registry import EXPLORERS
+    from scripts.generate_insights_metric_keys import render_explorers
+
+    path = REPO_ROOT / "ui" / "src" / "lib" / "insights" / "explorerKeys.generated.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == sorted(EXPLORERS)
+    assert path.read_text(encoding="utf-8") == render_explorers()
+    linked = set()
+    for source in (REPO_ROOT / "core").rglob("*.py"):
+        for key in re.findall(r"/dashboard/insights/explore/([a-z_]+)", source.read_text(encoding="utf-8")):
+            linked.add(key)
+            assert key in EXPLORERS, (source.name, key)
+    assert linked

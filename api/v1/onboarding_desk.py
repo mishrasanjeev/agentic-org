@@ -446,6 +446,11 @@ async def webhook_leads(tenant_id: str, source_id: str, request: Request) -> dic
         raise HTTPException(413, detail={"error": "too_large"})
     found = await store.webhook_secret(tid, sid)
     if found is None or not verify_signature(found[1], request.headers.get(SIGNATURE_HEADER, ""), body):
+        if found is not None:
+            # Counted only for a source the tenant configured; an unknown tenant or source is not attributed.
+            from core.insights.runtime_counters import count_security_event
+
+            count_security_event(tid, "webhook_signature_failed")
         raise HTTPException(401, detail={"error": "signature_invalid"})
     import json
 
@@ -749,6 +754,10 @@ async def twilio_inbound(tenant_id: str, request: Request) -> Response:
     if not token or not verify_twilio_signature(
         url=url, params=params, signature=request.headers.get("X-Twilio-Signature", ""), auth_token=token
     ):
+        if token:
+            from core.insights.runtime_counters import count_security_event
+
+            count_security_event(tid, "webhook_signature_failed")
         raise HTTPException(403, detail={"error": "signature_invalid"})
     sender_phone = params.get("From", "")
     if contacts.is_opt_out(params.get("Body")):

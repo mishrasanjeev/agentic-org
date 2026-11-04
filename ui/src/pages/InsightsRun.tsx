@@ -9,9 +9,12 @@ import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import Breadcrumbs from "@/components/insights/Breadcrumbs";
 import DataQualityBadge from "@/components/insights/DataQualityBadge";
 import EmptyState from "@/components/insights/EmptyState";
 import SpanWaterfall from "@/components/insights/SpanWaterfall";
+import RunDebugger from "@/components/RunDebugger";
+import { useOptionalRole } from "@/contexts/AuthContext";
 import { errorStatus, readErrorDetail } from "@/lib/insights/api";
 import { saveBlob } from "@/lib/insights/download";
 import {
@@ -52,6 +55,9 @@ export default function InsightsRun() {
   const [searchParams] = useSearchParams();
   const at = searchParams.get("at") || "";
   const [state, setState] = useState<State>({ kind: "loading" });
+  // The run debugger (its API is for administrators) steps through the run's LangGraph checkpoints.
+  const isAdmin = useOptionalRole() === "admin";
+  const [debugging, setDebugging] = useState(false);
   const [bundle, setBundle] = useState<
     { kind: "idle" } | { kind: "busy" } | { kind: "done"; sha256: string | null } | { kind: "error"; message: string | null }
   >({ kind: "idle" });
@@ -185,12 +191,33 @@ export default function InsightsRun() {
     body = (
       <>
         {failure ? <FailurePanel failure={failure} /> : null}
+        {isAdmin && state.data.debug ? (
+          <section aria-labelledby="run-debugger" className="flex flex-col gap-2 rounded-lg border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="run-debugger" className="text-base font-semibold">
+                {t("insightsRun.debug.title")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setDebugging((on) => !on)}
+                aria-expanded={debugging}
+                className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium hover:bg-muted"
+                data-testid="run-debug-toggle"
+              >
+                {debugging ? t("insightsRun.debug.close") : t("insightsRun.debug.open")}
+              </button>
+            </div>
+            {debugging ? (
+              <RunDebugger agentId={state.data.debug.agent_id} threadId={state.data.debug.thread_id} />
+            ) : null}
+          </section>
+        ) : null}
         <section aria-labelledby="run-facts" className="rounded-lg border p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 id="run-facts" className="text-base font-semibold">
               {run.agent_id ? (
                 <Link
-                  to={`/dashboard/agents/${run.agent_id}`}
+                  to={`/dashboard/insights/agents/${run.agent_id}`}
                   className="text-primary hover:underline"
                 >
                   {run.agent || t("insightsRun.agent")}
@@ -300,6 +327,12 @@ export default function InsightsRun() {
       <Helmet>
         <title>{`${t("insightsRun.title")} — AgenticOrg`}</title>
       </Helmet>
+      <Breadcrumbs
+        items={[
+          { label: t("insightsExplore.title"), to: "/dashboard/insights/explore/runs" },
+          { label: t("insightsRun.title") },
+        ]}
+      />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">

@@ -4,7 +4,7 @@
  * Tests the UI components for Grantex scope enforcement:
  * - Permission badges on AgentCreate page
  * - Enforcement log tab on AgentDetail page
- * - Scope Dashboard page rendering
+ * - Scope Dashboard URL opening the Enforce Audit page's Enforcement summary
  * - Enforce Audit Log filtering
  *
  * Tests run against BASE_URL (default: https://app.agenticorg.ai)
@@ -119,33 +119,35 @@ test.describe("Scope Enforcement — UI", () => {
   });
 
   // -----------------------------------------------------------------------
-  // Scope Dashboard
+  // Scope Dashboard (retired: now the Enforcement summary on Enforce Audit)
   // -----------------------------------------------------------------------
 
   test("test_scope_dashboard_renders", async ({ page }) => {
-    // Navigate to scope dashboard
+    // The retired scope dashboard URL opens the Enforce Audit page
     const response = await page.goto(`${APP}/dashboard/scopes`, {
       waitUntil: "domcontentloaded",
     });
 
-    // Accept either the dashboard page or a redirect (if route not yet created)
     const status = response?.status() ?? 0;
     expect(status).toBeLessThan(500);
 
     if (status < 400) {
-      // Dashboard loaded — verify it has stats/metrics
+      await expect(page).toHaveURL(/\/dashboard\/enforce-audit/, { timeout: 15000 });
+
+      // The former scope dashboard content: stats and the agent x connector table
+      const summary = page.getByTestId("enforcement-summary");
+      await expect(summary).toBeVisible({ timeout: 15000 });
+      await expect(summary.getByRole("heading", { name: "Enforcement summary" })).toBeVisible();
+      for (const label of ["Total Agents", "Tool Calls (24h)", "Denials (24h)", "Denial Rate"]) {
+        await expect(summary.getByText(label, { exact: true }).first()).toBeVisible();
+      }
+
       await page.waitForTimeout(2000);
       const mainContent = await page.locator("main").textContent() || "";
 
-      // Should show some dashboard content (stats, charts, numbers)
+      // Should show real numbers, not rendering artifacts
       expect(mainContent).not.toContain("undefined");
       expect(mainContent).not.toContain("NaN");
-
-      // Look for dashboard elements
-      const dashboardElements = await page.locator(
-        '[data-testid*="scope"], [data-testid*="dashboard"], ' +
-        '[class*="stat"], [class*="metric"], [class*="card"]'
-      ).count();
 
       // Page rendered without critical errors
       const pageTitle = await page.title();

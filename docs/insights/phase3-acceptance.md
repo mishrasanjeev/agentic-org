@@ -30,3 +30,13 @@ minutes each.
 
 Record the time taken and any help given. The gate passes when the auditor signs a pack and every participant
 completes their tasks unaided.
+
+## Results
+
+- **Auditor sign-off: done in production on 3 November 2026.** Two period evidence packs were built and each was
+  signed once from the Downloads page at 17:37 UTC (the first was downloaded and checked before signing); each
+  sign-off is a signed `insights.evidence_pack.signed` audit row. Production stood in for the staging tenant
+  because the export bucket exists only in production.
+- **Usability tasks 1 to 3: waiting for participants.** They are run with real people in the roles above, timed
+  and unaided; nothing here simulates them. Record each participant's time and any help in this section.
+

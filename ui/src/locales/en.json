@@ -60,7 +60,9 @@
     "billing": "Billing",
     "accountSecurity": "Account Security",
     "settings": "Settings",
-    "lineage": "Lineage"
+    "lineage": "Lineage",
+    "marketingOps": "Marketing operations",
+    "monitoring": "Monitoring"
   },
   "roles": {
     "cfo": "CFO",
@@ -787,6 +789,19 @@
       "roleBypass": "Connected as {{role}}, which bypasses row-level security.",
       "healthNone": "No health snapshot in the last {{hours}} hours.",
       "healthDetail": "{{snapshots}} snapshots in the last {{hours}} hours, {{unhealthy}} unhealthy. Latest version {{version}}, commit {{commit}}."
+    },
+    "operations": {
+      "title": "Dashboard operations",
+      "definition": "Background export jobs made in the range, and tenants whose rollup is behind. A job open for over an hour or a late rollup needs a look.",
+      "exports": "Export jobs",
+      "exportsDetail": "{{ready}} ready, {{failed}} failed, {{expired}} expired, {{open}} still open.",
+      "exportFailure": "Export failure rate",
+      "oldestOpen": "Oldest open export",
+      "noneOpen": "None open",
+      "rollupLate": "Rollups older than {{hours}} hours",
+      "rollupOnTime": "Every tenant's rollup is on time.",
+      "minutes": "{{count}} min",
+      "rollupLateDetail": "Tenants late: {{count}}. The furthest behind by {{hours}} hours."
     }
   },
   "insights": {
@@ -805,7 +820,10 @@
       "marketing": "Marketing",
       "commerce": "Commerce",
       "compliance": "Compliance",
-      "engineering": "Engineering"
+      "engineering": "Engineering",
+      "back_office": "Back office",
+      "domain": "My domain",
+      "partner": "Partner"
     },
     "filters": {
       "label": "Filters",
@@ -887,7 +905,8 @@
       "openDownloads": "Open Downloads",
       "svg": "Chart (SVG)",
       "png": "Chart (PNG)",
-      "noPicture": "This chart has no picture to save; export its data instead."
+      "noPicture": "This chart has no picture to save; export its data instead.",
+      "pdf": "Chart (PDF)"
     },
     "empty": {
       "title": "No data yet",
@@ -920,7 +939,9 @@
       "exploreConnectors": "See unhealthy connectors",
       "openOrders": "Open orders",
       "exploreAudit": "Explore the audit log",
-      "exploreQuality": "Explore quality"
+      "exploreQuality": "Explore quality",
+      "openCompanies": "Open companies",
+      "openTransactions": "Open transactions"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -966,7 +987,60 @@
       "evidencePack": "Evidence pack",
       "asking": "Asking…",
       "queued": "It is being prepared; you will get an email when it is ready.",
-      "schedule": "Schedule weekly"
+      "schedule": "Schedule weekly",
+      "partnerPack": "Partner client pack"
+    },
+    "breadcrumbs": "Where you are in Insights",
+    "search": {
+      "open": "Search",
+      "title": "Search Insights",
+      "placeholder": "Find an agent, workflow, connector, company, person or run id",
+      "hint": "Type at least two characters.",
+      "none": "Nothing you can open matches.",
+      "error": "Search failed. Try again.",
+      "kinds": {
+        "agent": "Agent",
+        "workflow": "Workflow",
+        "connector": "Connector",
+        "company": "Company",
+        "user": "Person",
+        "cost_centre": "Cost centre",
+        "run": "Run"
+      }
+    },
+    "saved": {
+      "label": "Saved views",
+      "choose": "Open a saved view",
+      "none": "No saved views yet",
+      "sharedTag": "shared",
+      "saveCurrent": "Save this view",
+      "namePlaceholder": "Name this view",
+      "share": "Share with everyone who can open it",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Saved.",
+      "failed": "The saved view could not be changed.",
+      "manage": "My saved views",
+      "delete": "Delete",
+      "deleteNamed": "Delete the saved view {{name}}"
+    },
+    "changes": {
+      "title": "Since you last looked ({{since}})",
+      "firstVisit": "In the last 7 days",
+      "items": {
+        "agents_created_one": "{{count}} agent added",
+        "agents_created_other": "{{count}} agents added",
+        "agent_status_changes_one": "{{count}} agent status change",
+        "agent_status_changes_other": "{{count}} agent status changes",
+        "approvals_decided_one": "{{count}} approval decided",
+        "approvals_decided_other": "{{count}} approvals decided",
+        "runs_failed_one": "{{count}} failed run",
+        "runs_failed_other": "{{count}} failed runs",
+        "alerts_fired_one": "{{count}} new alert",
+        "alerts_fired_other": "{{count}} new alerts",
+        "config_changes_one": "{{count}} configuration change",
+        "config_changes_other": "{{count}} configuration changes"
+      }
     }
   },
   "insightsBi": {
@@ -1188,6 +1262,11 @@
       "checksum": "Saved. SHA-256: {{sha256}}",
       "saved": "Saved.",
       "failed": "The evidence file could not be prepared."
+    },
+    "debug": {
+      "title": "Step through this run",
+      "open": "Open the debugger",
+      "close": "Close the debugger"
     }
   },
   "insightsValue": {
@@ -1286,7 +1365,8 @@
       "run_bundle": "Run evidence",
       "view_pdf": "View PDF",
       "finance_pack": "Finance pack",
-      "evidence_pack": "Evidence pack"
+      "evidence_pack": "Evidence pack",
+      "partner_pack": "Partner client pack"
     },
     "rawPii": "raw personal data",
     "download": "Download",
@@ -1307,5 +1387,78 @@
     "signed": "Signed.",
     "signFailed": "The pack could not be signed.",
     "signedBy": "Signed by {{name}} on {{when}}:"
+  },
+  "insightsEntity": {
+    "kinds": {
+      "agent": "Agent",
+      "workflow": "Workflow",
+      "connector": "Connector",
+      "company": "Company",
+      "user": "Person",
+      "cost_centre": "Cost centre"
+    },
+    "missing": "Not found",
+    "missingHint": "It does not exist, or it is outside the data you can see.",
+    "forbidden": "Not available to your role",
+    "forbiddenHint": "Ask an administrator if you need this page.",
+    "error": "This page could not be loaded.",
+    "yes": "Yes",
+    "no": "No",
+    "cards": "From {{from}} to {{to}}",
+    "noCards": "Nothing was recorded for this in the period.",
+    "agents": "Agents",
+    "linksTitle": "Open in",
+    "timeline": "Timeline",
+    "noTimeline": "No recorded activity yet.",
+    "facts": {
+      "title": "Facts",
+      "status": "Status",
+      "agent_type": "Type",
+      "domain": "Domain",
+      "version": "Version",
+      "created_at": "Created",
+      "spend_usd": "Spend in the period (USD)",
+      "trigger": "Trigger",
+      "active": "Active",
+      "mean_duration_s": "Mean run time (seconds)",
+      "category": "Category",
+      "auth_type": "Sign-in method",
+      "health_check_at": "Last health check",
+      "agents": "Agents using it",
+      "industry": "Industry",
+      "state_code": "State code",
+      "health_score": "Health score",
+      "overdue_deadlines": "Overdue deadlines",
+      "role": "Role",
+      "mfa_enabled": "Two-step sign-in",
+      "last_login_at": "Last sign-in",
+      "code": "Code",
+      "budget_limit": "Budget",
+      "budget_used_pct": "Budget used (%)",
+      "fiscal_year": "Fiscal year"
+    },
+    "links": {
+      "runs": "Runs",
+      "approvals": "Approvals",
+      "quality": "Quality",
+      "manage": "Manage",
+      "workflows": "Workflow runs",
+      "connectors": "Connector status",
+      "audit": "Audit log",
+      "cost": "Cost"
+    },
+    "columns": {
+      "at": "When",
+      "event": "Event",
+      "action": "Action",
+      "outcome": "Outcome",
+      "actor": "By"
+    }
+  },
+  "marketingOps": {
+    "title": "Marketing operations",
+    "tabs": "Marketing pages",
+    "operations": "Operations",
+    "abm": "ABM accounts"
   }
 }

@@ -202,8 +202,17 @@ def test_registry_declarations_are_consistent() -> None:
         "agents",
         "runs",
         "quality",
+        "connectors",
     ]
-    for role in ("analyst", "merchant", "domain_lead", ""):
+    for role in ("analyst", "domain_lead"):
+        assert [e.key for e in explore_registry.readable_explorers(role, is_admin=False)] == [
+            "agents",
+            "runs",
+            "approvals",
+            "cost",
+            "quality",
+        ], role
+    for role in ("merchant", ""):
         assert explore_registry.readable_explorers(role, is_admin=False) == [], role
     assert DOMAIN_HEADS == {"cfo", "chro", "cmo", "coo"}
 

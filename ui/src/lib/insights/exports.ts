@@ -7,7 +7,14 @@
  */
 import api from "@/lib/api";
 
-export type ExportKind = "metric" | "explorer" | "run_bundle" | "view_pdf" | "finance_pack" | "evidence_pack";
+export type ExportKind =
+  | "metric"
+  | "explorer"
+  | "run_bundle"
+  | "view_pdf"
+  | "finance_pack"
+  | "evidence_pack"
+  | "partner_pack";
 export type ExportStatus = "queued" | "running" | "ready" | "failed" | "expired";
 
 export interface ExportJob {

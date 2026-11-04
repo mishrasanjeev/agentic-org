@@ -11,7 +11,7 @@ published on or after 21 October 2026. See [Licensing and commercial use](/docs/
 agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). Free personal
 use of the software does not mean free hosting or providers.
 
-Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
+Administrators and CFOs read recorded agent cost on the Insights **Finance** view (`/dashboard/insights?view=finance`) and its cost explorer. It is the platform's own record, not a provider invoice.
 
 The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.
 

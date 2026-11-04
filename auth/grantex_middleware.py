@@ -610,6 +610,9 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             # The key's identity (not a secret): commerce platforms are bound to the key that called.
             request.state.api_key_id = str(matched_key.id)
             request.state.auth_mode = "api_key"
+            from core.insights.runtime_counters import count_security_event
+
+            count_security_event(matched_key.tenant_id, "api_key_used")
 
             await clear_auth_failures(client_ip)
             return await self._continue(request, call_next)

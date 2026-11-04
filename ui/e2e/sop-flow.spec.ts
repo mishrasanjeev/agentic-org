@@ -153,20 +153,15 @@ test.describe("SOP: Dashboard v3.0 (auth required)", () => {
     await setSessionToken(page, E2E_TOKEN);
   });
 
-  test("Dashboard shows LangGraph + Grantex + External Access cards", async ({ page }) => {
+  test("Dashboard lands on Insights", async ({ page }) => {
+    // The home dashboard and its status cards are retired: /dashboard lands on
+    // Insights. The Grantex, A2A and MCP details are on the Integrations page
+    // (next test).
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await expectSignedIn(page);
     await page.waitForLoadState("networkidle").catch(() => {});
-
-    const bodyText = await page.textContent("body") || "";
-    // Dashboard status cards: "Agent Runtime" (with LangGraph), "Grantex Authorization" (with Connected),
-    // "External Access" (with A2A Protocol, MCP Server)
-    const hasRuntime = bodyText.includes("Agent Runtime") || bodyText.includes("LangGraph") || bodyText.includes("Runtime");
-    const hasAuth = bodyText.includes("Grantex Authorization") || bodyText.includes("Grantex") || bodyText.includes("Connected");
-    const hasExternal = bodyText.includes("External Access") || bodyText.includes("A2A Protocol") || bodyText.includes("MCP Server");
-    // At least two of the three status cards should be present
-    const cardCount = [hasRuntime, hasAuth, hasExternal].filter(Boolean).length;
-    expect(cardCount).toBeGreaterThanOrEqual(1);
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 15000 });
   });
 
   test("Integrations page renders A2A and MCP info", async ({ page }) => {

@@ -189,6 +189,8 @@ export interface RunEvidence {
   failure?: RunFailure | null;
   spans: RunSpan[];
   span_total_ms?: number;
+  /** The agent and thread the run's root span names (identifiers only), for the run debugger. */
+  debug?: { agent_id: string; thread_id: string } | null;
   approvals: Array<
     Record<string, unknown> & {
       link?: string;

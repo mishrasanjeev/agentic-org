@@ -143,7 +143,7 @@ function financeView(): InsightsViewResponse {
       }),
     ],
     needs_you: [
-      { kind: "budget", title: "Ops monthly", link: "/dashboard/costs", state: "act", detail: "125.5% of the monthly budget used" },
+      { kind: "budget", title: "Ops monthly", link: "/dashboard/insights/explore/cost", state: "act", detail: "125.5% of the monthly budget used" },
     ],
   };
 }
@@ -355,6 +355,7 @@ describe("InsightsDashboard", () => {
       if (url === "/insights/status")
         return Promise.resolve({ data: { enabled: true, views: ["executive"], platform_operator: false, settings: SETTINGS } });
       if (url === "/insights/explorers") return Promise.resolve({ data: { explorers: [] } });
+      if (!url.startsWith("/insights/views/")) return Promise.reject(new Error(`not under test: ${url}`));
       calls += 1;
       if (calls === 1) return Promise.reject({ response: { status: 422, data: { detail: "company_id is not a company of this tenant" } } });
       return Promise.resolve({ data: executiveView() });

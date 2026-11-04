@@ -14,6 +14,8 @@ from core.insights.run_facts import ENTRYPOINTS, STATUSES
 # Developers read their domain's agents, runs and quality; auditors read every run, approval and the audit log.
 ENGINEERS: frozenset[str] = frozenset({"developer"})
 AUDITORS: frozenset[str] = frozenset({"auditor"})
+# Domain leads and analysts read their assigned domain's agents, runs, approvals, cost and quality.
+ANALYSTS: frozenset[str] = frozenset({"domain_lead", "analyst"})
 
 RUN_STATUSES = tuple(sorted(STATUSES))
 RUN_ENTRYPOINTS = tuple(sorted(e for e in ENTRYPOINTS if e != "debug"))
@@ -30,7 +32,7 @@ _EXPLORERS: tuple[Explorer, ...] = (
             "run, how long it has been idle, its shadow promotion checks and its learned rules."
         ),
         source=("agents", "insights_daily", "run_facts", "spend_usage_rollups", "agent_cost_ledger"),
-        readers=DOMAIN_HEADS | ENGINEERS,
+        readers=DOMAIN_HEADS | ENGINEERS | ANALYSTS,
         default_sort="spend",
         resolver=src.explore_agents,
         columns=(
@@ -71,7 +73,7 @@ _EXPLORERS: tuple[Explorer, ...] = (
             "are not shown. Cost is what the runtime reported, in USD."
         ),
         source=("run_facts",),
-        readers=DOMAIN_HEADS | ENGINEERS | AUDITORS,
+        readers=DOMAIN_HEADS | ENGINEERS | AUDITORS | ANALYSTS,
         default_sort="started_at",
         resolver=src.explore_runs,
         columns=(
@@ -121,7 +123,7 @@ _EXPLORERS: tuple[Explorer, ...] = (
             "long it took. A pending approval past its expiry shows as expired."
         ),
         source=("hitl_queue",),
-        readers=DOMAIN_HEADS | AUDITORS,
+        readers=DOMAIN_HEADS | AUDITORS | ANALYSTS,
         default_sort="created_at",
         resolver=src.explore_approvals,
         columns=(
@@ -149,7 +151,7 @@ _EXPLORERS: tuple[Explorer, ...] = (
             "other roles see their domains' agents."
         ),
         source=("spend_usage_rollups", "agent_cost_ledger", "insights_daily", "run_facts"),
-        readers=DOMAIN_HEADS,
+        readers=DOMAIN_HEADS | ANALYSTS,
         default_sort="spend",
         resolver=src.explore_cost,
         columns=(
@@ -205,7 +207,7 @@ _EXPLORERS: tuple[Explorer, ...] = (
             "received in the period. Revoking a rule removes it from the agent's prompt."
         ),
         source=("agents", "agent_feedback"),
-        readers=DOMAIN_HEADS | ENGINEERS,
+        readers=DOMAIN_HEADS | ENGINEERS | ANALYSTS,
         default_sort="negative_feedback",
         resolver=src.explore_quality,
         columns=(
@@ -226,10 +228,12 @@ _EXPLORERS: tuple[Explorer, ...] = (
         title="Connectors",
         definition=(
             "Every connector with its status, the worst health across the companies it is configured for, its "
-            "last health check and the agents that use it. A snapshot of now."
+            "last health check, the agents that use it, and its tool calls in the last seven days (count, success "
+            "rate and p95 latency). A snapshot of now."
         ),
-        source=("connectors", "connector_configs", "agents"),
-        readers=frozenset({"coo"}),
+        source=("connectors", "connector_configs", "agents", "tool_calls"),
+        # Developers too: the Engineering view's tool calls drill here.
+        readers=frozenset({"coo", "developer"}),
         default_sort="health",
         default_order="asc",
         uses_period=False,
@@ -249,6 +253,9 @@ _EXPLORERS: tuple[Explorer, ...] = (
             Column("sync_failing", "Sync failing", "bool", filter="bool"),
             Column("last_health_check", "Last health check", "datetime"),
             Column("dependent_agents", "Agents using it", "count", filter="min"),
+            Column("calls_7d", "Calls (7 days)", "count", filter="min"),
+            Column("success_rate_7d", "Success rate (7 days)", "percent"),
+            Column("p95_ms_7d", "p95 latency (7 days)", "duration_ms"),
         ),
     ),
     Explorer(

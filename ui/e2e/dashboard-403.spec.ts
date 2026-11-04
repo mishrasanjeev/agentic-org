@@ -3,10 +3,11 @@
  *
  * Two Phase-6 invariants:
  *
- *  1. Dashboard metrics strip carries no hardcoded KPIs. Specifically,
- *     the old "Deflection Rate 73%" card (fabricated, no backing API)
- *     must never come back. "Approvals Resolved" replaces it and is
- *     computed from `/approvals`.
+ *  1. The landing page carries no hardcoded KPIs. Specifically, the old
+ *     "Deflection Rate 73%" card (fabricated, no backing API) must never
+ *     come back. The home dashboard (and its "Approvals Resolved" card)
+ *     is retired: `/dashboard` now lands on Insights, whose figures all
+ *     come from the Insights API.
  *
  *  2. Unauthorized role → explicit `/dashboard/access-denied` page,
  *     not a silent redirect to `/dashboard/audit`. The page tells the
@@ -69,16 +70,17 @@ test.describe("Dashboard metrics — no hardcoded KPIs", () => {
     );
   });
 
-  test("Approvals Resolved KPI is sourced — not a fabricated constant", async ({
+  test("/dashboard lands on Insights, not the retired home KPI strip", async ({
     page,
   }) => {
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
-    // "Approvals Resolved" card must exist. Its value is either a
-    // percentage derived from the live count or "—" when there are
-    // no approvals at all. Crucially it is NOT a fixed number.
-    const label = page.getByText("Approvals Resolved").first();
-    await expect(label).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({
+      timeout: 15000,
+    });
+    // The retired home dashboard's KPI cards must not reappear.
+    await expect(page.getByText("Approvals Resolved")).toHaveCount(0);
   });
 });
 

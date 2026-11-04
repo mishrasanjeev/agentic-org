@@ -58,6 +58,8 @@ APP_CALLABLE_FUNCTIONS = {
     # v6z107_insights_platform: the platform operator's cross-tenant aggregates.
     "insights_platform_daily": "core/insights/platform.py",
     "insights_platform_tenants": "core/insights/platform.py",
+    # v6z114_insights_operations: the platform view's export and rollup figures.
+    "insights_platform_operations": "core/insights/platform.py",
     # v6z108_insights_bi: a tenant administrator's BI database logins, tenant-bound.
     "insights_bi_create_login": "core/insights/bi_access.py",
     "insights_bi_revoke_login": "core/insights/bi_access.py",

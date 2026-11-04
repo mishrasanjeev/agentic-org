@@ -216,7 +216,7 @@ test.describe("Aishwarya 18 June 2026 connector reopen regressions", () => {
       });
     });
 
-    await page.goto(`${baseURL}/dashboard/cmo`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseURL}/dashboard/marketing-ops`, { waitUntil: "domcontentloaded" });
 
     await expect(page.locator("main")).toContainText("Marketing Connector Contracts");
     await expect(page.locator("main")).toContainText("HubSpot CRM Read");

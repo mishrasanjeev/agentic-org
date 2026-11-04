@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { useLocation } from "react-router";
+import { INSIGHTS_ROLES } from "@/lib/insights/metrics";
+import { WORKBENCH_ROLES } from "@/lib/roles";
 
 const API_BASE = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api/v1`
@@ -88,15 +90,16 @@ const AuthContext = createContext<AuthContextType | null>(null);
  *  access to the commerce runtime, so sending them to ``/dashboard`` produced
  *  an Access Denied page on every login. */
 export function defaultLandingForRole(role: string | null | undefined): string {
+  // Role not known yet (the session is still loading): /dashboard sends the person on once it has loaded.
+  if (!role) return "/dashboard";
+  // Merchants work in the commerce runtime (their Insights view is one click away).
   if (role === "merchant") return "/dashboard/commerce-runtime";
-  // Bug sheet 2026-09-14 rows 17-19/52: domain_lead and developer are not
-  // admitted to /dashboard but can build personal agents, so land them on
-  // the agent fleet instead of an Access Denied page.
-  if (role === "domain_lead" || role === "developer") return "/dashboard/agents";
-  // An analyst is not admitted to /dashboard either; the workbench shell
-  // (WORKBENCH_ROLES in lib/roles.ts) is open to them.
-  if (role === "analyst") return "/dashboard/workbench";
-  return "/dashboard";
+  // Everyone else lands on their Insights view (the home and CxO dashboards are retired). Never /dashboard,
+  // which redirects here and would loop.
+  if (role && INSIGHTS_ROLES.includes(role)) return "/dashboard/insights";
+  // A role outside Insights has the workbench shell (WORKBENCH_ROLES in lib/roles.ts) or, failing that, its agents.
+  if (role && WORKBENCH_ROLES.includes(role)) return "/dashboard/workbench";
+  return "/dashboard/agents";
 }
 
 export function shouldHydrateSessionForPath(pathname: string) {

@@ -259,3 +259,31 @@ def summary_pdf(
         for line in lines:
             doc.para(line)
     return doc.output()
+
+
+def client_pdf(
+    *,
+    client: str,
+    organisation: str,
+    period: str,
+    facts: list[tuple[str, str]],
+    deadlines: list[list[str]],
+    invoices: list[list[str]],
+    computed_at: datetime,
+) -> bytes:
+    """One client company's page in the partner client pack: its facts, open deadlines and the period's invoices."""
+    doc = _Doc(f"Client report - {client}", organisation, period, "", computed_at.strftime("%d %b %Y %H:%M UTC"))
+    doc.heading("Summary")
+    doc.table(["", "Value"], [[label, value] for label, value in facts], [90, 90])
+    doc.heading("Deadlines not yet filed (overdue and next 30 days)")
+    if deadlines:
+        doc.table(["Type", "Period", "Due", "State"], deadlines, [55, 45, 40, 40])
+    else:
+        doc.para("No deadline is open for this client.")
+    doc.heading("Invoices issued in the period")
+    if invoices:
+        doc.table(["Invoice", "Issued", "Total", "Balance due", "Status"], invoices, [40, 30, 40, 40, 30])
+    else:
+        doc.para("No invoice was issued to this client in the period.")
+    return doc.output()
+

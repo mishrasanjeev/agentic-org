@@ -30,7 +30,7 @@ metric may be read by a role that may read any view showing it.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -39,6 +39,8 @@ from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
 from core.insights import metrics_domain as domain
 from core.insights import metrics_governance as governance
+from core.insights import metrics_partner as partner
+from core.insights import metrics_runtime as runtime
 from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
@@ -56,6 +58,9 @@ MARKETING = "marketing"
 COMMERCE = "commerce"
 COMPLIANCE = "compliance"
 ENGINEERING = "engineering"
+BACK_OFFICE = "back_office"
+DOMAIN = "domain"
+PARTNER = "partner"
 
 # Which roles may read each view. Administrators hold every view; the check is
 # made server side in every handler (403 insights_view_forbidden).
@@ -68,6 +73,12 @@ VIEW_ROLES: dict[str, frozenset[str]] = {
     COMMERCE: frozenset({"admin", "merchant"}),
     COMPLIANCE: frozenset({"admin", "auditor"}),
     ENGINEERING: frozenset({"admin", "developer"}),
+    # There is no back-office role (no cbo): administrators read it.
+    BACK_OFFICE: frozenset({"admin"}),
+    # Domain leads and analysts: everything in their assigned domain.
+    DOMAIN: frozenset({"admin", "domain_lead", "analyst"}),
+    # A CA firm's view of its client companies: the roles the legacy partner dashboard admitted.
+    PARTNER: frozenset({"admin", "cfo", "coo", "auditor"}),
 }
 
 # A role view shows the run and approval metrics of its domains only (and of the caller's domains within
@@ -81,6 +92,10 @@ VIEW_DOMAINS: dict[str, tuple[str, ...] | None] = {
     COMMERCE: ("commerce",),
     COMPLIANCE: None,
     ENGINEERING: None,
+    BACK_OFFICE: ("backoffice", "legal", "risk", "corporate", "comms"),
+    # The caller's own domains (an analyst's assigned domain; every domain for an administrator).
+    DOMAIN: None,
+    PARTNER: None,
 }
 
 RUN_QUALITY_RULE = (
@@ -126,6 +141,9 @@ class Metric:
     resolver: Resolver
     thresholds: Thresholds | None = None
     group_by: tuple[str, ...] = ()
+    # Run dimensions the metric may be filtered by (``filter[dim]``); only run metrics take filters, and
+    # they may also be grouped by two of their ``group_by`` dimensions at once.
+    filters: tuple[str, ...] = ()
     # True when the metric covers the requested period and may be compared with the previous one.
     comparable: bool = True
     kind: Literal["run", "cost", "snapshot", "value"] = "run"
@@ -142,8 +160,62 @@ class Metric:
             "data_quality_rule": self.data_quality_rule,
             "thresholds": self.thresholds.as_dict() if self.thresholds else None,
             "group_by": list(self.group_by),
+            "filters": list(self.filters),
             "comparable": self.comparable,
         }
+
+
+MAX_GROUP_DIMENSIONS = 2
+MAX_FILTER_VALUES = 50
+MAX_FILTER_VALUE_LENGTH = 128
+
+
+class MetricQueryError(ValueError):
+    """A metric request asked for a grouping or filter the metric does not offer."""
+
+    def __init__(self, error: str, message: str) -> None:
+        super().__init__(message)
+        self.error = error
+        self.message = message
+
+
+def parse_grouping(metric: Metric, values: Sequence[str | None]) -> tuple[str | None, str | None]:
+    """``group_by`` values (``group_by=a`` or ``group_by[]=a&group_by[]=b``) as at most two allowed dimensions."""
+    dims = list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
+    if not dims:
+        return None, None
+    unknown = [d for d in dims if d not in metric.group_by]
+    if unknown:
+        allowed = ", ".join(metric.group_by) or "none"
+        raise MetricQueryError("group_by_not_allowed", f"{metric.key} may be grouped by: {allowed}")
+    if len(dims) > 1 and not metric.filters:
+        raise MetricQueryError("group_by_not_allowed", f"{metric.key} may be grouped by one dimension at a time")
+    if len(dims) > MAX_GROUP_DIMENSIONS:
+        raise MetricQueryError(
+            "group_by_not_allowed", f"{metric.key} may be grouped by at most {MAX_GROUP_DIMENSIONS} dimensions"
+        )
+    return dims[0], dims[1] if len(dims) > 1 else None
+
+
+def parse_filters(metric: Metric, raw: Mapping[str, str | Sequence[str]]) -> dict[str, tuple[str, ...]]:
+    """``filter[dim]=a,b`` parameters (``dim`` without the brackets) as allowed values per dimension."""
+    out: dict[str, tuple[str, ...]] = {}
+    for dim, given in raw.items():
+        if dim not in metric.filters:
+            allowed = ", ".join(metric.filters) or "none"
+            raise MetricQueryError("filter_not_allowed", f"{metric.key} may be filtered by: {allowed}")
+        parts = [given] if isinstance(given, str) else list(given)
+        values = tuple(dict.fromkeys(v.strip() for part in parts for v in str(part).split(",") if v.strip()))
+        if not values:
+            raise MetricQueryError("invalid_filter", f"filter[{dim}] needs at least one value")
+        if len(values) > MAX_FILTER_VALUES:
+            raise MetricQueryError("invalid_filter", f"filter[{dim}] takes at most {MAX_FILTER_VALUES} values")
+        if any(len(v) > MAX_FILTER_VALUE_LENGTH for v in values):
+            raise MetricQueryError(
+                "invalid_filter", f"filter[{dim}] values are at most {MAX_FILTER_VALUE_LENGTH} characters"
+            )
+        out[dim] = values
+    return out
 
 
 RUN_SOURCE = ("insights_daily", "run_facts")
@@ -157,7 +229,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="The number of agents in each lifecycle status now (shadow, active, paused, retired).",
         unit="count",
         source=("agents",),
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, DOMAIN),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=runs.resolve_agents_by_status,
         comparable=False,
@@ -172,10 +244,11 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="count",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING, ENGINEERING),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING, ENGINEERING, DOMAIN, BACK_OFFICE),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_volume,
         group_by=RUN_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.success_rate",
@@ -189,11 +262,12 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS, HR, ENGINEERING),
+        views=(EXECUTIVE, OPERATIONS, HR, ENGINEERING, FINANCE, DOMAIN, BACK_OFFICE),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_success_rate,
         thresholds=Thresholds(watch=95.0, act=90.0, direction="below"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.straight_through_rate",
@@ -204,11 +278,12 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, DOMAIN),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_straight_through_rate,
         thresholds=Thresholds(watch=70.0, act=50.0, direction="below"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.latency",
@@ -221,11 +296,42 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="duration_ms",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS, ENGINEERING),
+        views=(EXECUTIVE, OPERATIONS, ENGINEERING, DOMAIN),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_latency,
         thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
+    ),
+    Metric(
+        key="runs.confidence",
+        title="Run confidence",
+        definition=(
+            "The mean confidence the agents reported for their runs in the period (0 to 100). Rows give the runs "
+            "below their agent's confidence floor (sent to a person) and the runs that reported a score; runs "
+            "without a score are left out. Debugging-console runs are not counted."
+        ),
+        unit="percent",
+        source=RUN_SOURCE,
+        views=(EXECUTIVE, ENGINEERING, DOMAIN),
+        data_quality_rule=RUN_QUALITY_RULE,
+        resolver=runs.resolve_runs_confidence,
+        thresholds=Thresholds(watch=80.0, act=70.0, direction="below"),
+        group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
+    ),
+    Metric(
+        key="quality.feedback",
+        title="Feedback on runs",
+        definition=(
+            "Feedback reviewers recorded on agent runs in the period (thumbs up, thumbs down, corrections); rows "
+            "give the count of each type. Limited to the agents of the caller's domains."
+        ),
+        unit="count",
+        source=("agent_feedback",),
+        views=(DOMAIN, ENGINEERING),
+        data_quality_rule="measured from the feedback rows; no_data when none was recorded in the period.",
+        resolver=domain.resolve_quality_feedback,
     ),
     Metric(
         key="approvals.pending",
@@ -233,7 +339,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="Approvals waiting on a person now; rows list the oldest five.",
         unit="count",
         source=("hitl_queue",),
-        views=(EXECUTIVE, OPERATIONS, HR, MARKETING),
+        views=(EXECUTIVE, OPERATIONS, HR, MARKETING, DOMAIN, BACK_OFFICE),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=runs.resolve_approvals_pending,
         thresholds=Thresholds(watch=5.0, act=20.0, direction="above"),
@@ -246,7 +352,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="The median time from an approval request to its decision, for decisions made in the period.",
         unit="duration_ms",
         source=("hitl_queue",),
-        views=(EXECUTIVE, HR),
+        views=(EXECUTIVE, HR, DOMAIN, BACK_OFFICE),
         data_quality_rule="measured from decided approvals; no_data when none was decided in the period.",
         resolver=runs.resolve_approvals_cycle_time,
         thresholds=Thresholds(watch=4 * 3_600_000.0, act=24 * 3_600_000.0, direction="above"),
@@ -699,6 +805,119 @@ _METRICS: tuple[Metric, ...] = (
         data_quality_rule="measured; no_data when no prompt was edited in the period.",
         resolver=governance.resolve_prompt_edits,
     ),
+    Metric(
+        key="engineering.tool_usage",
+        title="Tool calls",
+        definition=(
+            "Tool calls agents made through the tool gateway in the period; rows give each tool's calls, failures, "
+            "refusals (policy, scope or limits), idempotent replays, success rate and p95 latency."
+        ),
+        unit="count",
+        source=("tool_calls",),
+        views=(ENGINEERING,),
+        data_quality_rule="measured from the gateway's tool-call records; no_data when none was recorded.",
+        resolver=runtime.resolve_tool_usage,
+    ),
+    Metric(
+        key="compliance.guardrail_events",
+        title="Guardrail outcomes",
+        definition=(
+            "Guardrail outcomes in the period (a rule found something), by stage, detector, action and whether it "
+            "was enforced or only flagged. Dry runs are not counted. Counted per UTC day."
+        ),
+        unit="count",
+        source=("guardrail_events",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured from the daily counters; no_data when no outcome was counted.",
+        resolver=runtime.resolve_guardrail_events,
+    ),
+    Metric(
+        key="compliance.security_events",
+        title="Security events",
+        definition=(
+            "Failed sign-ins, rate-limit and scope denials, session revocations, API-key use and webhook "
+            "signature failures in the period, by kind. A kind spikes when its last day is more than three "
+            "standard deviations above its 30 days before (and at least 5). Counted per UTC day."
+        ),
+        unit="count",
+        source=("security_events_daily",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured from the daily counters; no_data when no event was counted.",
+        resolver=runtime.resolve_security_events,
+    ),
+    Metric(
+        key="backoffice.deadlines",
+        title="Compliance deadlines",
+        definition=(
+            "Statutory deadlines not yet filed that are overdue today; rows give, per deadline type, the overdue "
+            "ones and those due in the next 30 days."
+        ),
+        unit="count",
+        source=("compliance_deadlines",),
+        views=(BACK_OFFICE, PARTNER),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=domain.resolve_compliance_deadlines,
+        thresholds=Thresholds(watch=1.0, act=3.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="backoffice.txn_findings",
+        title="Transaction findings",
+        definition=(
+            "Findings transaction monitoring detected in the period; rows give each severity's findings and how "
+            "many are still open."
+        ),
+        unit="count",
+        source=("txn_findings",),
+        views=(BACK_OFFICE,),
+        data_quality_rule="measured from the findings rows; no_data when none was detected in the period.",
+        resolver=domain.resolve_txn_findings,
+    ),
+    Metric(
+        key="partner.clients",
+        title="Active client companies",
+        definition=(
+            "Client companies marked active; rows give every client's health (its recorded score less 25 per "
+            "overdue deadline and 5 per filing waiting for approval), its runs and run success in the period, "
+            "overdue deadlines, filings waiting and the balance outstanding on its invoices."
+        ),
+        unit="count",
+        source=("companies", "run_facts", "compliance_deadlines", "filing_approvals", "ca_client_invoices"),
+        views=(PARTNER,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=partner.resolve_partner_clients,
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="partner.filings",
+        title="Filings waiting for approval",
+        definition="Filings prepared for the firm's clients that wait for an approval now, by filing type.",
+        unit="count",
+        source=("filing_approvals",),
+        views=(PARTNER,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=partner.resolve_partner_filings,
+        thresholds=Thresholds(watch=5.0, act=15.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="partner.billing",
+        title="Invoiced to clients",
+        definition=(
+            "What the firm invoiced its clients in the period (issued invoices, not drafts or voided ones); rows "
+            "give, per currency, the amount invoiced, the payments received in the period and the balance "
+            "outstanding now."
+        ),
+        unit="inr",
+        source=("ca_client_invoices", "ca_client_payments"),
+        views=(PARTNER,),
+        data_quality_rule="measured from the firm's invoices and payments; no_data when no invoice is recorded.",
+        resolver=partner.resolve_partner_billing,
+        comparable=False,
+    ),
 )
 
 METRICS: dict[str, Metric] = {metric.key: metric for metric in _METRICS}
@@ -735,15 +954,16 @@ VIEWS: dict[str, View] = {
             "value.money_saved",
             "value.hours_saved",
         ),
-        charts=("runs.volume", "agents.by_status", "runs.success_rate", "cost.spend", "value.money_saved"),
+        charts=("runs.volume", "agents.by_status", "runs.success_rate", "runs.confidence", "cost.spend",
+                "value.money_saved"),
     ),
     FINANCE: View(
         key=FINANCE,
         title="Finance",
-        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "cost.data_quality", "value.money_saved",
-               "value.roi"),
+        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "runs.success_rate",
+               "runs.straight_through_rate", "cost.data_quality", "value.money_saved", "value.roi"),
         charts=("cost.spend", "cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "tokens.by_unit",
-                "value.money_saved"),
+                "value.money_saved", "agents.by_status"),
     ),
     OPERATIONS: View(
         key=OPERATIONS,
@@ -752,17 +972,19 @@ VIEWS: dict[str, View] = {
             "workflows.runs",
             "workflows.stalled",
             "runs.success_rate",
+            "runs.straight_through_rate",
             "runs.latency",
             "approvals.pending",
             "connectors.unhealthy",
         ),
-        charts=("workflows.runs", "runs.volume", "connectors.unhealthy"),
+        charts=("workflows.runs", "runs.volume", "connectors.unhealthy", "agents.by_status"),
     ),
     HR: View(
         key=HR,
         title="HR",
-        tiles=("runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"),
-        charts=("runs.volume", "hr.pt_returns"),
+        tiles=("runs.volume", "runs.success_rate", "runs.straight_through_rate", "approvals.pending",
+               "approvals.cycle_time", "hr.pt_returns"),
+        charts=("runs.volume", "hr.pt_returns", "agents.by_status"),
     ),
     MARKETING: View(
         key=MARKETING,
@@ -788,8 +1010,10 @@ VIEWS: dict[str, View] = {
             "compliance.dsar_completion_time",
             "compliance.attestations_expiring",
             "compliance.change_log",
+            "compliance.security_events",
+            "compliance.guardrail_events",
         ),
-        charts=("compliance.approvals_decided", "compliance.change_log"),
+        charts=("compliance.approvals_decided", "compliance.change_log", "compliance.security_events"),
     ),
     ENGINEERING: View(
         key=ENGINEERING,
@@ -801,8 +1025,46 @@ VIEWS: dict[str, View] = {
             "engineering.slow_spans",
             "engineering.eval_pass_rate",
             "engineering.prompt_edits",
+            "engineering.tool_usage",
+            "runs.confidence",
+            "quality.feedback",
         ),
-        charts=("engineering.slow_spans", "runs.volume"),
+        charts=("engineering.slow_spans", "engineering.tool_usage", "runs.volume", "runs.confidence",
+                "quality.feedback"),
+    ),
+    BACK_OFFICE: View(
+        key=BACK_OFFICE,
+        title="Back office",
+        tiles=(
+            "backoffice.deadlines",
+            "backoffice.txn_findings",
+            "approvals.pending",
+            "approvals.cycle_time",
+            "runs.volume",
+            "runs.success_rate",
+        ),
+        charts=("backoffice.deadlines", "backoffice.txn_findings", "runs.volume"),
+    ),
+    DOMAIN: View(
+        key=DOMAIN,
+        title="My domain",
+        tiles=(
+            "runs.volume",
+            "runs.success_rate",
+            "runs.straight_through_rate",
+            "runs.latency",
+            "runs.confidence",
+            "approvals.pending",
+            "approvals.cycle_time",
+            "quality.feedback",
+        ),
+        charts=("runs.volume", "runs.success_rate", "runs.confidence", "quality.feedback", "agents.by_status"),
+    ),
+    PARTNER: View(
+        key=PARTNER,
+        title="Partner",
+        tiles=("partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"),
+        charts=("partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"),
     ),
 }
 
@@ -844,7 +1106,10 @@ async def _complete_days_compare(metric: Metric, ctx: MetricContext, days: int) 
 
 async def resolve(metric: Metric, ctx: MetricContext) -> dict[str, Any]:
     """The metric's response for ``ctx``."""
-    part = await metric.resolver(ctx)
+    from core.insights.telemetry import metric_seconds, timed
+
+    with timed(metric_seconds, metric.key):
+        part = await metric.resolver(ctx)
     period = part.pop("period", None) or ctx.period.as_dict()
     value = part.get("value")
     state = part.pop("state", None)

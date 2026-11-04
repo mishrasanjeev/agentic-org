@@ -42,6 +42,31 @@ async function goTo(page: Page, path: string): Promise<void> {
   await page.waitForLoadState("networkidle").catch(() => {});
 }
 
+/**
+ * Open a retired dashboard URL and assert it redirected to the page that now
+ * holds its features (an Insights view or Marketing operations).
+ */
+async function goToRetired(page: Page, path: string, target: RegExp): Promise<void> {
+  await goTo(page, path);
+  await expect(page).toHaveURL(target, { timeout: 15000 });
+}
+
+/** The retired CxO dashboard URLs and where each one lands now. */
+const CXO_REDIRECTS: { path: string; target: RegExp }[] = [
+  { path: "/dashboard/ceo", target: /\/dashboard\/insights\?(.*&)?view=executive/ },
+  { path: "/dashboard/cfo", target: /\/dashboard\/insights\?(.*&)?view=finance/ },
+  { path: "/dashboard/chro", target: /\/dashboard\/insights\?(.*&)?view=hr/ },
+  { path: "/dashboard/cmo", target: /\/dashboard\/marketing-ops/ },
+  { path: "/dashboard/coo", target: /\/dashboard\/insights\?(.*&)?view=operations/ },
+  { path: "/dashboard/cbo", target: /\/dashboard\/insights\?(.*&)?view=back_office/ },
+];
+
+function cxoTarget(path: string): RegExp {
+  const entry = CXO_REDIRECTS.find((r) => r.path === path);
+  if (!entry) throw new Error(`No redirect target recorded for ${path}`);
+  return entry.target;
+}
+
 /** Assert no garbage text (undefined, NaN, Cannot convert) in page body. */
 async function assertNoGarbageText(page: Page): Promise<void> {
   const body = (await page.locator("body").textContent()) || "";
@@ -287,8 +312,14 @@ test.describe("Ramesh UI Regression", () => {
     }
 
     if (dashboardNames.length > 0) {
-      // Navigate to partner view
-      await goTo(page, "/dashboard/partner");
+      // Navigate to the partner view (the retired Partner dashboard URL opens
+      // the Insights partner view) and open the client companies' data table.
+      await goToRetired(page, "/dashboard/partner", /\/dashboard\/insights\?(.*&)?view=partner/);
+      const clientsCard = page.locator('[data-testid="chart-card"][data-metric-key="partner.clients"]');
+      const viewData = clientsCard.getByRole("button", { name: "View data" });
+      if (await viewData.isVisible({ timeout: 10000 }).catch(() => false)) {
+        await viewData.click();
+      }
       const body = (await page.locator("body").textContent()) || "";
 
       // At least some company names from dashboard should appear in partner view
@@ -647,39 +678,31 @@ test.describe("Proactive Regression - Similar Issues", () => {
     await authenticate(page);
   });
 
-  // No "undefined" text on any CxO dashboard
-  test("no undefined text on CEO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/ceo");
+  // No "undefined" text where the retired CxO dashboards now land (Insights views)
+  test("no undefined text on CEO dashboard (Insights executive view)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/ceo", cxoTarget("/dashboard/ceo"));
     await assertNoGarbageText(page);
   });
 
-  test("no undefined text on CHRO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/chro");
+  test("no undefined text on CHRO dashboard (Insights HR view)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/chro", cxoTarget("/dashboard/chro"));
     await assertNoGarbageText(page);
   });
 
-  test("no undefined text on COO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/coo");
+  test("no undefined text on COO dashboard (Insights operations view)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/coo", cxoTarget("/dashboard/coo"));
     await assertNoGarbageText(page);
   });
 
-  test("no undefined text on CBO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/cbo");
+  test("no undefined text on CBO dashboard (Insights back-office view)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/cbo", cxoTarget("/dashboard/cbo"));
     await assertNoGarbageText(page);
   });
 
   // No "NaN" on any KPI display
-  test("no NaN on any CxO dashboard", async ({ page }) => {
-    const paths = [
-      "/dashboard/ceo",
-      "/dashboard/cfo",
-      "/dashboard/chro",
-      "/dashboard/cmo",
-      "/dashboard/coo",
-      "/dashboard/cbo",
-    ];
-    for (const path of paths) {
-      await goTo(page, path);
+  test("no NaN where any CxO dashboard URL lands", async ({ page }) => {
+    for (const { path, target } of CXO_REDIRECTS) {
+      await goToRetired(page, path, target);
       const body = (await page.locator("body").textContent()) || "";
       expect(body).not.toMatch(/\bNaN\b/);
     }
@@ -805,15 +828,15 @@ test.describe("Proactive Regression - Similar Issues", () => {
     expect(body).not.toContain("Application error");
   });
 
-  // No undefined text on CFO dashboard
-  test("no undefined text on CFO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/cfo");
+  // No undefined text on CFO dashboard (now the Insights finance view)
+  test("no undefined text on CFO dashboard (Insights finance view)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/cfo", cxoTarget("/dashboard/cfo"));
     await assertNoGarbageText(page);
   });
 
-  // No undefined text on CMO dashboard
-  test("no undefined text on CMO dashboard", async ({ page }) => {
-    await goTo(page, "/dashboard/cmo");
+  // No undefined text on CMO dashboard (now Marketing operations)
+  test("no undefined text on CMO dashboard (Marketing operations)", async ({ page }) => {
+    await goToRetired(page, "/dashboard/cmo", cxoTarget("/dashboard/cmo"));
     await assertNoGarbageText(page);
   });
 

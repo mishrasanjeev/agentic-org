@@ -166,7 +166,7 @@ async def _cost(ctx: MetricContext) -> list[Candidate]:
                 f"{budget['name']} {verb} its {budget['period']} budget ({budget['used_pct']}% used)",
                 entity_ref=str(budget["id"]),
                 metric_key="cost.budgets",
-                link="/dashboard/costs",
+                link="/dashboard/insights/explore/cost",
                 detail={"used_pct": budget["used_pct"], "period": budget["period"]},
             )
         )
@@ -197,7 +197,7 @@ async def _cost(ctx: MetricContext) -> list[Candidate]:
                     "cfo",
                     f"Only {coverage['value']}% of metered usage was priced",
                     metric_key="cost.data_quality",
-                    link="/dashboard/costs",
+                    link="/dashboard/insights/explore/cost",
                     detail={"value": coverage["value"]},
                 )
             )

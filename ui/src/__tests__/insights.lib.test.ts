@@ -7,6 +7,7 @@ import {
   exportFilename,
   exportPath,
   exportUrl,
+  VIEW_KEYS,
   filterParams,
   readErrorDetail,
   type MetricResponse,
@@ -92,6 +93,11 @@ describe("metric keys used by the Insights page", () => {
     }
   });
 
+  it("every view a role may open survives the status normaliser (VIEW_KEYS)", () => {
+    for (const views of Object.values(ROLE_VIEWS)) for (const v of views) expect(VIEW_KEYS, v).toContain(v);
+    for (const v of Object.keys(VIEW_METRICS)) expect(VIEW_KEYS, v).toContain(v);
+  });
+
   it("role views mirror the server rule (core/insights/registry.py VIEW_ROLES)", () => {
     expect(ROLE_VIEWS.admin).toEqual([
       "executive",
@@ -102,17 +108,23 @@ describe("metric keys used by the Insights page", () => {
       "commerce",
       "compliance",
       "engineering",
+      "back_office",
+      "domain",
+      "partner",
     ]);
-    expect(ROLE_VIEWS.auditor).toEqual(["compliance"]);
+    expect(ROLE_VIEWS.auditor).toEqual(["compliance", "partner"]);
     expect(ROLE_VIEWS.developer).toEqual(["engineering"]);
     expect(defaultViewForRole("auditor")).toBe("compliance");
     expect(defaultViewForRole("developer")).toBe("engineering");
-    expect(ROLE_VIEWS.cfo).toEqual(["finance"]);
-    expect(ROLE_VIEWS.coo).toEqual(["operations"]);
+    expect(ROLE_VIEWS.cfo).toEqual(["finance", "partner"]);
+    expect(ROLE_VIEWS.coo).toEqual(["operations", "partner"]);
     expect(ROLE_VIEWS.chro).toEqual(["hr"]);
     expect(ROLE_VIEWS.cmo).toEqual(["marketing"]);
     expect(ROLE_VIEWS.merchant).toEqual(["commerce"]);
-    expect(ROLE_VIEWS.analyst).toBeUndefined();
+    expect(ROLE_VIEWS.analyst).toEqual(["domain"]);
+    expect(ROLE_VIEWS.domain_lead).toEqual(["domain"]);
+    expect(defaultViewForRole("analyst")).toBe("domain");
+    expect(ROLE_VIEWS.viewer).toBeUndefined();
     expect(defaultViewForRole("coo")).toBe("operations");
     expect(defaultViewForRole("merchant")).toBe("commerce");
     expect(defaultViewForRole("admin")).toBe("executive");
@@ -127,7 +139,7 @@ describe("metric keys used by the Insights page", () => {
       // core/insights/explore_registry.py: auditors read runs, approvals and the audit log; developers their
       // domain's agents, runs and quality.
       auditor: ["runs", "approvals", "audit"],
-      developer: ["agents", "runs", "quality"],
+      developer: ["agents", "runs", "quality", "connectors"],
     };
     const pagesFor: Record<string, string[]> = {
       coo: [],
@@ -162,7 +174,7 @@ describe("metric keys used by the Insights page", () => {
       const target = METRIC_PRESENTATION[key].action.to;
       const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
       if (explorer) expect(cfoExplorers, key).toContain(explorer);
-      else expect(["/dashboard/costs", "/dashboard/insights/value"], key).toContain(target);
+      else expect(["/dashboard/insights/value"], key).toContain(target);
     }
   });
 });

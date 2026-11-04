@@ -67,14 +67,14 @@ bypass permissions.
 | Configure voice | [Voice Agents](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
 | Configure browser automation | [RPA Scripts](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
 | Investigate run evidence | [Audit Log](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
-| Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
+| Inspect run timelines | [Insights runs](https://app.agenticorg.ai/dashboard/insights/explore/runs) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
 | Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
-| Review recorded agent cost in USD (no sidebar entry) | [Cost Dashboard](https://app.agenticorg.ai/dashboard/costs) | [Billing and support](/docs/billing-and-support) |
+| Review recorded agent cost | [Insights Finance view](https://app.agenticorg.ai/dashboard/insights?view=finance) | [Billing and support](/docs/billing-and-support) |
 
 ## When you get stuck
 

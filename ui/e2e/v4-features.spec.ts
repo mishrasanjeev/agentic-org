@@ -425,8 +425,9 @@ test.describe("v4 — Sidebar Navigation", () => {
     // Knowledge Base is visible to all roles; Billing only to admin
     // At least the dashboard page itself should render without error
     expect(pageText.length).toBeGreaterThan(100);
-    // Soft check: if sidebar rendered, at least "Dashboard" nav label exists
-    expect(pageText).toContain("Dashboard");
+    // Soft check: /dashboard lands on Insights, whose heading and nav label render
+    expect(page.url()).toContain("/dashboard/insights");
+    expect(pageText).toContain("Insights");
   });
 
   test("sidebar_knowledge_link_navigates", async ({ page }) => {

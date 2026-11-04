@@ -117,10 +117,10 @@ describe("ownership nav and route guards (bug sheet 2026-09-14)", () => {
     expect(screen.getByText("access denied")).toBeInTheDocument();
   });
 
-  it("domain_lead and developer land on the agent fleet after login", () => {
-    expect(defaultLandingForRole("developer")).toBe("/dashboard/agents");
-    expect(defaultLandingForRole("domain_lead")).toBe("/dashboard/agents");
-    expect(defaultLandingForRole("cfo")).toBe("/dashboard");
+  it("domain_lead and developer land on their Insights view after login", () => {
+    expect(defaultLandingForRole("developer")).toBe("/dashboard/insights");
+    expect(defaultLandingForRole("domain_lead")).toBe("/dashboard/insights");
+    expect(defaultLandingForRole("cfo")).toBe("/dashboard/insights");
     expect(defaultLandingForRole("merchant")).toBe("/dashboard/commerce-runtime");
   });
 

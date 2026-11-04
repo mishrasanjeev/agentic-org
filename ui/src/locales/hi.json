@@ -60,7 +60,9 @@
     "billing": "बिलिंग",
     "accountSecurity": "खाता सुरक्षा",
     "settings": "सेटिंग्स",
-    "lineage": "वंशावली"
+    "lineage": "वंशावली",
+    "marketingOps": "मार्केटिंग संचालन",
+    "monitoring": "निगरानी"
   },
   "roles": {
     "cfo": "CFO",
@@ -787,6 +789,19 @@
       "roleBypass": "{{role}} के रूप में जुड़ा है, जो पंक्ति-स्तरीय सुरक्षा को दरकिनार करता है।",
       "healthNone": "पिछले {{hours}} घंटों में कोई स्वास्थ्य स्नैपशॉट नहीं।",
       "healthDetail": "पिछले {{hours}} घंटों में {{snapshots}} स्नैपशॉट, {{unhealthy}} अस्वस्थ। नवीनतम संस्करण {{version}}, कमिट {{commit}}।"
+    },
+    "operations": {
+      "title": "डैशबोर्ड संचालन",
+      "definition": "इस अवधि में बने पृष्ठभूमि निर्यात कार्य, और वे टेनेंट जिनका रोलअप पीछे है। एक घंटे से अधिक खुला कार्य या देर से चल रहा रोलअप जाँचना चाहिए।",
+      "exports": "निर्यात कार्य",
+      "exportsDetail": "{{ready}} तैयार, {{failed}} विफल, {{expired}} समाप्त, {{open}} अभी खुले।",
+      "exportFailure": "निर्यात विफलता दर",
+      "oldestOpen": "सबसे पुराना खुला निर्यात",
+      "noneOpen": "कोई खुला नहीं",
+      "rollupLate": "{{hours}} घंटे से पुराने रोलअप",
+      "rollupOnTime": "हर टेनेंट का रोलअप समय पर है।",
+      "minutes": "{{count}} मिनट",
+      "rollupLateDetail": "देर से चल रहे टेनेंट: {{count}}। सबसे अधिक {{hours}} घंटे पीछे।"
     }
   },
   "insights": {
@@ -805,7 +820,10 @@
       "marketing": "मार्केटिंग",
       "commerce": "कॉमर्स",
       "compliance": "अनुपालन",
-      "engineering": "इंजीनियरिंग"
+      "engineering": "इंजीनियरिंग",
+      "back_office": "बैक ऑफ़िस",
+      "domain": "मेरा डोमेन",
+      "partner": "पार्टनर"
     },
     "filters": {
       "label": "फ़िल्टर",
@@ -887,7 +905,8 @@
       "openDownloads": "डाउनलोड खोलें",
       "svg": "चार्ट (SVG)",
       "png": "चार्ट (PNG)",
-      "noPicture": "इस चार्ट का कोई चित्र नहीं है; इसका डेटा एक्सपोर्ट करें।"
+      "noPicture": "इस चार्ट का कोई चित्र नहीं है; इसका डेटा एक्सपोर्ट करें।",
+      "pdf": "चार्ट (PDF)"
     },
     "empty": {
       "title": "अभी कोई डेटा नहीं",
@@ -920,7 +939,9 @@
       "exploreConnectors": "खराब कनेक्टर देखें",
       "openOrders": "ऑर्डर खोलें",
       "exploreAudit": "ऑडिट लॉग देखें",
-      "exploreQuality": "गुणवत्ता देखें"
+      "exploreQuality": "गुणवत्ता देखें",
+      "openCompanies": "कंपनियाँ खोलें",
+      "openTransactions": "लेन-देन खोलें"
     },
     "disabled": {
       "title": "इनसाइट्स बंद है",
@@ -966,7 +987,60 @@
       "evidencePack": "साक्ष्य पैक",
       "asking": "माँगा जा रहा है…",
       "queued": "यह तैयार हो रहा है; तैयार होने पर आपको ईमेल मिलेगा।",
-      "schedule": "साप्ताहिक शेड्यूल करें"
+      "schedule": "साप्ताहिक शेड्यूल करें",
+      "partnerPack": "पार्टनर क्लाइंट पैक"
+    },
+    "breadcrumbs": "इनसाइट्स में आप कहाँ हैं",
+    "search": {
+      "open": "खोजें",
+      "title": "इनसाइट्स में खोजें",
+      "placeholder": "एजेंट, वर्कफ़्लो, कनेक्टर, कंपनी, व्यक्ति या रन आईडी खोजें",
+      "hint": "कम से कम दो अक्षर लिखें।",
+      "none": "आप जो खोल सकते हैं उसमें कुछ मेल नहीं खाता।",
+      "error": "खोज विफल रही। फिर से कोशिश करें।",
+      "kinds": {
+        "agent": "एजेंट",
+        "workflow": "वर्कफ़्लो",
+        "connector": "कनेक्टर",
+        "company": "कंपनी",
+        "user": "व्यक्ति",
+        "cost_centre": "लागत केंद्र",
+        "run": "रन"
+      }
+    },
+    "saved": {
+      "label": "सहेजे गए दृश्य",
+      "choose": "सहेजा गया दृश्य खोलें",
+      "none": "अभी कोई सहेजा गया दृश्य नहीं",
+      "sharedTag": "साझा",
+      "saveCurrent": "यह दृश्य सहेजें",
+      "namePlaceholder": "इस दृश्य को नाम दें",
+      "share": "इसे खोल सकने वाले सभी के साथ साझा करें",
+      "save": "सहेजें",
+      "cancel": "रद्द करें",
+      "saved": "सहेज लिया।",
+      "failed": "सहेजा गया दृश्य बदला नहीं जा सका।",
+      "manage": "मेरे सहेजे गए दृश्य",
+      "delete": "हटाएँ",
+      "deleteNamed": "सहेजा गया दृश्य {{name}} हटाएँ"
+    },
+    "changes": {
+      "title": "आपके पिछली बार देखने के बाद से ({{since}})",
+      "firstVisit": "पिछले 7 दिनों में",
+      "items": {
+        "agents_created_one": "{{count}} एजेंट जोड़ा गया",
+        "agents_created_other": "{{count}} एजेंट जोड़े गए",
+        "agent_status_changes_one": "{{count}} एजेंट स्थिति बदलाव",
+        "agent_status_changes_other": "{{count}} एजेंट स्थिति बदलाव",
+        "approvals_decided_one": "{{count}} स्वीकृति पर निर्णय",
+        "approvals_decided_other": "{{count}} स्वीकृतियों पर निर्णय",
+        "runs_failed_one": "{{count}} रन विफल",
+        "runs_failed_other": "{{count}} रन विफल",
+        "alerts_fired_one": "{{count}} नया अलर्ट",
+        "alerts_fired_other": "{{count}} नए अलर्ट",
+        "config_changes_one": "{{count}} कॉन्फ़िगरेशन बदलाव",
+        "config_changes_other": "{{count}} कॉन्फ़िगरेशन बदलाव"
+      }
     }
   },
   "insightsBi": {
@@ -1188,6 +1262,11 @@
       "checksum": "सहेजा गया। SHA-256: {{sha256}}",
       "saved": "सहेजा गया।",
       "failed": "साक्ष्य फ़ाइल तैयार नहीं हो सकी।"
+    },
+    "debug": {
+      "title": "इस रन को चरण-दर-चरण देखें",
+      "open": "डीबगर खोलें",
+      "close": "डीबगर बंद करें"
     }
   },
   "insightsValue": {
@@ -1286,7 +1365,8 @@
       "run_bundle": "रन साक्ष्य",
       "view_pdf": "व्यू PDF",
       "finance_pack": "वित्त पैक",
-      "evidence_pack": "साक्ष्य पैक"
+      "evidence_pack": "साक्ष्य पैक",
+      "partner_pack": "पार्टनर क्लाइंट पैक"
     },
     "rawPii": "असली व्यक्तिगत डेटा",
     "download": "डाउनलोड",
@@ -1307,5 +1387,78 @@
     "signed": "हस्ताक्षर हो गए।",
     "signFailed": "पैक पर हस्ताक्षर नहीं हो सके।",
     "signedBy": "{{name}} ने {{when}} को हस्ताक्षर किए:"
+  },
+  "insightsEntity": {
+    "kinds": {
+      "agent": "एजेंट",
+      "workflow": "वर्कफ़्लो",
+      "connector": "कनेक्टर",
+      "company": "कंपनी",
+      "user": "व्यक्ति",
+      "cost_centre": "लागत केंद्र"
+    },
+    "missing": "नहीं मिला",
+    "missingHint": "यह मौजूद नहीं है, या उस डेटा से बाहर है जिसे आप देख सकते हैं।",
+    "forbidden": "आपकी भूमिका के लिए उपलब्ध नहीं",
+    "forbiddenHint": "यह पेज चाहिए तो किसी व्यवस्थापक से पूछें।",
+    "error": "यह पेज लोड नहीं हो सका।",
+    "yes": "हाँ",
+    "no": "नहीं",
+    "cards": "{{from}} से {{to}} तक",
+    "noCards": "इस अवधि में इसके लिए कुछ दर्ज नहीं हुआ।",
+    "agents": "एजेंट",
+    "linksTitle": "यहाँ खोलें",
+    "timeline": "समयरेखा",
+    "noTimeline": "अभी तक कोई गतिविधि दर्ज नहीं है।",
+    "facts": {
+      "title": "तथ्य",
+      "status": "स्थिति",
+      "agent_type": "प्रकार",
+      "domain": "डोमेन",
+      "version": "संस्करण",
+      "created_at": "बनाया गया",
+      "spend_usd": "अवधि में खर्च (USD)",
+      "trigger": "ट्रिगर",
+      "active": "सक्रिय",
+      "mean_duration_s": "औसत रन समय (सेकंड)",
+      "category": "श्रेणी",
+      "auth_type": "साइन-इन का तरीका",
+      "health_check_at": "पिछली स्वास्थ्य जाँच",
+      "agents": "इसका उपयोग करने वाले एजेंट",
+      "industry": "उद्योग",
+      "state_code": "राज्य कोड",
+      "health_score": "स्वास्थ्य स्कोर",
+      "overdue_deadlines": "बीती समय-सीमाएँ",
+      "role": "भूमिका",
+      "mfa_enabled": "दो-चरणीय साइन-इन",
+      "last_login_at": "पिछला साइन-इन",
+      "code": "कोड",
+      "budget_limit": "बजट",
+      "budget_used_pct": "बजट उपयोग (%)",
+      "fiscal_year": "वित्त वर्ष"
+    },
+    "links": {
+      "runs": "रन",
+      "approvals": "स्वीकृतियाँ",
+      "quality": "गुणवत्ता",
+      "manage": "प्रबंधित करें",
+      "workflows": "वर्कफ़्लो रन",
+      "connectors": "कनेक्टर स्थिति",
+      "audit": "ऑडिट लॉग",
+      "cost": "लागत"
+    },
+    "columns": {
+      "at": "कब",
+      "event": "घटना",
+      "action": "कार्रवाई",
+      "outcome": "परिणाम",
+      "actor": "किसके द्वारा"
+    }
+  },
+  "marketingOps": {
+    "title": "मार्केटिंग संचालन",
+    "tabs": "मार्केटिंग पेज",
+    "operations": "संचालन",
+    "abm": "ABM खाते"
   }
 }

@@ -204,12 +204,14 @@ test.describe("E1: Playground Shows Custom Agents", () => {
     requireAuth();
     await ensureAuth(page, baseURL!);
 
-    await page.goto(`${baseURL}/dashboard`, {
+    // The home dashboard (and its "Total Agents" card) is retired; the
+    // agent fleet page lists the tenant's agents.
+    await page.goto(`${baseURL}/dashboard/agents`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");
 
-    // Dashboard shows "Total Agents" heading, not "Your Agents"
+    // The fleet shows the "Agent Fleet" heading, not "Your Agents"
     const bodyText = await page.textContent("body") || "";
     const hasAgentSection =
       bodyText.includes("Total Agents") ||

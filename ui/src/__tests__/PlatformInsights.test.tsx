@@ -30,6 +30,14 @@ const SUMMARY = {
     { day: "2026-10-30", tenants_active: 2, runs: 10, failed: 1, tokens: 900, cost_usd: 1.5 },
     { day: "2026-10-31", tenants_active: 1, runs: 4, failed: 0, tokens: 100, cost_usd: 0.25 },
   ],
+  operations: {
+    exports: { queued: 1, running: 0, ready: 6, failed: 2, expired: 0 },
+    export_failure_rate: 0.25,
+    oldest_open_minutes: 12,
+    tenants_late: 1,
+    max_lag_hours: 3.5,
+    late_after_hours: 2,
+  },
   reconciled_gate_nights: 14,
 };
 const TENANTS = {
@@ -176,8 +184,13 @@ describe("PlatformInsights", () => {
 
     const chart = screen.getByTestId("chart-card");
     expect(within(chart).getByText("Runs per day")).toBeInTheDocument();
-    // No export endpoint exists for platform figures.
-    expect(chart.querySelector('[aria-haspopup="menu"]')).toBeNull();
+    // The platform figures export through their own endpoint: CSV, XLSX and JSON, never a PDF.
+    fireEvent.click(within(chart).getByRole("button", { name: "Export Runs per day" }));
+    const formats = within(chart)
+      .getAllByRole("menuitem")
+      .map((item) => item.getAttribute("data-format"));
+    expect(formats).toEqual(["csv", "xlsx", "json", "svg", "png"]);
+    fireEvent.keyDown(within(chart).getByRole("menu"), { key: "Escape" });
     fireEvent.click(within(chart).getByRole("button", { name: /view data/i }));
     expect(within(chart).getByTestId("insights-data-table")).toBeInTheDocument();
 
@@ -199,6 +212,16 @@ describe("PlatformInsights", () => {
     expect(screen.getByText(/Not forced: legacy_table/)).toBeInTheDocument();
     expect(screen.getByText(/288 snapshots in the last 24 hours, 2 unhealthy/)).toBeInTheDocument();
     expectNoBrokenText(container);
+  });
+
+  it("shows the dashboard's own export and rollup figures", async () => {
+    answer();
+    renderPage();
+    const panel = await screen.findByTestId("platform-operations");
+    expect(panel).toHaveTextContent("6 ready, 2 failed, 0 expired, 1 still open.");
+    expect(panel).toHaveTextContent("25.0%");
+    expect(panel).toHaveTextContent("12 min");
+    expect(panel).toHaveTextContent("Tenants late: 1. The furthest behind by 3.5 hours.");
   });
 
   it("sorts the tenant table from its column headers", async () => {
@@ -294,6 +317,10 @@ describe("platform client helpers", () => {
     expect(summary.totals.failure_rate).toBeNull();
     expect(summary.series).toHaveLength(1);
     expect(summary.reconciled_gate_nights).toBe(14);
+    expect(summary.operations.exports.ready).toBe(0);
+    expect(summary.operations.export_failure_rate).toBeNull();
+    expect(summary.operations.oldest_open_minutes).toBeNull();
+    expect(summary.operations.late_after_hours).toBe(2);
     const tenants = normaliseTenants({ tenants: [{ tenant_id: "t", failure_rate: null }, { name: "no id" }] });
     expect(tenants.tenants).toHaveLength(1);
     expect(tenants.tenants[0].failure_rate).toBeNull();

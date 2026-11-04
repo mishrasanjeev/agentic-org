@@ -389,7 +389,10 @@ def jsonable(value: Any) -> Any:
 
 async def resolve(explorer: Explorer, ctx: ExploreContext) -> dict[str, Any]:
     """The explorer's response for ``ctx``: its columns and the requested page of rows."""
-    data = await explorer.resolver(ctx)
+    from core.insights.telemetry import explorer_seconds, timed
+
+    with timed(explorer_seconds, explorer.key):
+        data = await explorer.resolver(ctx)
     if data.paged:
         rows, total = data.rows, int(data.total or 0)
     else:
