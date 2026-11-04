@@ -228,9 +228,11 @@ issued, AgenticOrg checks the cart against your catalog as it is at that moment:
 - **Fewer in stock than the cart holds, or a product you no longer sell.** No link is issued. The buyer's AI
   app is told what is short and changes the quantity or the item.
 - **Stock held by another buyer's payment.** With your Plural page, a payment link holds its items for the
-  30 minutes it is valid. When the stock left after those holds is less than the cart needs, no link is
-  issued. The buyer's AI app is told how many can be bought now and when the held stock frees up if that
-  other payment does not go through.
+  30 minutes it is valid. Orders paid through AgenticOrg since your catalog was last read count as sold. When
+  the stock left after those is less than the cart needs, no link is issued. The buyer's AI app is told how
+  many can be bought now and, when another buyer's pending payment holds the rest, when it frees up if that
+  payment does not go through. A canceled checkout holds nothing. Two buyers asking for the last unit at the
+  same moment are checked one after the other, so only one gets a link.
 - **Loyalty.** When the checkout is re-priced and AgenticOrg can read the buyer's membership from your Shopify
   store, the points forecast is worked out again from the new total. If the store cannot be read at that
   moment, the forecast already shown is kept.
@@ -239,8 +241,9 @@ While an earlier payment link of the checkout can still be paid on your Plural p
 was issued, so a payment on it still becomes your order.
 
 **Stock when the payment arrives.** The money is already taken when Plural reports a payment, so the order is
-always created. AgenticOrg first checks your catalog again. If your stock no longer covers every item (for
-example, you sold the last one in your own store meanwhile), the order is marked **Stock was short when the
+always created. AgenticOrg first checks your catalog again, less the orders paid through AgenticOrg since your
+catalog was last read. If your stock no longer covers every item (for example, you sold the last one in your
+own store meanwhile), the order is marked **Stock was short when the
 payment arrived** on the Orders page, with the short items, and every administrator gets an email. Ship what
 you can and refund the rest, or refund the order (see Refunds below).
 
@@ -269,9 +272,15 @@ is emailed about once, however often Plural reports it.
   refund Plural has not confirmed yet counts as made. The order then shows the refund as refunded or
   pending. Only workspace administrators can refund. Each refund is decided by the commerce arbiter and
   recorded in your ledger. Choosing **Confirm refund** twice sends one refund, not two.
+- **A refund Plural has not confirmed.** If Plural does not answer clearly (a timeout, a server error, a
+  pending status), the refund shows as pending and counts as refunded, so it is never sent twice. Every 5
+  minutes AgenticOrg asks Plural again and records the refund as refunded or failed. You can also choose
+  **Check refund again** once a refund is 5 minutes old. Only a refund Plural refused is marked failed; you
+  can then refund again. If Plural still does not say, the refund stays pending: check it in your Plural
+  dashboard.
 - **Payments with no order.** Choose **Refund** on the payment under **Payments with no order** and confirm.
   The whole amount the buyer paid is refunded once. A payment whose order was created while stock was short
-  is refunded through that order.
+  is refunded through that order. A refund Plural refused can be tried again.
 - **Orders paid in your Shopify checkout.** AgenticOrg never sees these orders. Refund them in your Shopify
   admin.
 

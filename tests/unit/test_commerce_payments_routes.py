@@ -699,6 +699,7 @@ async def test_an_order_shows_the_buyer_contact_delivery_items_total_and_surface
         "refundable_minor_units": 44900,
         "refund_available": True,
         "stock_short": None,
+        "refund_checkable": False,
         "surface": "Telegram",
         "permalink_url": "https://tea-corner.shops.example/orders/ord_1",
     }

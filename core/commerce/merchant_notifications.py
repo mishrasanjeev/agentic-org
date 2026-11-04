@@ -6,11 +6,11 @@ matches it, or the order was made while stock was short) each get one row,
 written in the transaction of the business change (``enqueue``). The email is
 sent from the row, never from the request:
 
-* ``deliver_tenant`` leases due rows (``pending``, or ``failed`` whose
-  ``next_attempt_at`` has come) ``FOR UPDATE SKIP LOCKED``, moves their
-  ``next_attempt_at`` past a lease, and commits before sending, like the order
-  webhook dispatcher (``core.commerce.ucp.webhooks``). It then sends each email
-  outside any transaction and records the outcome: ``sent`` when at least one
+* ``deliver_tenant`` leases one due row at a time (``pending``, or ``failed``
+  whose ``next_attempt_at`` has come) ``FOR UPDATE SKIP LOCKED``, moves its
+  ``next_attempt_at`` past a lease that covers one send, and commits before
+  sending, like the order webhook dispatcher (``core.commerce.ucp.webhooks``).
+  It then sends that email outside any transaction and records the outcome: ``sent`` when at least one
   administrator accepted it, otherwise ``failed`` with exponential backoff, and
   ``dead`` after ``MAX_ATTEMPTS``. An SMTP failure for every recipient (or no
   active administrator) is a failed attempt, so the row is tried again.
@@ -139,39 +139,44 @@ class DeliveryReport:
 async def deliver_tenant(
     tenant_id: Any, *, now: datetime | None = None, sender: Sender | None = None, limit: int = BATCH_SIZE
 ) -> DeliveryReport:
-    """Send the tenant's due merchant emails once each (lease, send outside a transaction, record)."""
+    """Send the tenant's due merchant emails once each: lease one row, send it outside a transaction, record.
+
+    Each row is leased just before its own send (``LEASE`` covers one send, never a batch), so a slow
+    batch cannot outlast a lease and have another worker send the same email again.
+    """
     from core.database import get_tenant_session
     from core.models.commerce_payments import CommerceMerchantNotificationRow as Row
 
     tenant = _tenant(tenant_id)
     send = sender or send_notification
-    moment = now or datetime.now(UTC)
     report = DeliveryReport()
-    leased: list[dict[str, Any]] = []
-    async with get_tenant_session(tenant) as session:
-        rows = (
-            await session.scalars(
+    seen: set[uuid.UUID] = set()
+    for _ in range(limit):
+        moment = now or datetime.now(UTC)
+        async with get_tenant_session(tenant) as session:
+            query = (
                 select(Row)
                 .where(Row.tenant_id == tenant, Row.status.in_(("pending", "failed")), Row.next_attempt_at <= moment)
                 .order_by(Row.next_attempt_at)
-                .limit(limit)
+                .limit(1)
                 .with_for_update(skip_locked=True)
             )
-        ).all()
-        for row in rows:
+            if seen:
+                query = query.where(Row.id.not_in(seen))
+            row = (await session.scalars(query)).first()
+            if row is None:
+                break
             row.attempts = row.attempts + 1
             row.next_attempt_at = moment + LEASE
             row.updated_at = moment
-            leased.append(
-                {
-                    "id": row.id,
-                    "kind": row.kind,
-                    "payload_ref": row.payload_ref,
-                    "details": dict(row.details or {}),
-                    "attempts": row.attempts,
-                }
-            )
-    for item in leased:
+            item: dict[str, Any] = {
+                "id": row.id,
+                "kind": row.kind,
+                "payload_ref": row.payload_ref,
+                "details": dict(row.details or {}),
+                "attempts": row.attempts,
+            }
+        seen.add(item["id"])
         error: str | None = None
         sent = 0
         try:
@@ -184,20 +189,20 @@ async def deliver_tenant(
             error = "no_email_accepted"
         finished = datetime.now(UTC) if now is None else moment
         async with get_tenant_session(tenant) as session:
-            row = await session.get(Row, item["id"])
-            if row is None:
+            stored = await session.get(Row, item["id"])
+            if stored is None:
                 continue
-            row.updated_at = finished
+            stored.updated_at = finished
             if error is None:
-                row.status, row.sent_at, row.sent_count, row.last_error = "sent", finished, sent, None
+                stored.status, stored.sent_at, stored.sent_count, stored.last_error = "sent", finished, sent, None
                 report.sent += 1
             elif item["attempts"] >= MAX_ATTEMPTS:
-                row.status, row.last_error = "dead", f"max_attempts_exceeded:{error}"[:120]
+                stored.status, stored.last_error = "dead", f"max_attempts_exceeded:{error}"[:120]
                 report.dead += 1
                 logger.error("merchant_notification_dead", kind=item["kind"], attempts=item["attempts"])
             else:
-                row.status, row.last_error = "failed", error[:120]
-                row.next_attempt_at = finished + retry_delay(item["attempts"], item["id"])
+                stored.status, stored.last_error = "failed", error[:120]
+                stored.next_attempt_at = finished + retry_delay(item["attempts"], item["id"])
                 report.retried += 1
     return report
 

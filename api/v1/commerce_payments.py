@@ -355,6 +355,8 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
         # Refunds from AgenticOrg go through Plural; any other executor's orders are refunded where they were paid.
         "refund_available": order.executor in ("plural_hosted", "plural_pine") and bool(order.provider_order_ref),
         "stock_short": list(short.get("lines") or []) if short else None,
+        # A refund Plural has not confirmed yet can be checked again (Orders page, "Check refund again").
+        "refund_checkable": any(refund["status"] == "pending" for refund in refunds),
         "surface": surface_label(state, order.platform_profile_url),
         "permalink_url": snapshot.get("permalink_url"),
     }

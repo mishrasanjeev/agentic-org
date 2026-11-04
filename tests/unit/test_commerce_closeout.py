@@ -479,3 +479,122 @@ def test_the_evidence_of_1000_products_is_built_and_hashed_for_the_ledger() -> N
     assert evidence["product_count"] == 1000 and evidence["variant_count"] == 1000
     digest = commerce_payload_hash(evidence)
     assert len(digest) == 64 and digest == commerce_payload_hash(json.loads(json.dumps(evidence)))
+
+
+# --- review fixes ------------------------------------------------------------------------------------------
+
+
+def test_only_an_explicit_refusal_marks_a_refund_failed() -> None:
+    assert hosted_refunds.refund_phase("PROCESSED") == "succeeded"
+    assert hosted_refunds.refund_phase("refunded") == "succeeded"
+    assert hosted_refunds.refund_phase("FAILED") == "failed" and hosted_refunds.refund_phase("REJECTED") == "failed"
+    for status in ("PENDING", "INITIATED", "SOMETHING_NEW", ""):
+        assert hosted_refunds.refund_phase(status) == "unknown", status
+    assert hosted_refunds.refused_phase(400) == "failed" and hosted_refunds.refused_phase(422) == "failed"
+    for code in (408, 409, 425, 429, 500, 502, 503, 504):
+        assert hosted_refunds.refused_phase(code) == "unknown", code
+
+
+def test_a_recorded_refund_a_journalled_call_accounts_for_is_not_counted_twice() -> None:
+    journalled = hosted_refunds.adjustment_id_for("aor-x")
+    snapshot = {
+        "adjustments": [
+            {"id": journalled, "type": "refund", "status": "pending", "totals": [{"type": "total", "amount": -2000}]},
+            {"id": "adj_hand", "type": "refund", "status": "completed", "totals": [{"type": "total", "amount": -1000}]},
+        ]
+    }
+    assert hosted_refunds.recorded_refunds(snapshot) == 3000
+    assert hosted_refunds.recorded_refunds(snapshot, exclude_ids={journalled}) == 1000
+
+
+def test_the_plural_order_read_settles_a_refund_only_when_it_names_it() -> None:
+    read = {
+        "order_id": "v1-1",
+        "status": "PROCESSED",
+        "order_amount": {"value": 5000, "currency": "INR"},
+        "payments": [{"refunds": [{"merchant_order_reference": "aor-1", "status": "PROCESSED"}]}],
+    }
+    assert hosted_refunds.refund_state_from_order(read, reference="aor-1", amount=1000) == "succeeded"
+    assert hosted_refunds.refund_state_from_order(read, reference="aor-2", amount=1000) is None
+    failed = {"refunds": [{"merchant_refund_reference": "aor-3", "status": "FAILED"}], "status": "PROCESSED"}
+    assert hosted_refunds.refund_state_from_order(failed, reference="aor-3", amount=1) == "failed"
+    pending = {"refunds": [{"merchant_order_reference": "aor-4", "status": "PENDING"}]}
+    assert hosted_refunds.refund_state_from_order(pending, reference="aor-4", amount=1) is None
+    whole = {"status": "REFUNDED", "order_amount": {"value": 5000, "currency": "INR"}}
+    assert hosted_refunds.refund_state_from_order(whole, reference="aou-1", amount=5000) == "succeeded"
+    assert hosted_refunds.refund_state_from_order(whole, reference="aou-1", amount=4000) is None
+
+
+def test_a_stock_short_order_refund_gets_a_new_request_id_per_attempt() -> None:
+    assert hosted_refunds.through_order_request_id("p1", 0) != hosted_refunds.through_order_request_id("p1", 1)
+
+
+def test_a_payment_without_a_plural_order_id_is_shown_but_not_refundable() -> None:
+    from types import SimpleNamespace
+
+    row = SimpleNamespace(
+        id=uuid.UUID(int=9),
+        merchant_id="m",
+        checkout_session_id="chk_1",
+        order_id=None,
+        reason="order_mismatch",
+        amount_minor_units=100,
+        currency="INR",
+        provider_order_id="unreported:aoh-1",
+        details={},
+        refund_status="pending",
+        refund_error=None,
+        refunded_at=None,
+        created_at=NOW,
+    )
+    view = hosted_refunds.unmatched_view(row)
+    assert view["refundable"] is False and view["provider_order_ref_present"] is False
+    assert view["refund_checkable"] is True
+
+
+def test_sold_units_since_the_catalog_read_come_off_the_stock() -> None:
+    sold_out = recheck.held_stock_changes([_line(quantity=1)], {"v1": _item(inventory=2)}, {}, sold={"v1": 2})
+    assert "Only 0 of Filter coffee 250 g left" in sold_out[0]["content"]
+    held = {"v1": [(1, NOW + timedelta(minutes=5))]}
+    messages = recheck.held_stock_changes([_line(quantity=1)], {"v1": _item(inventory=2)}, held, sold={"v1": 1})
+    assert "Only 0 of" in messages[0]["content"] and "held by another buyer" in messages[0]["content"]
+    assert recheck.held_stock_changes([_line(quantity=1)], {"v1": _item(inventory=3)}, held, sold={"v1": 1}) == []
+    unconfirmed = recheck.stock_unconfirmed([_line()], {"v1"})
+    assert [m["code"] for m in unconfirmed] == ["out_of_stock"] and "cannot be confirmed" in unconfirmed[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_units_sold_since_the_catalog_read_make_a_paid_order_short() -> None:
+    state = {"currency": "INR", "line_items": [_line("v1", 1)]}
+    catalog = _Catalog({"v1": _item("v1", inventory=1)})
+    assert await recheck.stock_short_lines(catalog, None, state) == []
+    short = await recheck.stock_short_lines(catalog, None, state, sold={"v1": 1})
+    assert [(s["quantity"], s["in_stock"]) for s in short] == [(1, 0)]
+
+
+def test_a_failed_loyalty_lookup_keeps_the_stored_loyalty() -> None:
+    stored = {"loyalty": {"claim": {"rewards": 100}}}
+    assert recheck.merged_state({"loyalty": None}, stored, loyalty_recomputed=True)["loyalty"] == stored["loyalty"]
+
+
+def test_the_refund_reconciliation_runs_on_the_beat_every_five_minutes(monkeypatch) -> None:
+    from core.config import settings
+    from core.tasks import payment_handoff_tasks as tasks
+    from core.tasks.celery_app import app
+
+    name = "core.tasks.payment_handoff_tasks.reconcile_plural_refunds"
+    entry = app.conf.beat_schedule["reconcile-plural-refunds"]
+    assert entry["task"] == name and entry["schedule"] == 300.0 and entry["options"]["queue"] == "maintenance"
+    assert name in app.tasks
+    monkeypatch.setattr(settings, "ucp_checkout_enabled", False)
+    monkeypatch.setattr(settings, "acp_checkout_enabled", False)
+    assert tasks.reconcile_plural_refunds() == {"skipped": "checkout_disabled"}
+    import asyncio
+
+    async def reconcile_all() -> dict[str, int]:
+        return {"succeeded": 1}
+
+    monkeypatch.setattr(hosted_refunds, "reconcile_all", reconcile_all)
+    monkeypatch.setattr(tasks, "run_async", asyncio.run)
+    monkeypatch.setattr(settings, "ucp_checkout_enabled", True)
+    assert tasks.reconcile_plural_refunds() == {"succeeded": 1}

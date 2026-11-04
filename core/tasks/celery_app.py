@@ -156,6 +156,14 @@ app.conf.beat_schedule = {
         "schedule": 60.0,
         "options": {"queue": "delivery", "expires": 60},
     },
+    "reconcile-plural-refunds": {
+        # Hosted Plural refunds whose outcome is unknown (a timeout, a 5xx, a pending status):
+        # read the order from Plural and record what it says (core/commerce/hosted_refunds.py).
+        # A no-op unless AGENTICORG_UCP_CHECKOUT_ENABLED or AGENTICORG_ACP_CHECKOUT_ENABLED.
+        "task": "core.tasks.payment_handoff_tasks.reconcile_plural_refunds",
+        "schedule": 300.0,
+        "options": {"queue": "maintenance", "expires": 300},
+    },
     "sweep-merchant-notifications": {
         # The merchant commerce email outbox (core/commerce/merchant_notifications.py): new-order
         # and payment-attention emails a lost kick, a crash or a failed SMTP send left unsent.

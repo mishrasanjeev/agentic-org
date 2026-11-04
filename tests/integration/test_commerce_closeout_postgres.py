@@ -50,6 +50,10 @@ class FakePlural(FakeHosted):
         super().__init__()
         self.refund_status = "PROCESSED"
         self.refund_http_status = 200
+        # What the order read (GET /pay/v1/orders/{id}) adds: refund entries, an order status, an HTTP error.
+        self.order_refunds: list[dict[str, Any]] = []
+        self.order_read_status: str | None = None
+        self.order_read_http = 200
 
     def refunds(self) -> list[tuple[str, dict[str, Any]]]:
         return [
@@ -78,6 +82,19 @@ class FakePlural(FakeHosted):
                     }
                 },
             )
+        if "/pay/v1/orders/" in request.url.path and request.method == "GET":
+            if self.order_read_http >= 400:
+                self.requests.append(request)
+                return httpx.Response(self.order_read_http, json={"code": "UNAVAILABLE"})
+            answer = super()._handle(request)
+            if answer.status_code != 200:
+                return answer
+            data = json.loads(answer.content)["data"]
+            if self.order_read_status:
+                data["status"] = self.order_read_status
+            if self.order_refunds:
+                data["refunds"] = list(self.order_refunds)
+            return httpx.Response(200, json={"data": data})
         return super()._handle(request)
 
 
@@ -681,9 +698,9 @@ def _total(state: dict[str, Any]) -> int:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reads_available", [True, False])
+@pytest.mark.parametrize("reads", ["available", "missing", "lookup_fails"])
 async def test_loyalty_follows_the_new_total_when_complete_reprices_and_is_kept_without_shopify_reads(
-    db, executor, kicks, monkeypatch, reads_available
+    db, executor, kicks, monkeypatch, reads
 ):
     import dataclasses
 
@@ -698,17 +715,474 @@ async def test_loyalty_follows_the_new_total_when_complete_reprices_and_is_kept_
     assert _forecast(before) == _total(before) // 100 * 2, before.get("loyalty")
 
     changed = _with_catalog(runtime, tenant, price="300.00")
-    if not reads_available:
+    if reads == "missing":
 
         async def _no_reads(_m: Any) -> None:
             return None
 
         changed = dataclasses.replace(changed, shopify_reads_for=_no_reads)
+    elif reads == "lookup_fails":
+        failing = uf.FakeShopifyReads(fail=True)
+
+        async def _failing_reads(_m: Any) -> Any:
+            return failing
+
+        changed = dataclasses.replace(changed, shopify_reads_for=_failing_reads)
     refused = await _complete(changed, tenant, session["id"], body=uf.complete_body())
     assert [m["code"] for m in refused.body["messages"] if m["type"] == "error"] == ["price_changed"]
     _status, after = await _state_of(db, session["id"])
     assert _total(after) != _total(before)
-    if reads_available:
+    if reads == "available":
         assert _forecast(after) == _total(after) // 100 * 2
     else:
+        # Without reads, or when the membership lookup fails, the stored loyalty is kept, never erased.
         assert after["loyalty"] == before["loyalty"]
+
+
+# --- review fixes ------------------------------------------------------------------------------------------
+
+
+def _later(minutes: int = 10) -> datetime:
+    return datetime.now(UTC) + timedelta(minutes=minutes)
+
+
+@pytest.mark.asyncio
+async def test_a_hand_recorded_refund_and_an_in_flight_refund_both_count_against_the_total(
+    db, executor, plural, kicks, monkeypatch
+):
+    from core.commerce.order_refunds import refund_order
+
+    tenant, order_id, total, _stored = await _paid_order(db, plural, monkeypatch)
+    # The merchant records a refund by hand through the order-update route (no journal row).
+    await handlers.apply_order_change(
+        tenant_id=tenant,
+        order_id=order_id,
+        fulfillment_event=None,
+        adjustment={"type": "refund", "status": "completed", "totals": [{"type": "total", "amount": -1000}]},
+        now=datetime.now(UTC),
+    )
+    plural.refund_status = "PENDING"
+    pending = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=2000,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="in-flight",
+    )
+    assert pending.status == "pending"
+    plural.refund_status = "PROCESSED"
+    over = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total - 3000 + 1,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="over",
+    )
+    assert over.status == "refused" and over.decision["reason"] == "refund_exceeds_captured"
+    rest = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total - 3000,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="rest",
+    )
+    assert rest.status == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_a_plural_server_error_leaves_the_refund_unknown_and_counted_and_a_replay_is_not_re_bounded(
+    db, executor, plural, kicks, monkeypatch
+):
+    from core.commerce import hosted_refunds
+    from core.commerce.executors.plural import refund_reference
+    from core.commerce.order_refunds import refund_order
+
+    tenant, order_id, total, _stored = await _paid_order(db, plural, monkeypatch)
+    plural.refund_http_status = 502
+    first = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="gw",
+    )
+    assert first.status == "pending" and first.reason == "refund_unknown"
+    phases = await _rows(
+        db, "SELECT phase FROM commerce_payment_operations WHERE tenant_id = :t AND operation = 'refund'", t=tenant
+    )
+    assert sorted(r["phase"] for r in phases) == ["requested", "unknown"]
+    # Not freed: a new request (a second click mints a new id) cannot refund it again.
+    plural.refund_http_status = 200
+    again = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="gw-2",
+    )
+    assert again.status == "refused" and len(plural.refunds()) == 1
+    # A replay of the in-flight reference is answered as a replay inside the lock, never refused by the bound.
+    replay = await hosted_refunds.refund_hosted_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        reference=refund_reference(order_id, "gw"),
+        decision_id="arbdec_replay",
+        payload_hash="0" * 64,
+        amount_minor_units=total,
+        currency="INR",
+    )
+    assert replay.status == "replayed"
+
+
+@pytest.mark.asyncio
+async def test_the_reconciliation_reads_plural_and_records_a_refund_left_unknown(
+    db, executor, plural, kicks, monkeypatch
+):
+    from api.v1 import commerce_payments
+    from core.commerce import hosted_refunds
+    from core.commerce.executors.plural import refund_reference
+    from core.commerce.order_refunds import refund_order
+
+    tenant, order_id, total, _stored = await _paid_order(db, plural, monkeypatch)
+    plural.refund_status = "PENDING"
+    await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=1000,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="slow",
+    )
+    reference = refund_reference(order_id, "slow")
+    view = (await commerce_payments.list_orders(merchant_id=None, limit=25, offset=0, tenant_id=tenant))["orders"][0]
+    assert view["refund_checkable"] is True and view["refunds"][0]["status"] == "pending"
+    # Too recent to check yet.
+    assert await hosted_refunds.check_refunds(tenant, order_id=order_id) == {}
+    # Plural cannot be read: the refund stays unknown and visible.
+    plural.order_read_http = 503
+    assert await hosted_refunds.check_refunds(tenant, order_id=order_id, now=_later()) == {"status_unavailable": 1}
+    plural.order_read_http = 200
+    # Plural's answer does not name the refund: still unknown.
+    assert await hosted_refunds.check_refunds(tenant, order_id=order_id, now=_later()) == {"still_unknown": 1}
+    plural.order_refunds = [{"merchant_order_reference": reference, "status": "PROCESSED", "refund_id": "r-1"}]
+    assert await hosted_refunds.check_refunds(tenant, order_id=order_id, now=_later()) == {"succeeded": 1}
+    snapshot = (await _rows(db, "SELECT snapshot FROM commerce_orders WHERE id = :i", i=order_id))[0]["snapshot"]
+    assert [a["status"] for a in snapshot["adjustments"] if a["type"] == "refund"] == ["completed"]
+    phases = await _rows(
+        db,
+        "SELECT phase FROM commerce_payment_operations WHERE tenant_id = :t AND idempotency_key = :k",
+        t=tenant,
+        k=reference,
+    )
+    assert sorted(r["phase"] for r in phases) == ["requested", "succeeded", "unknown"]
+    # Nothing left to check.
+    assert await hosted_refunds.check_refunds(tenant, order_id=order_id, now=_later()) == {}
+    view = (await commerce_payments.list_orders(merchant_id=None, limit=25, offset=0, tenant_id=tenant))["orders"][0]
+    assert view["refund_checkable"] is False and view["refundable_minor_units"] == total - 1000
+
+
+@pytest.mark.asyncio
+async def test_a_refund_plural_reports_failed_on_reconciliation_frees_the_amount(
+    db, executor, plural, kicks, monkeypatch
+):
+    from core.commerce import hosted_refunds
+    from core.commerce.executors.plural import refund_reference
+    from core.commerce.order_refunds import refund_order
+
+    tenant, order_id, total, _stored = await _paid_order(db, plural, monkeypatch)
+    plural.refund_status = "PENDING"
+    await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="doomed",
+    )
+    plural.order_refunds = [{"merchant_order_reference": refund_reference(order_id, "doomed"), "status": "FAILED"}]
+    # The beat sweep finds it for this tenant.
+    from core.commerce.ucp import webhooks
+
+    async def only_this_tenant() -> list[uuid.UUID]:
+        return [uuid.UUID(tenant)]
+
+    monkeypatch.setattr(webhooks, "_tenants_with_pending", only_this_tenant)
+    assert await hosted_refunds.reconcile_all(now=_later()) == {"failed": 1}
+    snapshot = (await _rows(db, "SELECT snapshot FROM commerce_orders WHERE id = :i", i=order_id))[0]["snapshot"]
+    assert [a["status"] for a in snapshot["adjustments"] if a["type"] == "refund"] == ["failed"]
+    plural.refund_status = "PROCESSED"
+    retried = await refund_order(
+        tenant_id=tenant,
+        order_id=order_id,
+        amount_minor_units=total,
+        reason=None,
+        now=datetime.now(UTC),
+        request_id="retry",
+    )
+    assert retried.status == "succeeded"
+
+
+async def _unmatched_payment(db, plural: FakePlural, monkeypatch, *, amount: int = 100) -> tuple[str, str]:
+    """A Plural payment of ``amount`` no order matches: ``(tenant, unmatched payment id)``."""
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, session["id"])
+    body = plural.bodies("/checkout/v1/orders")[-1]
+    short = json.dumps(
+        {
+            "event_type": "ORDER_PROCESSED",
+            "data": {
+                "order_id": f"v1-hosted-{len(plural.orders)}",
+                "merchant_order_reference": body["merchant_order_reference"],
+                "status": "PROCESSED",
+                "order_amount": {"value": amount, "currency": "INR"},
+            },
+        }
+    ).encode()
+    await plural_hosted.apply_webhook(
+        tenant_id=tenant, webhook_key=stored.webhook_key, raw_body=short, headers=_signed(short, webhook_id="wh_u")
+    )
+    kept = await _rows(db, "SELECT id FROM commerce_unmatched_payments WHERE tenant_id = :t", t=tenant)
+    return tenant, str(kept[0]["id"])
+
+
+@pytest.mark.asyncio
+async def test_an_unmatched_refund_left_pending_is_checked_again_and_settled(
+    db, executor, plural, kicks, told, monkeypatch
+):
+    from core.commerce import hosted_refunds
+
+    tenant, payment_id = await _unmatched_payment(db, plural, monkeypatch)
+    plural.refund_http_status = 504
+    pending = await hosted_refunds.refund_unmatched_payment(tenant_id=tenant, payment_id=payment_id, reason=None)
+    assert pending.status == "pending" and pending.payment["refund_status"] == "pending"
+    assert pending.payment["refund_checkable"] is True and pending.payment["refundable"] is False
+    assert (await hosted_refunds.check_unmatched_refund(tenant, payment_id))[0] == "too_recent"
+    plural.order_read_status = "REFUNDED"
+    plural.orders["v1-hosted-1"]["order_amount"] = {"value": 100, "currency": "INR"}
+    result, view = await hosted_refunds.check_unmatched_refund(tenant, payment_id, now=_later())
+    assert result == "succeeded" and view["refund_status"] == "refunded" and view["refund_checkable"] is False
+    assert (await hosted_refunds.check_unmatched_refund(tenant, payment_id, now=_later()))[0] == "nothing_to_check"
+    assert len(plural.refunds()) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_refused_refund_of_a_stock_short_order_can_be_asked_again(
+    db, executor, plural, kicks, told, monkeypatch
+):
+    from core.commerce import hosted_refunds
+
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, session["id"])
+    monkeypatch.setattr(
+        handlers, "payment_catalog_for", _with_catalog(runtime, tenant, inventory_quantity_snapshot=0).catalog_for
+    )
+    body = plural.bodies("/checkout/v1/orders")[0]
+    paid = json.dumps(
+        {
+            "event_type": "ORDER_PROCESSED",
+            "data": {
+                "order_id": "v1-hosted-1",
+                "merchant_order_reference": body["merchant_order_reference"],
+                "status": "PROCESSED",
+                "order_amount": body["order_amount"],
+            },
+        }
+    ).encode()
+    await plural_hosted.apply_webhook(
+        tenant_id=tenant, webhook_key=stored.webhook_key, raw_body=paid, headers=_signed(paid, webhook_id="wh_sr")
+    )
+    payment_id = str(
+        (await _rows(db, "SELECT id FROM commerce_unmatched_payments WHERE tenant_id = :t", t=tenant))[0]["id"]
+    )
+    plural.refund_http_status = 422
+    refused = await hosted_refunds.refund_unmatched_payment(tenant_id=tenant, payment_id=payment_id, reason=None)
+    assert refused.status == "failed" and refused.payment["refund_status"] == "failed"
+    plural.refund_http_status = 200
+    again = await hosted_refunds.refund_unmatched_payment(tenant_id=tenant, payment_id=payment_id, reason=None)
+    assert again.status == "succeeded", again
+    references = [b["merchant_order_reference"] for _o, b in plural.refunds()]
+    assert len(references) == 2 and references[0] != references[1]
+
+
+@pytest.mark.asyncio
+async def test_a_payment_without_a_plural_order_id_is_still_kept_and_emailed(db, executor, plural, kicks, monkeypatch):
+    tenant = await _tenant(db)
+    await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, session["id"])
+    reference = plural.bodies("/checkout/v1/orders")[0]["merchant_order_reference"]
+    result, _order = await handlers.confirm_handoff_payment(
+        tenant_id=tenant,
+        reference=reference,
+        provider_order_id="",
+        status="PROCESSED",
+        amount_minor_units=100,
+        currency="INR",
+        source="poll",
+        event_id=None,
+        now=datetime.now(UTC),
+    )
+    assert result in handlers.UNMATCHED_RESULTS
+    kept = await _rows(db, "SELECT provider_order_id FROM commerce_unmatched_payments WHERE tenant_id = :t", t=tenant)
+    assert [k["provider_order_id"] for k in kept] == [f"unreported:{reference}"]
+    queued = await _rows(db, "SELECT details FROM commerce_merchant_notifications WHERE tenant_id = :t", t=tenant)
+    assert len(queued) == 1 and queued[0]["details"]["provider_order_id"] == ""
+
+
+async def _catalog_read(db, tenant: str, at: datetime) -> None:
+    """A connector evidence row: the merchant's catalog was last read at ``at``."""
+    await _exec(
+        db,
+        "INSERT INTO commerce_c6z_connector_evidence_records (evidence_id, packet_id, tenant_id, merchant_id, "
+        "seller_agent_id, source_system, source_mode, source_evidence_ref, source_observed_at, synced_at, products, "
+        "product_count, variant_count, hmac_verified, raw_payload_stored, no_payment_execution, "
+        "no_public_discovery_enablement, allowed_to_execute, non_authoritative_for_transaction) VALUES "
+        "(:e, 'packet_x', :t, :m, :s, 'shopify', 'read_only', 'ref', :at, :at, CAST('[]' AS jsonb), 0, 0, "
+        "false, false, true, true, false, true)",
+        e=f"evidence_{uuid.uuid4().hex}",
+        t=tenant,
+        m=uf.fx.MERCHANT,
+        s=uf.fx.SELLER,
+        at=at,
+    )
+
+
+@pytest.mark.asyncio
+async def test_orders_paid_since_the_last_catalog_read_count_as_sold_at_link_and_at_payment(
+    db, executor, plural, kicks, told, monkeypatch
+):
+    from core.commerce.payment_handoff import iso
+
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    await _catalog_read(db, tenant, datetime.now(UTC) - timedelta(hours=1))
+    runtime = _with_catalog(_runtime(monkeypatch, tenant, _plural_payments()), tenant, inventory_quantity_snapshot=1)
+    _same_catalog(monkeypatch, runtime)
+    first = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, first["id"])
+    # The first link lapses (it can still be paid), so the second buyer gets a link too.
+    _status, state = await _state_of(db, first["id"])
+    lapsed = iso(datetime.now(UTC) - timedelta(minutes=1))
+    await _exec(
+        db,
+        "UPDATE commerce_checkout_sessions SET state = jsonb_set(state, CAST(:path AS text[]), "
+        "to_jsonb(CAST(:iso AS text))) WHERE id = :i",
+        path=["handoff_orders", state["handoff"]["reference"], "expires_at"],
+        iso=lapsed,
+        i=first["id"],
+    )
+    second = await _ready(runtime, tenant)
+    linked = await _complete(runtime, tenant, second["id"])
+    assert linked.body["status"] == "requires_escalation", linked.body
+    bodies = plural.bodies("/checkout/v1/orders")
+
+    async def pay(index: int, webhook_id: str) -> dict[str, Any]:
+        paid = json.dumps(
+            {
+                "event_type": "ORDER_PROCESSED",
+                "data": {
+                    "order_id": f"v1-hosted-{index + 1}",
+                    "merchant_order_reference": bodies[index]["merchant_order_reference"],
+                    "status": "PROCESSED",
+                    "order_amount": bodies[index]["order_amount"],
+                },
+            }
+        ).encode()
+        return await plural_hosted.apply_webhook(
+            tenant_id=tenant,
+            webhook_key=stored.webhook_key,
+            raw_body=paid,
+            headers=_signed(paid, webhook_id=webhook_id),
+        )
+
+    assert (await pay(0, "wh_first"))["result"] == "completed"
+    # The second buyer pays too: the catalog still says 1, but one was sold since it was read.
+    second_paid = await pay(1, "wh_second")
+    assert second_paid["result"] == "completed"
+    snapshot = (await _rows(db, "SELECT snapshot FROM commerce_orders WHERE id = :i", i=second_paid["order_id"]))[0][
+        "snapshot"
+    ]
+    assert [(line["quantity"], line["in_stock"]) for line in snapshot["stock_short"]["lines"]] == [(1, 0)]
+    # A third buyer gets no link: the only unit is sold.
+    third = await _ready(runtime, tenant)
+    refused = await _complete(runtime, tenant, third["id"])
+    errors = [m for m in refused.body["messages"] if m["type"] == "error"]
+    assert [m["code"] for m in errors] == ["out_of_stock"]
+    assert "sold since the shop's catalog was last read" in errors[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_canceled_checkout_holds_no_stock(db, executor, plural, kicks, monkeypatch):
+    tenant = await _tenant(db)
+    await _save_plural(tenant)
+    runtime = _with_catalog(_runtime(monkeypatch, tenant, _plural_payments()), tenant, inventory_quantity_snapshot=1)
+    first = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, first["id"])
+    await _exec(db, "UPDATE commerce_checkout_sessions SET status = 'canceled' WHERE id = :i", i=first["id"])
+    second = await _ready(runtime, tenant)
+    opened = await _complete(runtime, tenant, second["id"])
+    assert opened.body["status"] == "requires_escalation", opened.body
+
+
+@pytest.mark.asyncio
+async def test_two_buyers_completing_at_once_for_the_last_unit_get_one_link(db, executor, plural, kicks, monkeypatch):
+    import asyncio
+
+    tenant = await _tenant(db)
+    await _save_plural(tenant)
+    runtime = _with_catalog(_runtime(monkeypatch, tenant, _plural_payments()), tenant, inventory_quantity_snapshot=1)
+    first, second = await _ready(runtime, tenant), await _ready(runtime, tenant)
+    answers = await asyncio.gather(_complete(runtime, tenant, first["id"]), _complete(runtime, tenant, second["id"]))
+    statuses = sorted(a.body["status"] for a in answers)
+    assert statuses == ["ready_for_complete", "requires_escalation"], [a.body.get("messages") for a in answers]
+    assert len(plural.bodies("/checkout/v1/orders")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_held_stock_scan_past_its_limit_treats_the_stock_as_held(db, executor, plural, kicks, monkeypatch):
+    tenant = await _tenant(db)
+    await _save_plural(tenant)
+    runtime = _with_catalog(_runtime(monkeypatch, tenant, _plural_payments()), tenant, inventory_quantity_snapshot=50)
+    first = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, first["id"])
+    monkeypatch.setattr(handlers, "HELD_STOCK_SCAN_LIMIT", 0)
+    second = await _ready(runtime, tenant)
+    refused = await _complete(runtime, tenant, second["id"])
+    errors = [m for m in refused.body["messages"] if m["type"] == "error"]
+    assert [m["code"] for m in errors] == ["out_of_stock"] and "cannot be confirmed right now" in errors[0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_the_outbox_leases_each_email_just_before_it_is_sent(db, executor, plural, kicks, monkeypatch):
+    from core.commerce import merchant_notifications as outbox
+
+    tenant, _first, _t, _s = await _paid_order(db, plural, monkeypatch)
+    await _paid_order(db, plural, monkeypatch, tenant=tenant)
+    seen: list[list[tuple[str, int]]] = []
+
+    async def sender(tenant_id: str, kind: str, payload_ref: str, details: dict[str, Any]) -> int:
+        rows = await _rows(
+            db,
+            "SELECT status, attempts FROM commerce_merchant_notifications WHERE tenant_id = :t ORDER BY created_at",
+            t=tenant_id,
+        )
+        seen.append([(r["status"], r["attempts"]) for r in rows])
+        return 1
+
+    report = await outbox.deliver_tenant(tenant, sender=sender)
+    assert report.sent == 2
+    # While the first email is sent, the second is not leased yet.
+    assert seen[0] == [("pending", 1), ("pending", 0)]
+    assert seen[1] == [("sent", 1), ("pending", 1)]

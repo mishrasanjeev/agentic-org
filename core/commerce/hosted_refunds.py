@@ -27,6 +27,17 @@ the call before it is sent, unique per reference: a repeated request finds
 the first one and never calls Plural twice. The journal row is written in the
 transaction that locks the order and re-reads what was already refunded, so
 two different requests cannot both pass the bound.
+
+Outcomes: only an explicit refusal (a 4xx business error other than 408, 409,
+425 and 429, or a refund status FAILED, REJECTED, DECLINED or CANCELLED) is
+``failed`` and frees the amount. A 5xx, a timeout, a conflict, a pending or an
+unrecognised status is ``unknown``: it counts as refunded and is not retried.
+The reconciliation (``reconcile_all``, a beat task every 5 minutes, and the
+admin "check again" action) reads the Plural order (``GET /pay/v1/orders/{id}``)
+for refunds unknown for at least ``RECONCILE_AFTER`` and records ``succeeded``
+or ``failed`` when the answer names the refund's reference (or the order is
+fully refunded by a whole-order refund). When it cannot tell, the refund stays
+unknown and shows as pending.
 """
 
 from __future__ import annotations
@@ -35,7 +46,7 @@ import hashlib
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -50,6 +61,27 @@ PROVIDER = "plural_hosted"
 UNMATCHED_REFUND_EVENT = "commerce.payment.unmatched_refund"
 SUCCEEDED = frozenset({"PROCESSED", "CAPTURED", "SUCCESS", "REFUNDED"})
 PENDING = frozenset({"PENDING", "INITIATED", "CREATED"})
+# Refund states Plural reports for a refund it did not make.
+REFUND_FAILED = frozenset({"FAILED", "REJECTED", "DECLINED", "CANCELLED"})
+# HTTP answers that do not prove Plural refused the refund (it may have taken it): the outcome is unknown.
+AMBIGUOUS_HTTP = frozenset({408, 409, 425, 429})
+
+
+def refund_phase(status: str) -> str:
+    """The journal phase of a refund state: ``succeeded``, ``failed`` only for an explicit failure, else ``unknown``."""
+    value = str(status or "").upper()
+    if value in SUCCEEDED:
+        return "succeeded"
+    if value in REFUND_FAILED:
+        return "failed"
+    return "unknown"
+
+
+def refused_phase(http_status: int) -> str:
+    """A Plural HTTP error: ``failed`` for a business refusal (4xx), ``unknown`` for 5xx and timeouts or conflicts."""
+    return "failed" if 400 <= int(http_status) < 500 and int(http_status) not in AMBIGUOUS_HTTP else "unknown"
+
+
 REFUNDABLE_STATUSES = ("none", "failed")
 
 
@@ -67,11 +99,18 @@ def unmatched_reference(payment_id: str, attempt: int) -> str:
     return "aou-" + hashlib.sha256(f"{payment_id}|{attempt}".encode()).hexdigest()[:44]
 
 
-def recorded_refunds(snapshot: Mapping[str, Any] | None) -> int:
-    """The refunds recorded on an order snapshot: ``refund`` adjustments ``completed`` or ``pending``."""
+def recorded_refunds(
+    snapshot: Mapping[str, Any] | None, *, exclude_ids: frozenset[str] | set[str] = frozenset()
+) -> int:
+    """The refunds recorded on an order snapshot: ``refund`` adjustments ``completed`` or ``pending``.
+
+    ``exclude_ids`` leaves out adjustments a journalled refund call already accounts for.
+    """
     total = 0
     for entry in (snapshot or {}).get("adjustments") or []:
         if not isinstance(entry, Mapping) or entry.get("type") != "refund":
+            continue
+        if entry.get("id") in exclude_ids:
             continue
         if entry.get("status") not in ("completed", "pending"):
             continue
@@ -82,8 +121,8 @@ def recorded_refunds(snapshot: Mapping[str, Any] | None) -> int:
     return total
 
 
-async def journalled_refunds(session: Any, *, tenant: uuid.UUID, order_id: str) -> int:
-    """Refund calls journalled for the order whose outcome is not ``failed`` (requested, unknown, succeeded)."""
+async def journalled_refund_calls(session: Any, *, tenant: uuid.UUID, order_id: str) -> dict[str, tuple[set[str], int]]:
+    """Every refund call journalled for the order: ``{reference: (phases, requested amount)}``."""
     from core.models.commerce_payments import CommercePaymentOperationRow as Row
 
     rows = (
@@ -93,19 +132,32 @@ async def journalled_refunds(session: Any, *, tenant: uuid.UUID, order_id: str) 
             )
         )
     ).all()
-    phases: dict[str, set[str]] = {}
-    amounts: dict[str, int] = {}
+    calls: dict[str, tuple[set[str], int]] = {}
     for key, phase, amount in rows:
-        phases.setdefault(key, set()).add(phase)
-        if phase == "requested":
-            amounts[key] = int(amount or 0)
-    return sum(amounts.get(key, 0) for key, seen in phases.items() if "failed" not in seen)
+        phases, requested = calls.get(key, (set(), 0))
+        phases.add(phase)
+        calls[key] = (phases, int(amount or 0) if phase == "requested" else requested)
+    return calls
+
+
+async def journalled_refunds(session: Any, *, tenant: uuid.UUID, order_id: str) -> int:
+    """Refund calls journalled for the order whose outcome is not ``failed`` (requested, unknown, succeeded)."""
+    calls = await journalled_refund_calls(session, tenant=tenant, order_id=order_id)
+    return sum(amount for phases, amount in calls.values() if "failed" not in phases)
 
 
 async def hosted_refunded(session: Any, *, tenant: uuid.UUID, order: Any) -> int:
-    """What is already refunded of a hosted order (the larger of the recorded and the journalled refunds)."""
-    journalled = await journalled_refunds(session, tenant=tenant, order_id=order.id)
-    return max(recorded_refunds(order.snapshot), journalled)
+    """What is already refunded of a hosted order.
+
+    Every journalled refund call that did not fail, plus every refund recorded on the order that no
+    journalled call accounts for (for example one a merchant recorded by hand through the order-update
+    route). A journalled call's adjustment has the id ``adjustment_id_for(reference)``, so it is never
+    counted twice.
+    """
+    calls = await journalled_refund_calls(session, tenant=tenant, order_id=order.id)
+    journalled = sum(amount for phases, amount in calls.values() if "failed" not in phases)
+    represented = {adjustment_id_for(reference) for reference in calls}
+    return journalled + recorded_refunds(order.snapshot, exclude_ids=represented)
 
 
 def credential_ref_for_order(state: Mapping[str, Any], provider_order_ref: str | None) -> str | None:
@@ -174,6 +226,19 @@ async def _begin(session: Any, op: Any) -> bool:
     return inserted is not None
 
 
+async def _journalled(session: Any, *, tenant: uuid.UUID, reference: str) -> bool:
+    from core.models.commerce_payments import CommercePaymentOperationRow as Row
+
+    found = (
+        await session.execute(
+            select(Row.id)
+            .where(Row.tenant_id == tenant, Row.idempotency_key == reference, Row.operation == "refund")
+            .limit(1)
+        )
+    ).first()
+    return found is not None
+
+
 async def _call_plural(credentials: Any, *, provider_order_id: str, op: Any, metadata: Mapping[str, str]) -> Any:
     """The refund call and its journal outcome row; returns ``(phase, provider refund ref)``."""
     from core.commerce import plural_hosted
@@ -192,17 +257,20 @@ async def _call_plural(credentials: Any, *, provider_order_id: str, op: Any, met
             "POST", f"/pay/v1/refunds/{provider_order_id}", body, request_id=request_id(op.idempotency_key, "refund")
         )
     except PluralRequestError as exc:
+        # Only a 4xx business refusal proves no refund was made; a 5xx, a timeout or a conflict may have
+        # been processed, so it stays unknown (counted as refunded) until the reconciliation reads it.
+        phase = refused_phase(exc.status_code)
         await journal.finish(
-            op, "failed", provider_ref=provider_order_id, details={"http_status": exc.status_code, "code": exc.code}
+            op, phase, provider_ref=provider_order_id, details={"http_status": exc.status_code, "code": exc.code}
         )
-        return "failed", None
+        return phase, None
     except PluralUnavailableError as exc:
         logger.warning("plural_hosted_refund_outcome_unknown", error_type=type(exc).__name__)
         await journal.finish(op, "unknown", provider_ref=provider_order_id, details={"error": "unreachable"})
         return "unknown", None
     status = str(data.get("status") or "").upper()
     ref = str(data.get("refund_id") or data.get("order_id") or provider_order_id or "") or None
-    phase = "unknown" if status in PENDING else ("succeeded" if status in SUCCEEDED else "failed")
+    phase = refund_phase(status)
     await journal.finish(op, phase, provider_ref=ref, details={"status": status[:40]})
     return phase, ref
 
@@ -254,6 +322,9 @@ async def refund_hosted_order(
         ).scalar_one_or_none()
         problem: str | None = None
         credentials = None
+        if order is not None and await _journalled(session, tenant=tenant, reference=reference):
+            # The same request is already in flight or done: never re-check its own amount against the bound.
+            return HostedRefundResult(status="replayed", reason="operation_already_requested")
         if order is None or order.executor != HOSTED_EXECUTOR:
             problem = "order_not_hosted"
         elif not order.provider_order_ref:
@@ -305,6 +376,14 @@ class UnmatchedRefundOutcome:
     decision: dict[str, Any] | None = None
 
 
+UNREPORTED_PREFIX = "unreported:"
+
+
+def provider_order_known(provider_order_id: Any) -> bool:
+    """Whether Plural named the order the payment is on (rows without one key on the hand-off reference)."""
+    return bool(provider_order_id) and not str(provider_order_id).startswith(UNREPORTED_PREFIX)
+
+
 def unmatched_view(row: Any) -> dict[str, Any]:
     """What the merchant may see of a payment that needs it (never a credential)."""
     from core.commerce.order_notifications import UNMATCHED_REASONS, money
@@ -313,7 +392,12 @@ def unmatched_view(row: Any) -> dict[str, Any]:
         return value.isoformat().replace("+00:00", "Z") if isinstance(value, datetime) else None
 
     refundable = row.refund_status in REFUNDABLE_STATUSES and (
-        row.order_id is not None or (isinstance(row.amount_minor_units, int) and row.amount_minor_units > 0)
+        row.order_id is not None
+        or (
+            isinstance(row.amount_minor_units, int)
+            and row.amount_minor_units > 0
+            and provider_order_known(row.provider_order_id)
+        )
     )
     return {
         "id": str(row.id),
@@ -325,7 +409,8 @@ def unmatched_view(row: Any) -> dict[str, Any]:
         "amount_minor_units": row.amount_minor_units,
         "currency": row.currency,
         "amount": money(row.amount_minor_units, row.currency) or None,
-        "provider_order_ref_present": bool(row.provider_order_id),
+        "provider_order_ref_present": provider_order_known(row.provider_order_id),
+        "refund_checkable": row.refund_status in ("requested", "pending"),
         "short_lines": list((row.details or {}).get("lines") or []),
         "refund_status": row.refund_status,
         "refund_error": row.refund_error,
@@ -415,7 +500,14 @@ async def refund_unmatched_payment(
         )
         return UnmatchedRefundOutcome(status="refused", reason="refund_already_requested", payment=view)
     if order_id is not None:
-        return await _refund_through_order(tenant=tenant, payment_id=str(row.id), order_id=order_id, reason=reason)
+        return await _refund_through_order(
+            tenant=tenant, payment_id=str(row.id), order_id=order_id, reason=reason, attempt=int(row.refund_attempts)
+        )
+    if not provider_order_known(row.provider_order_id):
+        await _record_unmatched(
+            tenant=tenant, row_view=view, outcome="refused", reason="provider_order_unknown", decision_id=None
+        )
+        return UnmatchedRefundOutcome(status="refused", reason="provider_order_unknown", payment=view)
     amount, currency = row.amount_minor_units, str(row.currency or "").upper()
     if not isinstance(amount, int) or amount < 1 or not currency:
         await _record_unmatched(
@@ -573,10 +665,20 @@ async def refund_unmatched_payment(
     return UnmatchedRefundOutcome(status=outcome_status, reason=f"refund_{phase}", payment=view, decision=public)
 
 
+def through_order_request_id(payment_id: str, attempt: int) -> str:
+    """The order refund request id of an attempt to refund a stock-short payment (a refusal frees a new one)."""
+    return f"unmatched-{payment_id}-{attempt}"
+
+
 async def _refund_through_order(
-    *, tenant: uuid.UUID, payment_id: str, order_id: str, reason: str | None
+    *, tenant: uuid.UUID, payment_id: str, order_id: str, reason: str | None, attempt: int
 ) -> UnmatchedRefundOutcome:
-    """A payment whose order was made while stock was short: refund what is left of the order, once."""
+    """A payment whose order was made while stock was short: refund what is left of the order, once.
+
+    The order refund's request id carries the attempt: a refund Plural refused moves the payment to
+    ``failed`` with the next attempt, so the next click is a new refund, not a replay of the refusal.
+    """
+    from core.commerce.executors.plural import refund_reference
     from core.commerce.order_refunds import RefundRequestError, refund_order
     from core.database import get_tenant_session
     from core.models.commerce_ucp import CommerceOrderRow
@@ -599,16 +701,20 @@ async def _refund_through_order(
             amount_minor_units=remaining,
             reason=reason or "Refund: stock short at payment",
             now=datetime.now(UTC),
-            request_id=f"unmatched-{payment_id}",
+            request_id=through_order_request_id(payment_id, attempt),
         )
     except RefundRequestError as exc:
         raise UnmatchedRefundError(exc.status, exc.code) from exc
-    status = {"succeeded": "refunded", "pending": "pending"}.get(outcome.status)
+    status = {"succeeded": "refunded", "pending": "pending", "failed": "failed"}.get(outcome.status)
     async with get_tenant_session(tenant) as session:
         row = await _load_unmatched(session, tenant, payment_id, lock=True)
         if row is not None and status is not None:
             row.refund_status = status
-            row.refund_reference = None
+            # The order refund's journal reference, which the reconciliation follows.
+            row.refund_reference = refund_reference(order_id, through_order_request_id(payment_id, attempt))
+            row.refund_error = "plural_refused_the_refund" if status == "failed" else None
+            if status == "failed":
+                row.refund_attempts = attempt + 1
             row.refunded_at = datetime.now(UTC) if status == "refunded" else None
             row.updated_at = datetime.now(UTC)
         view = unmatched_view(row) if row is not None else {"id": payment_id}
@@ -627,3 +733,301 @@ async def _refund_through_order(
         payment={**view, "adjustment_id": outcome.adjustment_id},
         decision=outcome.decision,
     )
+
+
+# --- reconciliation: refunds whose outcome is not known yet ---------------------------------------------
+
+# A refund call whose outcome is unknown is read from Plural once it is this old (the admin "check again"
+# action too), and no longer after RECONCILE_WINDOW.
+RECONCILE_AFTER = timedelta(minutes=5)
+RECONCILE_WINDOW = timedelta(days=30)
+RECONCILE_BATCH = 50
+_REFUND_REFERENCE_KEYS = ("merchant_order_reference", "merchant_refund_reference", "merchant_refund_id")
+_ORDER_REFUNDED = frozenset({"REFUNDED", "FULLY_REFUNDED"})
+
+
+@dataclass(frozen=True)
+class OutstandingRefund:
+    """A journalled refund call with no ``succeeded`` or ``failed`` outcome yet."""
+
+    reference: str
+    order_id: str | None
+    checkout_session_id: str
+    merchant_id: str
+    decision_id: str
+    amount_minor_units: int
+    currency: str
+    requested_at: datetime
+
+
+def _refund_entries(value: Any) -> list[Mapping[str, Any]]:
+    """Every object in a Plural order answer that names a merchant refund reference and a status."""
+    out: list[Mapping[str, Any]] = []
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, Mapping):
+            if item.get("status") and any(item.get(key) for key in _REFUND_REFERENCE_KEYS):
+                out.append(item)
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+    return out
+
+
+def refund_state_from_order(order: Mapping[str, Any], *, reference: str, amount: int) -> str | None:
+    """What a Plural order read (``GET /pay/v1/orders/{id}``) says of the refund ``reference``.
+
+    ``succeeded`` or ``failed`` when a refund entry carries our reference; ``succeeded`` too when the
+    order itself is fully refunded and the refund was for the whole order amount; None when the
+    answer does not say (the refund stays unknown). The refund fields of the order read are not
+    documented for hosted orders, so only these unambiguous signs are used.
+    """
+    for entry in _refund_entries(order):
+        if any(str(entry.get(key) or "") == reference for key in _REFUND_REFERENCE_KEYS):
+            phase = refund_phase(str(entry.get("status") or ""))
+            return phase if phase != "unknown" else None
+    nested = order.get("order") if isinstance(order.get("order"), Mapping) else order
+    order_amount = nested.get("order_amount") if isinstance(nested.get("order_amount"), Mapping) else {}
+    if str(nested.get("status") or "").upper() in _ORDER_REFUNDED and order_amount.get("value") == amount:
+        return "succeeded"
+    return None
+
+
+async def outstanding_refunds(
+    session: Any,
+    *,
+    tenant: uuid.UUID,
+    now: datetime,
+    order_id: str | None = None,
+    reference: str | None = None,
+    limit: int = RECONCILE_BATCH,
+) -> list[OutstandingRefund]:
+    """Hosted refund calls journalled as ``requested`` (or ``unknown``) at least ``RECONCILE_AFTER`` ago."""
+    from core.models.commerce_payments import CommercePaymentOperationRow as Row
+
+    query = select(Row).where(
+        Row.tenant_id == tenant,
+        Row.provider == PROVIDER,
+        Row.operation == "refund",
+        Row.created_at >= now - RECONCILE_WINDOW,
+    )
+    if order_id is not None:
+        query = query.where(Row.order_id == order_id)
+    if reference is not None:
+        query = query.where(Row.idempotency_key == reference)
+    rows = (await session.execute(query.order_by(Row.created_at).limit(limit * 4))).scalars().all()
+    by_key: dict[str, list[Any]] = {}
+    for row in rows:
+        by_key.setdefault(row.idempotency_key, []).append(row)
+    out: list[OutstandingRefund] = []
+    for key, entries in by_key.items():
+        phases = {e.phase for e in entries}
+        requested = next((e for e in entries if e.phase == "requested"), None)
+        if requested is None or phases & {"succeeded", "failed"} or requested.created_at > now - RECONCILE_AFTER:
+            continue
+        out.append(
+            OutstandingRefund(
+                reference=key,
+                order_id=requested.order_id,
+                checkout_session_id=requested.checkout_session_id,
+                merchant_id=requested.merchant_id,
+                decision_id=requested.decision_id,
+                amount_minor_units=int(requested.amount_minor_units or 0),
+                currency=str(requested.currency or ""),
+                requested_at=requested.created_at,
+            )
+        )
+    return out[:limit]
+
+
+async def _refund_target(session: Any, tenant: uuid.UUID, item: OutstandingRefund) -> tuple[Any, str, str]:
+    """``(credentials, Plural order id, seller agent id)`` of an outstanding refund (credentials None when absent)."""
+    from core.commerce import plural_hosted
+    from core.models.commerce_payments import CommerceUnmatchedPaymentRow as Unmatched
+    from core.models.commerce_ucp import CommerceOrderRow
+
+    if item.order_id is not None:
+        order = (
+            await session.execute(
+                select(CommerceOrderRow).where(
+                    CommerceOrderRow.tenant_id == tenant, CommerceOrderRow.id == item.order_id
+                )
+            )
+        ).scalar_one_or_none()
+        if order is None:
+            return None, "", ""
+        credentials = await load_order_credentials(session, tenant=tenant, order=order)
+        return credentials, str(order.provider_order_ref or ""), order.seller_agent_id
+    unmatched = (
+        await session.execute(
+            select(Unmatched).where(Unmatched.tenant_id == tenant, Unmatched.refund_reference == item.reference)
+        )
+    ).scalar_one_or_none()
+    if unmatched is None or not unmatched.credential_ref:
+        return None, "", ""
+    credentials = await plural_hosted.load_credentials(
+        session, tenant_id=tenant, credential_ref=unmatched.credential_ref, merchant_id=unmatched.merchant_id
+    )
+    return credentials, str(unmatched.provider_order_id), unmatched.seller_agent_id
+
+
+async def reconcile_refund(tenant_id: Any, item: OutstandingRefund, *, now: datetime | None = None) -> str:
+    """Read one outstanding refund from Plural and record what it says.
+
+    Returns ``succeeded`` or ``failed`` (recorded in the journal, on the order adjustment and on the
+    unmatched payment), ``still_unknown`` (the answer does not say), ``status_unavailable`` (Plural
+    could not be read) or ``credentials_missing``. An unknown refund stays counted as refunded and
+    visible as pending.
+    """
+    from core.commerce import plural_hosted
+    from core.commerce.executors.plural import PluralRequestError, PluralUnavailableError
+    from core.commerce.payment_records import DbPaymentJournal
+    from core.commerce.ucp.handlers import apply_order_change, set_order_adjustment_status
+    from core.database import get_tenant_session
+    from core.models.commerce_payments import CommerceUnmatchedPaymentRow as Unmatched
+
+    tenant = _tenant(tenant_id)
+    moment = now or datetime.now(UTC)
+    async with get_tenant_session(tenant) as session:
+        credentials, provider_order_id, seller = await _refund_target(session, tenant, item)
+    if credentials is None or not provider_order_known(provider_order_id):
+        return "credentials_missing"
+    try:
+        data = await plural_hosted.fetch_order(credentials.credentials, provider_order_id)
+    except (PluralRequestError, PluralUnavailableError) as exc:
+        logger.warning("plural_hosted_refund_status_unavailable", error_type=type(exc).__name__)
+        return "status_unavailable"
+    phase = refund_state_from_order(data, reference=item.reference, amount=item.amount_minor_units)
+    if phase is None:
+        return "still_unknown"
+    op = _operation(
+        tenant_id=str(tenant),
+        merchant_id=item.merchant_id,
+        seller_agent_id=seller,
+        checkout_session_id=item.checkout_session_id,
+        decision_id=item.decision_id,
+        reference=item.reference,
+        amount=item.amount_minor_units,
+        currency=item.currency or "INR",
+        order_id=item.order_id,
+    )
+    await DbPaymentJournal().record_once(
+        op, phase, provider_ref=provider_order_id, details={"source": "reconcile", "phase": phase}
+    )
+    if item.order_id is not None:
+        adjustment_id = adjustment_id_for(item.reference)
+        changed = await set_order_adjustment_status(
+            tenant_id=str(tenant),
+            order_id=item.order_id,
+            adjustment_id=adjustment_id,
+            status="completed" if phase == "succeeded" else "failed",
+            now=moment,
+        )
+        if changed is None and phase == "succeeded":
+            # Plural took it but no adjustment was recorded (a crash): record it now, under its fixed id.
+            await apply_order_change(
+                tenant_id=str(tenant),
+                order_id=item.order_id,
+                fulfillment_event=None,
+                adjustment={
+                    "type": "refund",
+                    "status": "completed",
+                    "totals": [{"type": "total", "amount": -item.amount_minor_units}],
+                    "description": "Refund",
+                },
+                now=moment,
+                adjustment_id=adjustment_id,
+            )
+    async with get_tenant_session(tenant) as session:
+        row = (
+            await session.execute(
+                select(Unmatched)
+                .where(Unmatched.tenant_id == tenant, Unmatched.refund_reference == item.reference)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is not None and row.refund_status in ("requested", "pending"):
+            row.refund_status = "refunded" if phase == "succeeded" else "failed"
+            row.refund_error = None if phase == "succeeded" else "plural_reported_the_refund_failed"
+            row.refunded_at = moment if phase == "succeeded" else None
+            if phase == "failed" and row.order_id is not None:
+                row.refund_attempts = int(row.refund_attempts) + 1
+            row.updated_at = moment
+    return phase
+
+
+async def check_refunds(
+    tenant_id: Any,
+    *,
+    order_id: str | None = None,
+    reference: str | None = None,
+    now: datetime | None = None,
+    limit: int = RECONCILE_BATCH,
+) -> dict[str, int]:
+    """Reconcile the tenant's outstanding hosted refunds (optionally one order's, or one reference); counts."""
+    from core.database import get_tenant_session
+
+    tenant = _tenant(tenant_id)
+    moment = now or datetime.now(UTC)
+    async with get_tenant_session(tenant) as session:
+        items = await outstanding_refunds(
+            session, tenant=tenant, now=moment, order_id=order_id, reference=reference, limit=limit
+        )
+    counts: dict[str, int] = {}
+    for item in items:
+        result = await reconcile_refund(tenant, item, now=now)
+        counts[result] = counts.get(result, 0) + 1
+    return counts
+
+
+async def reconcile_all(*, now: datetime | None = None) -> dict[str, int]:
+    """The beat sweep: every tenant's outstanding hosted refunds, read from Plural once each."""
+    from core.commerce.ucp.webhooks import _tenants_with_pending
+
+    totals: dict[str, int] = {}
+    for tenant in await _tenants_with_pending():
+        try:
+            counts = await check_refunds(tenant, now=now)
+        # enterprise-gate: broad-except-ok reason=one-tenant-failure-never-stops-the-refund-reconciliation
+        except Exception as exc:
+            logger.warning("plural_hosted_refund_reconcile_failed", error_type=type(exc).__name__)
+            continue
+        for key, value in counts.items():
+            totals[key] = totals.get(key, 0) + value
+    return totals
+
+
+REFUND_CHECK_EVENT = "commerce.ucp.order.refund_check"
+UNMATCHED_REFUND_CHECK_EVENT = "commerce.payment.unmatched_refund_check"
+
+
+async def check_unmatched_refund(
+    tenant_id: Any, payment_id: str, *, now: datetime | None = None
+) -> tuple[str, dict[str, Any]]:
+    """The admin "check again" action for an unmatched payment's refund: ``(result, payment view)``.
+
+    Results: ``nothing_to_check`` (no refund waiting), ``too_recent`` (asked less than
+    ``RECONCILE_AFTER`` ago), else the reconciliation's (``succeeded``, ``failed``, ``still_unknown``,
+    ``status_unavailable``, ``credentials_missing``). Raises ``UnmatchedRefundError`` 404 for an unknown id.
+    """
+    from core.database import get_tenant_session
+
+    tenant = _tenant(tenant_id)
+    moment = now or datetime.now(UTC)
+    async with get_tenant_session(tenant) as session:
+        row = await _load_unmatched(session, tenant, payment_id, lock=False)
+        if row is None:
+            raise UnmatchedRefundError(404, "payment_not_found")
+        status, reference, updated = row.refund_status, row.refund_reference, row.updated_at
+    if status not in ("requested", "pending") or not reference:
+        result = "nothing_to_check"
+    elif updated is not None and updated > moment - RECONCILE_AFTER:
+        result = "too_recent"
+    else:
+        counts = await check_refunds(tenant, reference=reference, now=now)
+        result = next(iter(counts), "nothing_to_check")
+    async with get_tenant_session(tenant) as session:
+        row = await _load_unmatched(session, tenant, payment_id, lock=False)
+        view = {**unmatched_view(row), "seller_agent_id": row.seller_agent_id} if row is not None else {}
+    return result, view

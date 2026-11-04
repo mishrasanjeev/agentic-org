@@ -1928,20 +1928,32 @@ async def daily_committed_minor_units(
     return committed
 
 
-# Checkouts read when summing the stock other buyers' Plural links hold (newest first).
+# Checkouts read when summing the stock other buyers' Plural links hold (newest first), and orders read
+# when summing the units sold since the catalog was last read. Past either, the stock is treated as held.
 HELD_STOCK_SCAN_LIMIT = 500
+SOLD_SINCE_SYNC_SCAN_LIMIT = 500
+
+
+@dataclass(frozen=True)
+class HeldStock:
+    """Units of each item other buyers' payable Plural links hold, and whether the scan was cut short."""
+
+    holds: dict[str, list[tuple[int, datetime]]]
+    truncated: bool = False
 
 
 async def held_stock(
     session: Any, *, tenant_id: Any, merchant_id: str, exclude_session_id: str, item_ids: set[str], now: datetime
-) -> dict[str, list[tuple[int, datetime]]]:
+) -> HeldStock:
     """The units of each item other checkouts of the merchant hold: ``{item_id: [(quantity, until), ...]}``.
 
     A checkout holds its line items while one of its Plural links can still be paid and has not
     lapsed (``issued``, ``expires_at`` in the future), or while its Plural order is being created
-    (counted for one link lifetime). A link lives at most ``PLURAL_LINK_TTL`` and its checkout is
-    updated when it is issued, so only checkouts updated within that time are read, through the
-    ``ix_commerce_checkout_sessions_status`` ranges (three statuses, ``expires_at`` in the future).
+    (counted for one link lifetime). A canceled checkout holds nothing. A link lives at most
+    ``PLURAL_LINK_TTL`` and its checkout is updated when it is issued, so only checkouts updated
+    within that time are read, through the ``ix_commerce_checkout_sessions_status`` ranges (two
+    statuses, ``expires_at`` in the future). When more than ``HELD_STOCK_SCAN_LIMIT`` checkouts
+    match, ``truncated`` is set and the caller treats the stock as held.
     """
     from core.commerce import payment_handoff as ph
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
@@ -1951,18 +1963,18 @@ async def held_stock(
             select(Row.state)
             .where(
                 Row.tenant_id == tenant_id,
-                Row.status.in_(("requires_escalation", "complete_in_progress", "canceled")),
+                Row.status.in_(("requires_escalation", "complete_in_progress")),
                 Row.expires_at > now,
                 Row.updated_at >= now - ph.PLURAL_LINK_TTL,
                 Row.merchant_id == merchant_id,
                 Row.id != exclude_session_id,
             )
             .order_by(Row.updated_at.desc())
-            .limit(HELD_STOCK_SCAN_LIMIT)
+            .limit(HELD_STOCK_SCAN_LIMIT + 1)
         )
     ).scalars().all()
     held: dict[str, list[tuple[int, datetime]]] = {}
-    for state in rows:
+    for state in rows[:HELD_STOCK_SCAN_LIMIT]:
         until = ph.held_until(state or {}, now)
         if until is None:
             continue
@@ -1973,13 +1985,87 @@ async def held_stock(
             quantity = line.get("quantity")
             if item_id in item_ids and isinstance(quantity, int) and not isinstance(quantity, bool) and quantity > 0:
                 held.setdefault(item_id, []).append((quantity, until))
-    return held
+    truncated = len(rows) > HELD_STOCK_SCAN_LIMIT
+    if truncated:
+        logger.warning("held_stock_scan_limit_reached", limit=HELD_STOCK_SCAN_LIMIT)
+    return HeldStock(holds=held, truncated=truncated)
+
+
+async def catalog_synced_at(session: Any, *, tenant_id: Any, merchant_id: str, seller_agent_id: str) -> datetime | None:
+    """When the merchant's catalog was last read (the newest connector evidence), or None without one."""
+    from sqlalchemy import func as sql_func
+
+    from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow as Evidence
+
+    return (
+        await session.execute(
+            select(sql_func.max(Evidence.synced_at)).where(
+                Evidence.tenant_id == str(tenant_id),
+                Evidence.merchant_id == merchant_id,
+                Evidence.seller_agent_id == seller_agent_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def sold_since_sync(
+    session: Any, *, tenant_id: Any, merchant: MerchantUcp, item_ids: set[str]
+) -> tuple[dict[str, int], bool]:
+    """Units of each item in the merchant's orders created since its catalog was last read.
+
+    The catalog's stock is what the shop reported at that read; AgenticOrg's own orders since then
+    are not in it yet. Returns ``(units by item id, truncated)``: past ``SOLD_SINCE_SYNC_SCAN_LIMIT``
+    orders the count is incomplete and the caller treats the stock as held. Without a catalog read
+    nothing is counted.
+    """
+    from core.models.commerce_ucp import CommerceOrderRow as Order
+
+    synced = await catalog_synced_at(
+        session, tenant_id=tenant_id, merchant_id=merchant.merchant_id, seller_agent_id=merchant.seller_agent_id
+    )
+    if synced is None or not item_ids:
+        return {}, False
+    snapshots = (
+        await session.execute(
+            select(Order.snapshot)
+            .where(Order.tenant_id == tenant_id, Order.merchant_id == merchant.merchant_id, Order.created_at > synced)
+            .order_by(Order.created_at.desc())
+            .limit(SOLD_SINCE_SYNC_SCAN_LIMIT + 1)
+        )
+    ).scalars().all()
+    sold: dict[str, int] = {}
+    for snapshot in snapshots[:SOLD_SINCE_SYNC_SCAN_LIMIT]:
+        for line in (snapshot or {}).get("line_items") or []:
+            if not isinstance(line, Mapping):
+                continue
+            item_id = str((line.get("item") or {}).get("id") or "")
+            total = (line.get("quantity") or {}).get("total") if isinstance(line.get("quantity"), Mapping) else None
+            if item_id in item_ids and isinstance(total, int) and not isinstance(total, bool) and total > 0:
+                sold[item_id] = sold.get(item_id, 0) + total
+    truncated = len(snapshots) > SOLD_SINCE_SYNC_SCAN_LIMIT
+    if truncated:
+        logger.warning("sold_since_sync_scan_limit_reached", limit=SOLD_SINCE_SYNC_SCAN_LIMIT)
+    return sold, truncated
+
+
+async def lock_merchant_stock(session: Any, *, tenant_id: Any, merchant_id: str) -> None:
+    """Serialise stock checks of one merchant until the transaction ends (a transaction-scoped advisory lock)."""
+    from sqlalchemy import text
+
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"commerce-stock|{tenant_id}|{merchant_id}"},
+    )
 
 
 async def _held_stock_messages(
     session: Any, runtime: UcpRuntime, merchant: MerchantUcp, row: Any, state: Mapping[str, Any], now: datetime
 ) -> list[dict[str, Any]]:
-    """``out_of_stock`` messages for lines whose stock other buyers' payable Plural links already hold."""
+    """``out_of_stock`` messages for lines whose stock is sold since the last catalog read or held by others.
+
+    Runs under ``lock_merchant_stock`` in the transaction that marks this checkout's Plural order as
+    being created, so a concurrent Complete of the same merchant sees this one's hold.
+    """
     from core.commerce.ucp import catalog_recheck as recheck
 
     line_items = [li for li in state.get("line_items") or [] if isinstance(li, Mapping)]
@@ -1998,22 +2084,30 @@ async def _held_stock_messages(
         item_ids=tracked,
         now=now,
     )
-    return recheck.held_stock_changes(line_items, found, held) if held else []
+    sold, sold_truncated = await sold_since_sync(session, tenant_id=row.tenant_id, merchant=merchant, item_ids=tracked)
+    if held.truncated or sold_truncated:
+        return recheck.stock_unconfirmed(line_items, tracked)
+    return recheck.held_stock_changes(line_items, found, held.holds, sold=sold)
 
 
-async def _stock_short_at_payment(
-    merchant: MerchantUcp, state: Mapping[str, Any]
-) -> list[dict[str, Any]]:
-    """The order lines the shop's catalog no longer has enough stock for, when a Plural payment arrives.
+async def _stock_short_at_payment(merchant: MerchantUcp, state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The order lines the shop's stock no longer covers when a Plural payment arrives.
 
-    Read before the confirmation's transaction (the catalog read opens its own). A catalog that
-    cannot be read is logged and treated as unchanged: the money is taken either way.
+    The catalog's stock less the units of orders created since the catalog was last read. Read
+    before the confirmation's transaction (the catalog read opens its own). A catalog that cannot be
+    read is logged and treated as unchanged: the money is taken either way.
     """
     from core.commerce.ucp import catalog_recheck as recheck
+    from core.database import get_tenant_session
 
     try:
         catalog = (payment_catalog_for or _default_payment_catalog)(merchant)
-        return await recheck.stock_short_lines(catalog, merchant, state)
+        ids = {str((li.get("item") or {}).get("id") or "") for li in state.get("line_items") or []} - {""}
+        async with get_tenant_session(uuid.UUID(str(merchant.tenant_id))) as session:
+            sold, _truncated = await sold_since_sync(
+                session, tenant_id=uuid.UUID(str(merchant.tenant_id)), merchant=merchant, item_ids=ids
+            )
+        return await recheck.stock_short_lines(catalog, merchant, state, sold=sold)
     # enterprise-gate: broad-except-ok reason=a-catalog-read-failure-at-payment-never-blocks-the-paid-order
     except Exception as exc:
         logger.warning("plural_hosted_stock_check_unavailable", error_type=type(exc).__name__)
@@ -2115,10 +2209,6 @@ async def _complete_with_handoff(
         changed = await _catalog_recheck(runtime, merchant, negotiated, row, state, now)
         if changed:
             return await _blocked(changed, outcome="refused")
-        if settings.mode == ph.MODE_PLURAL_HOSTED:
-            held = await _held_stock_messages(session, runtime, merchant, row, state, now)
-            if held:
-                return await _blocked(held, outcome="refused")
         if settings.mode == ph.MODE_SHOPIFY_CART:
             cart_url = ph.shopify_cart_url(target.shop_domain, state.get("line_items") or [])
             if cart_url is None:
@@ -2205,6 +2295,15 @@ async def _complete_with_handoff(
 
         if row.revision != decided_revision or row.status not in ("ready_for_complete", "requires_escalation"):
             return await _refused("decision_payload_mismatch", "The checkout changed after the decision.")
+        if cart_url is None:
+            # A Plural link holds its items: check the stock others hold, and mark this checkout's order as
+            # being created, under one per-merchant lock so two Completes cannot both take the last unit.
+            await lock_merchant_stock(session, tenant_id=row.tenant_id, merchant_id=merchant.merchant_id)
+            held = await _held_stock_messages(session, runtime, merchant, row, state, now)
+            if held:
+                return await _blocked_response(
+                    runtime, session, req, merchant, negotiated, row, now, held, "refused", vendor=vendor_out
+                )
         try:
             await require_allow_decision(
                 session,
@@ -2389,15 +2488,19 @@ async def _record_payment_attention(
     lines: Sequence[Mapping[str, Any]],
     now: datetime,
 ) -> None:
-    """Keep the payment the merchant must act on (``commerce_unmatched_payments``) and queue its email."""
+    """Keep the payment the merchant must act on (``commerce_unmatched_payments``) and queue its email.
+
+    A payment Plural reported without its order id is still kept and emailed (the email says the
+    Plural order was not given); its row is keyed on the hand-off reference instead and cannot be
+    refunded from here.
+    """
     from sqlalchemy.dialects.postgresql import insert
 
     from core.commerce import merchant_notifications as outbox
-    from core.commerce.hosted_refunds import credential_ref_for_order
+    from core.commerce.hosted_refunds import UNREPORTED_PREFIX, credential_ref_for_order
     from core.models.commerce_payments import CommerceUnmatchedPaymentRow as Unmatched
 
-    if not provider_order_id:
-        return
+    row_order_id = provider_order_id or f"{UNREPORTED_PREFIX}{reference}"
     payment_id = uuid.uuid4()
     inserted = (
         await session.execute(
@@ -2409,7 +2512,7 @@ async def _record_payment_attention(
                 seller_agent_id=row.seller_agent_id,
                 checkout_session_id=row.id,
                 reference=reference[:64],
-                provider_order_id=provider_order_id[:120],
+                provider_order_id=row_order_id[:120],
                 reason=reason,
                 amount_minor_units=amount_minor_units,
                 currency=(str(currency).upper()[:3] if currency else None),
@@ -2938,6 +3041,71 @@ async def apply_order_change(
             payload=snapshot,
             resource_id=row.id,
             details={"revision": row.revision, "entry_id": entry["id"]},
+        )
+        await enqueue_order_deliveries(session, event, platform_profile_url=row.platform_profile_url, now=now)
+        await emit_order_event(session, event)
+        return row.revision, snapshot, row.ucp_version
+
+
+async def set_order_adjustment_status(
+    *, tenant_id: str, order_id: str, adjustment_id: str, status: str, now: datetime
+) -> tuple[int, dict[str, Any], str] | None:
+    """Move one adjustment of an order to ``status`` (``completed`` or ``failed``) and send the full snapshot.
+
+    Server-side only (the refund reconciliation). Returns None when the order or the adjustment is
+    missing or already has that status; otherwise ``(revision, snapshot, ucp_version)``.
+    """
+    from core.commerce.ucp.orders import ORDER_UPDATED, line_status
+    from core.commerce.ucp.webhooks import enqueue_order_deliveries
+    from core.database import get_tenant_session
+    from core.models.commerce_ucp import CommerceOrderRow
+
+    if status not in ("pending", "completed", "failed"):
+        raise ValueError("adjustment status must be pending, completed or failed")
+    tenant = uuid.UUID(str(tenant_id))
+    async with get_tenant_session(tenant) as session:
+        row = (
+            await session.execute(
+                select(CommerceOrderRow)
+                .where(CommerceOrderRow.tenant_id == tenant, CommerceOrderRow.id == order_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        snapshot = json.loads(json.dumps(row.snapshot))
+        entry = next(
+            (a for a in snapshot.get("adjustments") or [] if isinstance(a, dict) and a.get("id") == adjustment_id),
+            None,
+        )
+        if entry is None or entry.get("status") == status:
+            return None
+        entry["status"] = status
+        for line in snapshot.get("line_items") or []:
+            line["status"] = line_status(line["quantity"])
+        row.snapshot = snapshot
+        row.revision = row.revision + 1
+        row.updated_at = now
+        event = OrderEvent(
+            event_type=ORDER_UPDATED,
+            tenant_id=str(tenant_id),
+            merchant_id=row.merchant_id,
+            order_id=row.id,
+            revision=row.revision,
+            snapshot=snapshot,
+            ucp_version=row.ucp_version,
+        )
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event=ORDER_UPDATE_EVENT,
+            outcome="success",
+            merchant_id=row.merchant_id,
+            seller_agent_id=row.seller_agent_id,
+            buyer_agent_id=None,
+            payload=snapshot,
+            resource_id=row.id,
+            details={"revision": row.revision, "entry_id": adjustment_id, "status": status},
         )
         await enqueue_order_deliveries(session, event, platform_profile_url=row.platform_profile_url, now=now)
         await emit_order_event(session, event)

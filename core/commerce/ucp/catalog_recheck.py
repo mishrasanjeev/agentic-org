@@ -148,14 +148,15 @@ def merged_state(
     """The re-priced state plus what only the stored state holds (platform, hand-offs, consent, payment...).
 
     ``loyalty_recomputed``: the re-pricing read the buyer's membership again (Shopify reads were
-    available), so its loyalty forecast is for the new total. Otherwise the stored loyalty is kept
-    rather than erased.
+    available), so its loyalty forecast is for the new total. Otherwise, or when the lookup gave no
+    membership (it failed), the stored loyalty is kept rather than erased.
     """
     out = dict(fresh)
     for key, value in stored.items():
         if key not in out or key in KEPT_MEMBERS:
             out[key] = value
-    if not loyalty_recomputed and "loyalty" in stored:
+    if stored.get("loyalty") is not None and (not loyalty_recomputed or out.get("loyalty") is None):
+        # Without the reads, or when the membership lookup failed, the stored loyalty is kept, not erased.
         out["loyalty"] = stored["loyalty"]
     return out
 
@@ -172,11 +173,15 @@ def held_stock_changes(
     line_items: Sequence[Mapping[str, Any]],
     found: Mapping[str, CatalogItem],
     held: Mapping[str, Sequence[tuple[int, datetime]]],
+    *,
+    sold: Mapping[str, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """``out_of_stock`` for each line whose stock, less what other buyers' payable Plural links hold, is short.
+    """``out_of_stock`` for each line whose stock, less what is sold and what others hold, is short.
 
-    ``held`` maps an item id to ``(quantity, until)`` per checkout holding it. The message says how
-    many can be bought now and when enough frees up if those payments do not go through.
+    ``held`` maps an item id to ``(quantity, until)`` per checkout holding it; ``sold`` maps it to the
+    units of orders made since the catalog was last read (whole units). The message says how many can
+    be bought now and, when other buyers' pending payments hold the rest, when enough frees up if
+    those payments do not go through.
     """
     out: list[dict[str, Any]] = []
     for index, line in enumerate(line_items):
@@ -185,21 +190,34 @@ def held_stock_changes(
         item = found.get(item_id)
         quantity = line.get("quantity")
         holds = sorted(held.get(item_id) or (), key=lambda hold: hold[1])
-        if item is None or item.inventory is None or not isinstance(quantity, int) or not holds:
+        sold_units = int((sold or {}).get(item_id) or 0)
+        if item is None or item.inventory is None or not isinstance(quantity, int) or not (holds or sold_units):
             continue
         need = _whole_units(quantity, item)
+        stock = item.inventory - sold_units
         units = [_whole_units(q, item) for q, _until in holds]
         held_total = sum(units)
-        if item.inventory - held_total >= need:
+        if stock - held_total >= need:
+            continue
+        path = f"$.line_items[{index}]"
+        if stock < need:
+            out.append(
+                msg.error(
+                    "out_of_stock",
+                    f"Only {max(stock, 0)} of {_title(line)} left: the rest has been sold since the shop's "
+                    "catalog was last read. Change the quantity or the item.",
+                    path=path,
+                )
+            )
             continue
         free_at: datetime | None = None
         remaining = held_total
         for count, (_q, until) in zip(units, holds, strict=True):
             remaining -= count
-            if item.inventory - remaining >= need:
+            if stock - remaining >= need:
                 free_at = until
                 break
-        available = max(item.inventory - held_total, 0)
+        available = max(stock - held_total, 0)
         when = f" until about {_clock(free_at)}" if free_at is not None else ""
         out.append(
             msg.error(
@@ -207,26 +225,47 @@ def held_stock_changes(
                 f"Only {available} of {_title(line)} can be bought now: {held_total} are held by another "
                 f"buyer's pending payment{when}. If that payment does not go through, they free up then; "
                 "change the quantity or try again later.",
-                path=f"$.line_items[{index}]",
+                path=path,
             )
         )
     return out
 
 
+def stock_unconfirmed(line_items: Sequence[Mapping[str, Any]], tracked: set[str]) -> list[dict[str, Any]]:
+    """``out_of_stock`` for every tracked line when the held or sold stock could not be counted in full."""
+    return [
+        msg.error(
+            "out_of_stock",
+            f"The stock of {_title(line)} cannot be confirmed right now because many payments are pending; "
+            "try again in a few minutes.",
+            path=f"$.line_items[{index}]",
+        )
+        for index, line in enumerate(line_items)
+        if str(((line.get("item") if isinstance(line.get("item"), Mapping) else {}) or {}).get("id") or "") in tracked
+    ]
+
+
 async def stock_short_lines(
-    catalog: ItemCatalog, merchant: MerchantUcp, state: Mapping[str, Any]
+    catalog: ItemCatalog, merchant: MerchantUcp, state: Mapping[str, Any], *, sold: Mapping[str, int] | None = None
 ) -> list[dict[str, Any]]:
     """The lines whose quantity the catalog's stock no longer covers (``out_of_stock`` of ``catalog_changes``).
 
     For a payment that already arrived: one entry per short line (``line_item_id``, ``item_id``,
-    ``title``, ``quantity`` in whole units, ``in_stock``). An item the catalog no longer lists, or one
-    whose stock is not tracked, is not counted as short.
+    ``title``, ``quantity`` in whole units, ``in_stock``). ``sold`` (units of orders made since the
+    catalog was last read) is taken off the catalog's stock first. An item the catalog no longer
+    lists, or one whose stock is not tracked, is not counted as short.
     """
+    import dataclasses
+
     line_items = [li for li in state.get("line_items") or [] if isinstance(li, Mapping)]
     if not line_items:
         return []
     ids = [str((li.get("item") or {}).get("id") or "") for li in line_items]
-    found = await catalog.lookup(merchant, [i for i in ids if i])
+    found = dict(await catalog.lookup(merchant, [i for i in ids if i]))
+    for item_id, units in (sold or {}).items():
+        item = found.get(item_id)
+        if item is not None and item.inventory is not None and units:
+            found[item_id] = dataclasses.replace(item, inventory=item.inventory - int(units))
     short: list[dict[str, Any]] = []
     for message in changes(line_items, found, state.get("currency")):
         path = str(message.get("path") or "")

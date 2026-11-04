@@ -358,6 +358,10 @@ export const ordersApi = {
     api.get("/commerce/runtime/payments/unmatched", { params }),
   refundUnmatched: (paymentId: string, body: { reason?: string }) =>
     api.post(`/commerce/runtime/ucp/payments/unmatched/${encodeURIComponent(paymentId)}/refunds`, body),
+  // Ask Plural again about refunds it has not confirmed yet.
+  checkRefunds: (orderId: string) => api.post(`/commerce/runtime/ucp/orders/${encodeURIComponent(orderId)}/refunds/check`, {}),
+  checkUnmatched: (paymentId: string) =>
+    api.post(`/commerce/runtime/ucp/payments/unmatched/${encodeURIComponent(paymentId)}/refunds/check`, {}),
 };
 
 // ABM (Account-Based Marketing)

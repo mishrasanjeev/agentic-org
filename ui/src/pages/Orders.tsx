@@ -49,6 +49,7 @@ interface Order {
   refundable_minor_units?: number;
   refund_available?: boolean;
   stock_short?: ShortLine[] | null;
+  refund_checkable?: boolean;
   surface: string;
   permalink_url: string | null;
 }
@@ -64,6 +65,7 @@ interface UnmatchedPayment {
   refund_status: string;
   refund_error: string | null;
   refundable: boolean;
+  refund_checkable?: boolean;
   created_at: string | null;
 }
 
@@ -264,6 +266,51 @@ function UnmatchedRefund({ payment, onDone }: { payment: UnmatchedPayment; onDon
   );
 }
 
+const CHECK_RESULTS: Record<string, string> = {
+  succeeded: "Plural confirmed the refund.",
+  failed: "Plural reports the refund failed. You can refund again.",
+  still_unknown: "Plural has not confirmed the refund yet. It still counts as refunded; check again later.",
+  status_unavailable: "Plural could not be reached. Check again later.",
+  credentials_missing: "Your Plural credentials are missing, so the refund cannot be checked.",
+  too_recent: "The refund was asked for less than 5 minutes ago. Check again in a few minutes.",
+  nothing_to_check: "No refund is waiting for Plural.",
+};
+
+function checkMessage(results: Record<string, number> | string): string {
+  const key = typeof results === "string" ? results : Object.keys(results)[0] ?? "nothing_to_check";
+  return CHECK_RESULTS[key] ?? key;
+}
+
+/** Ask Plural again about a refund it has not confirmed; shows what it said. */
+function CheckRefund({ check, onDone }: { check: () => Promise<{ data: any }>; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { data } = await check();
+      setMessage(checkMessage(data.results ?? data.result));
+      onDone();
+    } catch (e) {
+      setMessage(extractApiError(e, "The refund could not be checked. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 text-sm">
+      <Button variant="outline" onClick={() => void run()} disabled={busy}>
+        <RefreshCw className="mr-2 h-4 w-4" /> Check refund again
+      </Button>
+      {message ? (
+        <p className="mt-2 text-muted-foreground" role="status">
+          {message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 const REFUND_STATUS: Record<string, string> = {
   none: "Not refunded",
   requested: "Refund in progress",
@@ -434,6 +481,9 @@ export default function Orders() {
               </ul>
             ) : null}
             <OrderRefund order={order} onDone={() => void load(filter, offset)} />
+            {order.refund_checkable ? (
+              <CheckRefund check={() => ordersApi.checkRefunds(order.id)} onDone={() => void load(filter, offset)} />
+            ) : null}
             <p className="mt-3 text-xs text-muted-foreground">Merchant {order.merchant_id}</p>
           </li>
         ))}
@@ -463,6 +513,9 @@ export default function Orders() {
                 </div>
                 <p className="mt-2 text-muted-foreground">Why: {payment.reason_text}.</p>
                 <UnmatchedRefund payment={payment} onDone={() => void load(filter, offset)} />
+                {payment.refund_checkable ? (
+                  <CheckRefund check={() => ordersApi.checkUnmatched(payment.id)} onDone={() => void load(filter, offset)} />
+                ) : null}
               </li>
             ))}
           </ul>

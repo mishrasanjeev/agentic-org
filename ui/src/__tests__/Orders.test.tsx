@@ -7,6 +7,8 @@ const list = vi.fn();
 const refund = vi.fn();
 const unmatched = vi.fn();
 const refundUnmatched = vi.fn();
+const checkRefunds = vi.fn();
+const checkUnmatched = vi.fn();
 
 vi.mock("@/lib/api", () => ({ default: {} }));
 vi.mock("../lib/api", () => ({
@@ -15,6 +17,8 @@ vi.mock("../lib/api", () => ({
     refund: (...a: unknown[]) => refund(...a),
     unmatched: (...a: unknown[]) => unmatched(...a),
     refundUnmatched: (...a: unknown[]) => refundUnmatched(...a),
+    checkRefunds: (...a: unknown[]) => checkRefunds(...a),
+    checkUnmatched: (...a: unknown[]) => checkUnmatched(...a),
   },
   extractApiError: (_e: unknown, fallback: string) => fallback,
 }));
@@ -55,6 +59,8 @@ describe("Orders", () => {
     refund.mockReset();
     unmatched.mockReset();
     refundUnmatched.mockReset();
+    checkRefunds.mockReset();
+    checkUnmatched.mockReset();
     unmatched.mockResolvedValue({ data: { payments: [], next_offset: null } });
   });
 
@@ -237,5 +243,54 @@ describe("Orders", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm refund" }));
     await waitFor(() => expect(refundUnmatched).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", {}));
     expect(await screen.findByText(/Refund requested/)).toBeInTheDocument();
+  });
+
+  it("checks a refund Plural has not confirmed again and says what Plural answered", async () => {
+    list.mockResolvedValue({
+      data: {
+        orders: [
+          order({
+            refund_available: true,
+            refundable_minor_units: 0,
+            refund_checkable: true,
+            refunds: [{ id: "adj_1", status: "pending", amount: "Rs 449.00", occurred_at: null }],
+          }),
+        ],
+        next_offset: null,
+      },
+    });
+    unmatched.mockResolvedValue({
+      data: {
+        payments: [
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            merchant_id: "tea-corner",
+            checkout_id: "chk_example_8",
+            order_id: null,
+            reason: "paid_twice",
+            reason_text: "the buyer had already paid this checkout through another of its payment links",
+            amount: "Rs 449.00",
+            refund_status: "pending",
+            refund_error: null,
+            refundable: false,
+            refund_checkable: true,
+            created_at: "2026-10-29T10:00:00Z",
+          },
+        ],
+        next_offset: null,
+      },
+    });
+    show();
+    const buttons = await screen.findAllByRole("button", { name: /Check refund again/ });
+    expect(buttons).toHaveLength(2);
+    expect(screen.getByText("Refund pending at Plural")).toBeInTheDocument();
+    checkRefunds.mockResolvedValueOnce({ data: { results: { still_unknown: 1 }, checked: 1 } });
+    fireEvent.click(buttons[0]);
+    await waitFor(() => expect(checkRefunds).toHaveBeenCalledWith("ord_example_1"));
+    expect(await screen.findByText(/Plural has not confirmed the refund yet/)).toBeInTheDocument();
+    checkUnmatched.mockResolvedValueOnce({ data: { result: "succeeded", payment: {} } });
+    fireEvent.click(screen.getAllByRole("button", { name: /Check refund again/ })[1]);
+    await waitFor(() => expect(checkUnmatched).toHaveBeenCalledWith("22222222-2222-4222-8222-222222222222"));
+    expect(await screen.findByText("Plural confirmed the refund.")).toBeInTheDocument();
   });
 });

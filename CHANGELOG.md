@@ -34,6 +34,20 @@
   `read_limit` and `read_limit_reached`, and the setup page tells the merchant when the store has more.
 - Migration v6z122 adds `commerce_merchant_notifications` and `commerce_unmatched_payments` (forced row-level
   security).
+- Review fixes: the refund bound counts journalled refunds plus hand-recorded refund adjustments no journalled
+  call accounts for; only an explicit Plural refusal (a 4xx other than 408/409/425/429, or a failed status) marks a
+  refund failed, while 5xx answers, timeouts and unknown statuses stay unknown and counted; a replayed in-flight
+  refund answers `replayed` before the bound check.
+- Refund reconciliation: beat task `reconcile-plural-refunds` (every 5 minutes, maintenance queue) reads the Plural
+  order for refunds unknown for 5 minutes and records refunded or failed; admins can ask again with
+  `POST /commerce/runtime/ucp/orders/{id}/refunds/check` and
+  `POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds/check` (**Check refund again** on the Orders page).
+- A stock-short payment refunded through its order gets a new request id after Plural refuses a refund.
+- Held stock also counts orders made since the catalog was last read, no longer counts canceled checkouts, runs
+  under a per-merchant advisory lock in the transaction that marks the Plural order as being created, and treats
+  stock as unconfirmed when a scan limit is reached. The check at payment subtracts the same orders.
+- The outbox leases one row just before its send. Loyalty is kept when the recomputed lookup gives nothing. A
+  payment Plural reported without its order id still gets its outbox row and email.
 
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 

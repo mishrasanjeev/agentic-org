@@ -866,6 +866,80 @@ async def refund_unmatched_payment(
     }
 
 
+@runtime_router.post("/orders/{order_id}/refunds/check")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="reads-plural-and-records-a-known-outcome-once",
+    audit_event="commerce.ucp.order.refund_check",
+)
+async def check_order_refunds(order_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Ask Plural again about the order's refunds whose outcome is unknown (requested at least 5 minutes ago)."""
+    from core.commerce.hosted_refunds import REFUND_CHECK_EVENT, check_refunds
+
+    tenant = _tenant_uuid(tenant_id)
+    counts = await check_refunds(tenant, order_id=order_id)
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event=REFUND_CHECK_EVENT,
+        outcome="success",
+        merchant_id=None,
+        seller_agent_id=None,
+        buyer_agent_id=None,
+        payload={"order_id": order_id, "results": counts},
+        resource_id=order_id,
+        details={"results": counts},
+    )
+    if counts:
+        kick_dispatch(tenant)
+    return {"order_id": order_id, "results": counts, "checked": sum(counts.values())}
+
+
+@runtime_router.post("/payments/unmatched/{payment_id}/refunds/check")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="reads-plural-and-records-a-known-outcome-once",
+    audit_event="commerce.payment.unmatched_refund_check",
+)
+async def check_unmatched_refund(payment_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Ask Plural again about an unmatched payment's refund whose outcome is unknown."""
+    from core.commerce.hosted_refunds import UNMATCHED_REFUND_CHECK_EVENT, UnmatchedRefundError
+    from core.commerce.hosted_refunds import check_unmatched_refund as check
+
+    try:
+        result, view = await check(tenant_id, payment_id)
+    except UnmatchedRefundError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event=UNMATCHED_REFUND_CHECK_EVENT,
+            outcome="blocked",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload={"payment_id": payment_id, "reason": exc.code},
+            resource_id=payment_id,
+            details={"reason": exc.code},
+        )
+        raise HTTPException(status_code=exc.status, detail=exc.code) from exc
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event=UNMATCHED_REFUND_CHECK_EVENT,
+        outcome="success",
+        merchant_id=view.get("merchant_id"),
+        seller_agent_id=view.pop("seller_agent_id", None),
+        buyer_agent_id=None,
+        payload={"payment_id": payment_id, "result": result},
+        resource_id=payment_id,
+        details={"result": result},
+    )
+    return {"result": result, "payment": view}
+
+
 class ShopifyFulfillmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
