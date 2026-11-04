@@ -16,6 +16,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from core.config import Settings
 
@@ -87,8 +88,10 @@ def test_openai_plugin_listing_fits_the_directory_limits() -> None:
     routes = _ui_routes()
     for key in ("websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"):
         url = listing[key]
-        assert url.startswith("https://agenticorg.ai") and len(url) <= 1024, key
-        path = url.removeprefix("https://agenticorg.ai") or "/"
+        parts = urlsplit(url)
+        assert parts.scheme == "https" and parts.netloc == "agenticorg.ai" and len(url) <= 1024, key
+        assert not parts.query and not parts.fragment, key
+        path = parts.path or "/"
         assert path in routes, f"{key} points at {path}, which is not a UI route"
     for key in ("logo", "composerIcon"):
         image = PLUGIN / listing[key].removeprefix("./")
