@@ -66,6 +66,8 @@ Approved merchants reach the partner through the governed case's signed push (se
 | `handoffs` | Requests for a person and who resolved them |
 | `case` | The governed case: application, subject, policy result, recommendation, screening results and dispositions, decision with its approvers and decision grants |
 | `case_evidence` | The Grantex evidence service's signed export of the case's agent runs (`included`, with its root and anchor hash), or `off`, `unavailable` with the reason, or `no_case` |
+| `agent_identity` | Only with [agent identity](agent-identity.md) on. Every agent action with the agent's identity identifier, attestation hash and trust tier: desk actions (allowed, held or stopped, and why), sent contact attempts, text replies and the case agents' provider calls |
+| `enrolment` | Only with agent identity on. Each agent-ready enrolment: the consent and its Grantex consent grant, the fields shared, the verification reference, the identity provider's reference and status, and when |
 
 **`manifest`.** The schema (`agenticorg.onboarding_evidence/1`), tenant, application, time, and the SHA-256 of each section's canonical JSON. Canonical JSON is UTF-8, with sorted keys and no whitespace.
 
@@ -100,6 +102,7 @@ The script recomputes every section digest and checks the signature. It exits 0 
 | `hours_to_decision` | Median and 90th percentile hours from submitted application to decision |
 | `consent_coverage` | Share of leads with a current consent on any channel, and on each channel |
 | `checks_per_merchant` | Provider calls the case agents made per case (mean and maximum), and screening results per case |
+| `funnel.agent_ready` | Only with agent identity on: applications whose verified business was handed to the identity provider for agent enrolment |
 
 **Cohort.** Every figure follows the same cohort, the leads created in the period, from first contact to decision.
 

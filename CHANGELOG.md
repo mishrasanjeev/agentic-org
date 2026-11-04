@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased - Onboarding desk: agent identity and the agent-ready merchant offer
+
+- Agent identity for desk and case agents, off by default (`AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED`,
+  `..._PROVIDER`, `..._STATUS_CACHE_SECONDS`). Off, no identity provider is called and every agent acts as before.
+- A vendor-neutral identity provider interface (`connectors/framework/agent_identity_provider.py`): resolve an agent
+  identity credential (identifier, attestation and its SHA-256, trust tier, allowed scopes, status, expiry, key
+  thumbprint), check its status, present it, prove key possession and take an enrolment. Providers register in
+  `connectors/agent_identity/registry.py` or through the `agenticorg.agent_identity_providers` entry-point group. A
+  `mock` provider with `active`, `revoked`, `suspended`, `expired`, `unknown` and `unreachable` fixtures runs in local
+  and test only.
+- Before each outreach send, text reply and case provider call, the agent's identity status and its Grantex grant are
+  checked; the action runs only within both scope sets. Revoked, suspended or expired identities and unbound grants
+  stop the action; unknown or unreachable ones hold it (outreach is rescheduled, a text gets no reply, a case run is
+  refused with `authorization_unavailable` before the case moves). Checks are cached briefly and never past the
+  credential's expiry.
+- `POST /onboarding-desk/agent-identity/{role}/bind` registers the agent's key on its Grantex agent and proves
+  possession (`/v1/agents/{id}/keys`, `/challenge`, `/prove`); grant tokens are checked for `cnf.jkt`.
+  `GET /onboarding-desk/agent-identity` shows each agent's check.
+- Contact attempts, transcript replies, desk agent actions and case tool calls record the agent identity identifier,
+  attestation hash and trust tier. With identity on, the evidence pack gains `agent_identity` and `enrolment` sections.
+- Verification providers can declare `accepts_presented_identity`; the case investigator then presents its identity
+  on `verify_business`. The mock verification provider echoes it in the handle's `accepted_identity`.
+- The agent-ready merchant offer per tenant (`GET`/`PUT /onboarding-desk/agent-ready-settings`), shown after a person
+  approves the case, on the applicant page (English and French) and by text. Accepting records an `agent_enrolment`
+  consent naming the person and requests a Grantex consent grant; the hand-off to the identity provider carries only
+  the verification reference and registry-verified fields, and records the provider's reference and status as
+  received. Verifications older than the configured age are not shared. Withdrawing revokes the grant and blocks any
+  further sharing. The partner report gains `funnel.agent_ready` with identity on.
+- Migration v6z121 adds the identity columns to contact attempts, the `web` consent channel and the encrypted consent
+  subject, and the `onboarding_desk_agent_actions` and `onboarding_desk_enrolments` tables (forced row-level security).
+
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 
 - The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,

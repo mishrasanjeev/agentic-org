@@ -386,6 +386,85 @@ describe("onboarding applicant element", () => {
     expect(shadow.querySelector(".progress")!.textContent).toContain("0 sur 5");
   });
 
+  it("offers agent-ready enrolment only after approval, and accepts, continues and withdraws", async () => {
+    const submitted = application({ status: "submitted", ready: false });
+    fetchMock.mockResolvedValueOnce(json({ ...SESSION, application: submitted }));
+    let element = mount();
+    await flush();
+    expect(element.shadowRoot!.querySelector('[data-role="agent-ready"]')).toBeNull();
+
+    const offered = { ...submitted, agent_ready: { status: "offered", offer: "Be <b>agent</b> ready.", enrolment: null } };
+    const pending = { status: "consent_pending", offer: "x", enrolment: { status: "consent_pending" } };
+    const shared = { status: "shared", offer: "x", enrolment: { status: "shared", provider_ref: "ref-1" } };
+    document.body.innerHTML = "";
+    fetchMock
+      .mockResolvedValueOnce(json({ ...SESSION, application: offered }))
+      .mockResolvedValueOnce(json({ enrolment: pending.enrolment, consent_url: "https://grantex.example/c/1" }))
+      .mockResolvedValueOnce(json({ ...submitted, agent_ready: pending }))
+      .mockResolvedValueOnce(json({ enrolment: shared.enrolment }))
+      .mockResolvedValueOnce(json({ ...submitted, agent_ready: shared }))
+      .mockResolvedValueOnce(json({ enrolment: { status: "revoked" } }));
+    element = mount();
+    await flush();
+    const shadow = element.shadowRoot!;
+    let box = shadow.querySelector('[data-role="agent-ready"]') as HTMLElement;
+    expect(box.querySelector("h2")!.textContent).toBe("Make your business ready for AI agents");
+    expect(box.querySelector(".intro")!.textContent).toBe("Be <b>agent</b> ready.");
+    expect(box.querySelector("b")).toBeNull();
+    const inputs = box.querySelectorAll("input");
+    (inputs[0] as HTMLInputElement).value = "Avery Example";
+    (inputs[1] as HTMLInputElement).value = "Owner";
+    (inputs[2] as HTMLInputElement).value = "avery@northwind.example";
+    const accept = box.querySelector('[data-role="agent-ready-accept"]') as HTMLButtonElement;
+    accept.click();
+    await flush();
+    expect(fetchMock.mock.calls.length).toBe(2);
+    (inputs[3] as HTMLInputElement).checked = true;
+    accept.click();
+    await flush();
+    await flush();
+    expect(fetchMock.mock.calls[2][0]).toBe("https://app.example.test/api/v1/onboarding-desk/apply/agent-ready/accept");
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toEqual({
+      name: "Avery Example",
+      role: "Owner",
+      contact: "avery@northwind.example",
+      accept: true,
+    });
+    box = shadow.querySelector('[data-role="agent-ready"]') as HTMLElement;
+    expect(box.querySelector(".message")!.textContent).toBe("Waiting for your confirmation.");
+    expect((box.querySelector("a") as HTMLAnchorElement).href).toBe("https://grantex.example/c/1");
+    (box.querySelector('[data-role="agent-ready-continue"]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    box = shadow.querySelector('[data-role="agent-ready"]') as HTMLElement;
+    expect(box.querySelector(".message")!.textContent).toBe("Your business was sent for agent enrolment. Reference: ref-1");
+    (box.querySelector('[data-role="agent-ready-withdraw"]') as HTMLButtonElement).click();
+    await flush();
+    expect(lastCall()[0]).toBe("https://app.example.test/api/v1/onboarding-desk/apply/agent-ready/withdraw");
+    expect(box.textContent).toBe("Your consent is withdrawn. Nothing more will be shared.");
+  });
+
+  it("asks to verify again, and speaks French, for the agent-ready offer", async () => {
+    const stale = { status: "reverify_required", message: "Please verify your business again." };
+    fetchMock.mockResolvedValueOnce(
+      json({ ...SESSION, application: application({ status: "submitted", agent_ready: stale }) })
+    );
+    let element = mount();
+    await flush();
+    let box = element.shadowRoot!.querySelector('[data-role="agent-ready"]') as HTMLElement;
+    expect(box.querySelector(".message")!.textContent).toBe("Please verify your business again.");
+    expect(box.querySelector("button")).toBeNull();
+    document.body.innerHTML = "";
+    const offered = { status: "offered", offer: "Offre.", enrolment: null };
+    fetchMock.mockResolvedValueOnce(
+      json({ ...SESSION, application: application({ status: "submitted", locale: "fr", agent_ready: offered }) })
+    );
+    element = mount();
+    await flush();
+    box = element.shadowRoot!.querySelector('[data-role="agent-ready"]') as HTMLElement;
+    expect(box.querySelector("h2")!.textContent).toBe("Rendre votre entreprise accessible aux agents IA");
+  });
+
   it("has every string in English and French", () => {
     const { en, fr } = window.AgenticOrgOnboarding.STRINGS;
     expect(Object.keys(fr).sort()).toEqual(Object.keys(en).sort());
