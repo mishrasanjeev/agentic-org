@@ -3794,7 +3794,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 180,
+    "source_line": 193,
     "tenant_required": true
   },
   {
@@ -3848,7 +3848,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 617,
+    "source_line": 650,
     "tenant_required": true
   },
   {
@@ -3866,7 +3866,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 708,
+    "source_line": 743,
     "tenant_required": true
   },
   {
@@ -3884,7 +3884,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 667,
+    "source_line": 700,
     "tenant_required": true
   },
   {
@@ -4118,7 +4118,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 504,
+    "source_line": 537,
     "tenant_required": true
   },
   {
@@ -4136,7 +4136,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 879,
+    "source_line": 926,
     "tenant_required": true
   },
   {
@@ -4154,7 +4154,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 782,
+    "source_line": 817,
     "tenant_required": true
   },
   {
@@ -4172,7 +4172,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 824,
+    "source_line": 871,
     "tenant_required": true
   },
   {
@@ -4316,7 +4316,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 217,
+    "source_line": 230,
     "tenant_required": true
   },
   {
@@ -15890,7 +15890,7 @@
     "public_exempt_reason": "per-merchant-path-token-plus-shopify-hmac-verified-with-the-merchant-stored-secret",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.shopify",
-    "source_line": 924,
+    "source_line": 971,
     "tenant_required": true
   },
   {

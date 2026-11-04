@@ -2,7 +2,7 @@
 """Commerce merchant emails outbox and Plural payments no order matches.
 
 Revision ID: v6z122_commerce_outbox
-Revises: v6z115_insights_counters
+Revises: v6z121_desk_agent_identity
 Create Date: 2026-11-04
 
 - ``commerce_merchant_notifications``: one row per email the merchant's
@@ -23,7 +23,7 @@ Both tables are tenant scoped under forced row-level security.
 from alembic import op
 
 revision = "v6z122_commerce_outbox"
-down_revision = "v6z115_insights_counters"
+down_revision = "v6z121_desk_agent_identity"
 branch_labels = None
 depends_on = None
 
