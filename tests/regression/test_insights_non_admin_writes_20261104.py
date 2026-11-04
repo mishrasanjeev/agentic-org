@@ -48,24 +48,48 @@ HANDLER_ROLES: dict[tuple[str, str], set[str]] = {
 }
 
 
+def _routers() -> list[Any]:
+    """Every Insights router as api/main.py mounts it (under /api/v1); read directly, not from a shared app that
+    other tests may have rebuilt."""
+    from api.v1 import insights, insights_bi, insights_explore, insights_value
+
+    return [
+        insights.router,
+        insights_alerts.router,
+        insights_bi.router,
+        insights_explore.router,
+        insights_exports.router,
+        insights_saved_views.router,
+        insights_value.router,
+    ]
+
+
 @pytest.fixture(scope="module")
-def app() -> FastAPI:
-    from api.main import app as _app
-
-    return _app
+def app() -> list[Any]:
+    return _routers()
 
 
-def _insights_writes(app: FastAPI) -> dict[tuple[str, str], dict[str, Any]]:
+def _insights_writes(routers: list[Any]) -> dict[tuple[str, str], dict[str, Any]]:
     out: dict[tuple[str, str], dict[str, Any]] = {}
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        meta = getattr(route.endpoint, ROUTE_METADATA_ATTR, None)
-        if not isinstance(meta, dict) or not str(meta.get("scope") or "").startswith("insights"):
-            continue
-        for method in route.methods - {"GET", "HEAD", "OPTIONS"}:
-            out[(method, route.path)] = meta
+    for router in routers:
+        for route in router.routes:
+            if not isinstance(route, APIRoute):
+                continue
+            meta = getattr(route.endpoint, ROUTE_METADATA_ATTR, None)
+            if not isinstance(meta, dict) or not str(meta.get("scope") or "").startswith("insights"):
+                continue
+            for method in route.methods - {"GET", "HEAD", "OPTIONS"}:
+                out[(method, "/api/v1" + route.path)] = meta
     return out
+
+
+def test_every_insights_router_is_mounted_under_api_v1() -> None:
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[2] / "api" / "main.py").read_text(encoding="utf-8")
+    for name in ("insights", "insights_alerts", "insights_bi", "insights_explore", "insights_exports",
+                 "insights_saved_views", "insights_value"):
+        assert f'app.include_router({name}.router, prefix="/api/v1")' in source, name
 
 
 def test_every_role_a_handler_admits_passes_route_enforcement(app) -> None:
@@ -164,4 +188,5 @@ def test_value_and_bi_changes_stay_the_administrators_at_the_route(app) -> None:
         assert meta["scope"].startswith("insights_admin."), key
         assert required_scopes_for(meta["scope"], key[0]) == ("agenticorg:admin",), key
         for role in READERS:
-            assert not (set(required_scopes_for(meta["scope"], key[0])) & _expand_granted(ROLE_SCOPES[role])), (key, role)
+            required = set(required_scopes_for(meta["scope"], key[0]))
+            assert not (required & _expand_granted(ROLE_SCOPES[role])), (key, role)
