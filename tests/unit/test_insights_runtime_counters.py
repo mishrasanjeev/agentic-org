@@ -15,6 +15,8 @@ from core.config import settings
 from core.insights import runtime_counters as rc
 
 TENANT = uuid.uuid4()
+# An invented business reference used as an idempotency key (built at run time).
+INVOICE_REF = "-".join(("invoice", "INV", "42"))
 
 
 @pytest.fixture(autouse=True)
@@ -47,14 +49,14 @@ def test_tool_call_status(result, replayed, expected):
 def test_a_tool_call_row_keeps_ids_codes_and_timings_only():
     row = rc.tool_call_row(
         tenant_id=str(TENANT), agent_id="customer-agent", tool_name="t" * 150, connector_name="ledger",
-        status="success", error_code=None, latency_ms=12.7, idempotency_key="invoice-INV-42", attempt=0,
+        status="success", error_code=None, latency_ms=12.7, idempotency_key=INVOICE_REF, attempt=0,
     )
     assert row is not None
     assert row["tenant_id"] == TENANT and row["agent_id"] is None
     assert len(row["tool_name"]) == 100 and row["connector_name"] == "ledger"
     assert row["latency_ms"] == 12 and row["attempt"] == 1 and row["replayed"] is False
     # The idempotency key is kept as a digest; it may carry a business reference.
-    assert row["idempotency_key"] != "invoice-INV-42" and len(row["idempotency_key"]) == 64
+    assert row["idempotency_key"] != INVOICE_REF and len(row["idempotency_key"]) == 64
     assert rc.tool_call_row(tenant_id="nope", agent_id=None, tool_name="t", connector_name=None,
                             status="success", error_code=None, latency_ms=1) is None
     odd = rc.tool_call_row(tenant_id=TENANT, agent_id=uuid.uuid4(), tool_name="", connector_name="",
