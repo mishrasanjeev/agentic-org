@@ -84,7 +84,7 @@ async def _tenant(conn, plan: str, *, deleted: bool = False) -> uuid.UUID:
             "INSERT INTO tenants(id,name,slug,plan,data_region,settings,deleted_at) "
             "VALUES (:id,:name,:slug,:plan,'IN','{}',:deleted)"
         ),
-        {"id": tid, "name": f"Bench {tid.hex[:6]}", "slug": "bench-" + tid.hex, "plan": plan,
+        {"id": tid, "name": f"Bench {tid.hex}", "slug": "bench-" + tid.hex, "plan": plan,
          "deleted": datetime.now(UTC) if deleted else None},
     )
     return tid
