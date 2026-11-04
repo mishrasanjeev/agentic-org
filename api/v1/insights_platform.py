@@ -156,7 +156,7 @@ _DATASETS: dict[str, tuple[str, str]] = {
 async def platform_export(
     operator: Operator,
     dataset: Annotated[str, Query(pattern="^(daily|tenants)$")] = "daily",
-    format: Annotated[str, Query(pattern="^(csv|xlsx|json)$")] = "csv",  # noqa: A002 - the public query parameter name
+    format: Annotated[str, Query(pattern="^(csv|xlsx|json|parquet)$")] = "csv",  # noqa: A002 - the public query parameter name
     from_: FromDay = None,
     to: ToDay = None,
 ) -> Response:

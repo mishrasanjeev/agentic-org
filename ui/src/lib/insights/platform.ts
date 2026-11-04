@@ -236,7 +236,7 @@ export const platformApi = {
   /** The daily figures or the tenant table as a file (CSV, XLSX or JSON); the server audits the export. */
   async exportFile(
     dataset: "daily" | "tenants",
-    format: "csv" | "xlsx" | "json",
+    format: "csv" | "xlsx" | "json" | "parquet",
     range: PlatformPeriod,
   ): Promise<{ blob: Blob; filename: string }> {
     const { data } = await api.get("/platform/insights/export", {
