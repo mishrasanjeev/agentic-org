@@ -68,6 +68,8 @@ BASE_TABLES = (
     "run_spans",
     # Exports read the tenant's PII masking setting (v6z110 release).
     "governance_config",
+    # The connectors explorer's seven days of tool calls (v6z115).
+    "tool_calls",
 )
 
 pytestmark = [
