@@ -190,6 +190,7 @@ def test_every_documented_group_is_discovered() -> None:
         "agenticorg.providers",
         "agenticorg.agents",
         "agenticorg.workflows",
+        "agenticorg.agent_identity_providers",
     ]
 
 

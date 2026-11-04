@@ -95,7 +95,7 @@ class OnboardingConsent(BaseModel):
     __tablename__ = "onboarding_desk_consents"
     __table_args__ = (
         Index("ix_onboarding_consents_lead_channel", "tenant_id", "lead_id", "channel"),
-        CheckConstraint("channel IN ('sms','email','whatsapp','voice')", name="ck_onboarding_consents_channel"),
+        CheckConstraint("channel IN ('sms','email','whatsapp','voice','web')", name="ck_onboarding_consents_channel"),
         CheckConstraint("status IN ('granted','withdrawn')", name="ck_onboarding_consents_status"),
     )
 
@@ -116,6 +116,8 @@ class OnboardingConsent(BaseModel):
     withdrawn_via: Mapped[str | None] = mapped_column(String(32), nullable=True)
     recorded_by: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    #: The person who consented (name, role, contact), encrypted; agent-enrolment consents only (v6z121).
+    subject_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class OnboardingSuppression(BaseModel):
@@ -163,6 +165,10 @@ class OnboardingContactAttempt(BaseModel):
     attempt_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # The acting agent's identity, when agent identity is on (v6z121).
+    agent_identity_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    agent_attestation_sha256: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    agent_trust_tier: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 APPLICATION_STATUSES = ("in_progress", "submitted", "withdrawn")
@@ -259,3 +265,72 @@ class OnboardingHandoff(BaseModel):
     resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     resolution_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+AGENT_ACTION_OUTCOMES = ("allowed", "held", "stopped")
+ENROLMENT_STATUSES = ("consent_pending", "shared", "refused", "failed", "revoked")
+
+
+class OnboardingAgentAction(BaseModel):
+    """One desk agent action and the identity check it ran under (agent identity on only)."""
+
+    __tablename__ = "onboarding_desk_agent_actions"
+    __table_args__ = (
+        Index("ix_onboarding_agent_actions_lead", "tenant_id", "lead_id", text("created_at DESC")),
+        CheckConstraint("outcome IN ('allowed','held','stopped')", name="ck_onboarding_agent_actions_outcome"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    application_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    role: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    channel: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_identity_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    agent_attestation_sha256: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    agent_trust_tier: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    grant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class OnboardingEnrolment(BaseModel):
+    """An agent-ready merchant's enrolment: the consent grant, what was shared, and the provider's answer."""
+
+    __tablename__ = "onboarding_desk_enrolments"
+    __table_args__ = (
+        Index(
+            "ux_onboarding_enrolments_live",
+            "tenant_id",
+            "application_id",
+            unique=True,
+            postgresql_where=text("status <> 'revoked'"),
+        ),
+        CheckConstraint(
+            "status IN ('consent_pending','shared','refused','failed','revoked')",
+            name="ck_onboarding_enrolments_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    consent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    case_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="consent_pending")
+    consent_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    consent_grant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    provider_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    shared_fields: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    verification_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    refusal_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    shared_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

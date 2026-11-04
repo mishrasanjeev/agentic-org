@@ -13,6 +13,11 @@ Replies go only to a lead with a current SMS consent, and only for partners
 that turn the conversation on (``sms_conversation`` in the branding). A reply
 answers a message the applicant just sent, so contact hours do not hold it
 back; outreach is still governed by the contact rules.
+
+With agent identity on, the conversation agent's identity and Grantex grant are checked before
+each reply: a held or stopped identity sends no reply and records why, and every reply records the
+agent's identity in the transcript. After a person approves the case, a tenant with the agent-ready
+offer on gets the offer as the reply to a submitted applicant's text.
 """
 
 from __future__ import annotations
@@ -85,6 +90,9 @@ async def handle_sms(tenant_id: uuid.UUID, phone: str, body: str, *, now: dateti
     if not branding.sms_conversation or not branding.partner_name or not branding.onboarding_url:
         return None
     leads = await store.open_leads_by_phone(tenant_id, phone)
+    if not leads and await _offer_on(tenant_id):
+        # Only for the agent-ready offer: a submitted applicant's text gets the offer after approval.
+        leads = await store.open_leads_by_phone(tenant_id, phone, statuses=("submitted",))
     if len(leads) != 1:
         # No lead, or several sharing one phone: the desk cannot tell whose application this is.
         return None
@@ -100,6 +108,9 @@ async def handle_sms(tenant_id: uuid.UUID, phone: str, body: str, *, now: dateti
     partner = branding.partner_name
     inbound = " ".join(body.split())[: applications.MAX_TRANSCRIPT_TEXT]
     keyword = _keyword(body)
+    stamp = await _identity(tenant_id, lead.id, application.id, inbound, moment)
+    if stamp is False:
+        return None
     reply = await _reply(tenant_id, application, keyword, inbound, lang, partner, branding, lead.id, moment)
     if len(reply) > messages.MAX_SMS:
         link = outreach.onboarding_link(branding.onboarding_url, tenant_id, lead.id, moment)
@@ -107,10 +118,42 @@ async def handle_sms(tenant_id: uuid.UUID, phone: str, body: str, *, now: dateti
     await applications.append_transcript(
         tenant_id,
         application.id,
-        [{"channel": "sms", "from": "applicant", "text": inbound}, {"channel": "sms", "from": "desk", "text": reply}],
+        [
+            {"channel": "sms", "from": "applicant", "text": inbound},
+            {"channel": "sms", "from": "desk", "text": reply, **({"agent_identity": stamp} if stamp else {})},
+        ],
         now=moment,
     )
     return reply
+
+
+async def _offer_on(tenant_id: uuid.UUID) -> bool:
+    from core.onboarding_desk import agent_ready
+
+    return agent_ready.available() and (await agent_ready.get_settings(tenant_id)).enabled
+
+
+async def _identity(
+    tenant_id: uuid.UUID, lead_id: uuid.UUID, application_id: uuid.UUID, inbound: str, moment: datetime
+) -> dict[str, str] | None | bool:
+    """The conversation agent's identity stamp, ``None`` when agent identity is off, ``False`` to stay silent."""
+    from core.agent_identity import guard, scopes
+
+    check = await guard.check_action(tenant_id, scopes.CONVERSATION_ROLE, scopes.SMS_REPLY)
+    if not check.enabled:
+        return None
+    await store.record_agent_action(
+        tenant_id, role=scopes.CONVERSATION_ROLE, action="sms_reply", check=check, lead_id=lead_id,
+        application_id=application_id, channel="sms", now=moment,
+    )  # fmt: skip
+    if check.allowed:
+        return check.stamp_dict()
+    # No reply; the applicant's message is kept so a person (or the next reply) can answer it.
+    await applications.append_transcript(
+        tenant_id, application_id, [{"channel": "sms", "from": "applicant", "text": inbound}], now=moment
+    )
+    logger.info("onboarding_sms_reply_withheld", reason=check.reason, outcome=check.outcome)
+    return False
 
 
 async def _reply(
@@ -131,7 +174,15 @@ async def _reply(
         await applications.request_person(tenant_id, application.id, channel="sms", now=moment)
         return text["person"].format(partner=partner)
     if application.status != "in_progress":
-        return text["submitted"].format(partner=partner)
+        from core.onboarding_desk import agent_ready
+
+        offer = await agent_ready.sms_offer(
+            tenant_id,
+            application,
+            partner=partner,
+            link=outreach.onboarding_link(branding.onboarding_url, tenant_id, lead_id, moment),
+        )
+        return offer or text["submitted"].format(partner=partner)
     question_set = (await applications.get_application_policy(tenant_id)).for_type(application.merchant_type)
     pending = application.pending_item
     if pending and pending in question_set.required and questions.ITEMS[pending].kind in questions.SMS_KINDS:

@@ -63,6 +63,7 @@ from connectors.framework.verification_types import (
     Pending,
     PercentageRange,
     PersonSubject,
+    PresentedIdentity,
     ProviderEvent,
     ProviderEventType,
     RegistryStatus,
@@ -244,6 +245,9 @@ class VerificationProvider(ABC):  # noqa: B024 - every method has a capability-h
 
     name: str
     capabilities: frozenset[Capability]
+    #: Whether ``verify_business`` accepts ``VerifyOptions.presented_identity``. Off unless declared:
+    #: the tool gateway fills it only for a provider that says it takes one.
+    accepts_presented_identity: ClassVar[bool] = False
 
     def require(self, capability: Capability) -> None:
         if capability not in self.capabilities:
@@ -355,6 +359,7 @@ __all__ = [
     "Pending",
     "PercentageRange",
     "PersonSubject",
+    "PresentedIdentity",
     "ProviderAuthenticationFailed",
     "ProviderError",
     "ProviderEvent",

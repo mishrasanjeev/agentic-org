@@ -8,6 +8,10 @@ records the result. ``run_due`` does this for every lead that is due in one
 tenant; the beat sweep runs it for tenants whose branding turns on automatic
 contact. Nothing is sent without a consent on record, inside the permitted
 hours, under the attempt and reminder limits.
+
+With agent identity on, the outreach agent's identity and Grantex grant are checked before an
+attempt is claimed: a held identity reschedules the contact like any held contact, a stopped one
+parks it, and a sent attempt records the agent's identity.
 """
 
 from __future__ import annotations
@@ -22,6 +26,9 @@ import structlog
 
 from core.onboarding_desk import messages, senders, store, tokens
 from core.onboarding_desk.store import DeskError
+
+#: How long a contact held by the agent identity check waits before it is tried again.
+IDENTITY_HOLD_MINUTES = 15
 
 logger = structlog.get_logger()
 
@@ -114,7 +121,12 @@ async def contact_lead(
         if channel:
             await store.record_refusal(tenant_id, lead_id, channel, kind, first_refusal.reason)
         return first_refusal
-    attempt = await store.claim_attempt(tenant_id, lead_id, chosen, kind, now=moment)
+    identity = await _identity_check(tenant_id, lead_id, chosen, lead.status, moment)
+    if isinstance(identity, Outcome):
+        return identity
+    attempt = await store.claim_attempt(
+        tenant_id, lead_id, chosen, kind, now=moment, **({"identity": identity} if identity else {})
+    )
     contact = json.loads(await store.decrypt_contact(lead))
     to = contact.get("email") if chosen == "email" else contact.get("phone")
     try:
@@ -144,6 +156,30 @@ async def contact_lead(
     if not result.ok:
         return Outcome(False, result.error or "send_failed", chosen, str(attempt.id))
     return Outcome(True, "sent", chosen, str(attempt.id))
+
+
+async def _identity_check(
+    tenant_id: uuid.UUID, lead_id: uuid.UUID, channel: str, lead_status: str, moment: datetime
+) -> dict[str, str] | None | Outcome:
+    """The outreach agent's identity stamp, ``None`` when agent identity is off, or the refusal."""
+    from core.agent_identity import guard, scopes
+
+    check = await guard.check_action(tenant_id, scopes.OUTREACH_ROLE, scopes.OUTREACH_SEND)
+    if not check.enabled:
+        return None
+    await store.record_agent_action(
+        tenant_id, role=scopes.OUTREACH_ROLE, action="outreach_send", check=check, lead_id=lead_id, channel=channel,
+        now=moment,
+    )  # fmt: skip
+    if check.allowed:
+        return check.stamp_dict()
+    if check.held:
+        retry: datetime | None = moment + timedelta(minutes=IDENTITY_HOLD_MINUTES)
+    else:
+        # Stopped (revoked, suspended, expired, unbound or out of scope): recheck a new lead daily, park the rest.
+        retry = moment + timedelta(hours=24) if lead_status == "new" else None
+    await store.set_next_contact(tenant_id, lead_id, retry)
+    return Outcome(False, check.reason, channel, next_allowed_at=retry if check.held else None)
 
 
 async def run_due(tenant_id: uuid.UUID, *, now: datetime | None = None, limit: int = 50) -> dict[str, int]:
