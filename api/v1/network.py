@@ -49,10 +49,13 @@ step's failure undoes an earlier one; the page shows where it stopped.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
+import time
 import uuid
+import weakref
 from typing import Any
 
 import structlog
@@ -156,29 +159,56 @@ async def list_network_feeds() -> JSONResponse:
     """Every servable shop's web address and product feed, for the operator's Merchant Center accounts.
 
     One entry per shop in the public directory: its web address (the website a Merchant Center
-    sub-account claims), its feed URL, sitemap, and how many items the feed holds now.
+    sub-account claims), its feed URL, sitemap, and how many items the feed holds now. The whole
+    index is built at most once per FEED_INDEX_TTL_SECONDS per instance (one build at a time,
+    FEED_INDEX_CONCURRENCY shops at once), so repeated anonymous calls never load catalogs again.
     """
     _require_network()
-    feeds = []
-    for shop in await net.directory():
-        host = str(shop["host"])
+    return JSONResponse(await _feed_index(), headers={"Cache-Control": "public, max-age=300"})
+
+
+FEED_INDEX_TTL_SECONDS = 300.0
+FEED_INDEX_CONCURRENCY = 4
+# enterprise-gate: process-local-ok reason=feed index cache expires on its ttl; the database is the source of truth
+_FEED_INDEX: dict[str, tuple[float, dict[str, Any]]] = {}
+# One build at a time per event loop (an asyncio lock belongs to the loop that first waits on it).
+_FEED_INDEX_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = weakref.WeakKeyDictionary()
+
+
+def reset_feed_index_cache() -> None:
+    _FEED_INDEX.clear()
+
+
+async def _feed_entry(shop: dict[str, Any], gate: asyncio.Semaphore) -> dict[str, Any]:
+    host = str(shop["host"])
+    async with gate:
         site = await shop_site_store.load_site(host)
-        summary = shop_site_store.feed_summary_of(site) if site is not None else None
-        feeds.append(
-            {
-                "slug": shop["slug"],
-                "name": shop["name"],
-                "website_url": f"https://{host}/",
-                "feed_url": f"https://{host}/feeds/google.xml",
-                "sitemap_url": f"https://{host}/sitemap.xml",
-                "catalog_verified": bool(summary and summary.catalog_verified),
-                "eligible_items": summary.eligible_items if summary else 0,
-            }
-        )
-    return JSONResponse(
-        {"format": "rss-2.0-google-merchant", "shops": feeds, "count": len(feeds)},
-        headers={"Cache-Control": "public, max-age=300"},
-    )
+    summary = shop_site_store.feed_summary_of(site) if site is not None else None
+    return {
+        "slug": shop["slug"],
+        "name": shop["name"],
+        "website_url": f"https://{host}/",
+        "feed_url": f"https://{host}/feeds/google.xml",
+        "sitemap_url": f"https://{host}/sitemap.xml",
+        "catalog_verified": bool(summary and summary.catalog_verified),
+        "eligible_items": summary.eligible_items if summary else 0,
+    }
+
+
+async def _feed_index() -> dict[str, Any]:
+    cached = _FEED_INDEX.get("all")
+    if cached is not None and cached[0] > time.monotonic():
+        return cached[1]
+    lock = _FEED_INDEX_LOCKS.setdefault(asyncio.get_running_loop(), asyncio.Lock())
+    async with lock:
+        cached = _FEED_INDEX.get("all")
+        if cached is not None and cached[0] > time.monotonic():
+            return cached[1]
+        gate = asyncio.Semaphore(FEED_INDEX_CONCURRENCY)
+        feeds = list(await asyncio.gather(*(_feed_entry(shop, gate) for shop in await net.directory())))
+        index = {"format": "rss-2.0-google-merchant", "shops": feeds, "count": len(feeds)}
+        _FEED_INDEX["all"] = (time.monotonic() + FEED_INDEX_TTL_SECONDS, index)
+        return index
 
 
 # --- checkout gateway (network service credential) ----------------------------------------------

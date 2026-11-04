@@ -16,7 +16,9 @@
   no stock figure or no image are left out. `GET /api/v1/network/feeds` lists every servable shop's website,
   feed, sitemap and eligible item count.
 - `api/middleware/merchant_host.py` sends those paths to the new `/shop-site` routes only when the request's host
-  is a listed, servable network shop (`core.commerce.network.shop_for_host`); other hosts are unchanged. The
+  is a listed, servable network shop (`core.commerce.network.shop_for_host`). On another merchant host it answers
+  them with 404 itself, and with 503 and `Retry-After` when the lookup fails, so they never reach authentication;
+  the API's own host is unchanged. The `/api/v1/network/feeds` index is built at most once every five minutes. The
   Firebase Hosting config rewrites the new paths too, and `scripts/release_merchant_domain_site.py --check-host`
   reports whether each host reaches the shop site after a release.
 - The Sell everywhere page's Google, Microsoft and Perplexity rows, and a new ChatGPT app directory line, read

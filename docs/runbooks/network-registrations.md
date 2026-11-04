@@ -68,7 +68,7 @@ For the whole network:
 
 | URL | What it is |
 | --- | --- |
-| `https://app.agenticorg.ai/api/v1/network/feeds` | Every listed shop: name, website, feed URL, sitemap, eligible item count. Use it to set up sub-accounts. |
+| `https://app.agenticorg.ai/api/v1/network/feeds` | Every listed shop: name, website, feed URL, sitemap, eligible item count. Use it to set up sub-accounts. Built at most once every five minutes, so a change shows within about five minutes. |
 | `https://mcp.agenticorg.ai/mcp` | The hosted MCP server (Streamable HTTP, no sign-in) |
 | `https://mcp.agenticorg.ai/.well-known/openai-apps-challenge` | The ChatGPT domain challenge token, once `MCP_OPENAI_APPS_CHALLENGE` is set |
 | `https://agenticorg.ai/privacy` | Privacy notice, with the section "Shopping network buyers" (`#shopping-network-buyers`) |
@@ -95,9 +95,14 @@ python scripts/release_merchant_domain_site.py --project PROJECT_ID --site agent
 python scripts/release_merchant_domain_site.py --project PROJECT_ID --site agenticorg-merchant-domains --check-host SHOP1.agenticorg.ai --check-host SHOP2.example
 ```
 
-Each host should print `shop site live (robots.txt 200)`. `reaches AgenticOrg, not a listed network
-shop` means the host is connected but the shop is not listed or not live. `not reaching AgenticOrg
-yet` means the release has not reached that host; wait a minute and check again.
+Each host should print `shop site live (robots.txt 200)`. Other answers:
+
+| Printed | Meaning |
+| --- | --- |
+| `reaches AgenticOrg, not a listed network shop (404)` | The host is a merchant domain, but its shop is not listed, not live, or the network is off. |
+| `reaches AgenticOrg, shop lookup failed; check again in a minute (503)` | The API could not look the host up (for example a database problem). Crawlers are told to retry. |
+| `reaches an AgenticOrg API without the shop site; deploy this release first (401)` | The Hosting release is out, but the API serving the host is an older release. |
+| `not reaching AgenticOrg yet` | The release has not reached that host; wait a minute and check again. |
 
 0.4. Open `https://app.agenticorg.ai/api/v1/network/feeds`. Every shop you plan to register needs
 `catalog_verified: true` and `eligible_items` above 0. Open one shop's home page, one product page

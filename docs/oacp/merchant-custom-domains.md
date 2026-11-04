@@ -160,8 +160,10 @@ refusals. The UCP profile keeps its own `public, max-age=300`.
 paths and a network shop's own storefront and feed (`/`, `/products/**`,
 `/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/feeds/**`, served by
 `api/v1/shop_site.py`) to `agenticorg-api`. The storefront paths answer only
-on a listed, servable network shop's host; elsewhere they reach the API
-unchanged and find nothing. Every other path on a merchant domain is
+on a listed, servable network shop's host. On any other merchant domain the
+middleware answers them with 404 itself (503 with `Retry-After` when the
+lookup fails), so they never reach the API's authentication; both answers
+carry `X-AgenticOrg-Shop-Site`. Every other path on a merchant domain is
 Firebase's own 404, so no AgenticOrg application page or API route is
 reachable on a merchant host. Cloud Run domain mappings cannot do this.
 Hosting applies a release to every domain on the site, so one run of the

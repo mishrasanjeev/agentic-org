@@ -26,6 +26,7 @@ from core.commerce.ucp import store
 from core.config import settings
 
 SHOP_HOST = "tea-corner.agenticorg.ai"
+OTHER_MERCHANT = "agent.other-merchant.example"
 SERVICE_HOST = "agenticorg-api-example.a.run.app"
 SHOP = net.ShopRef(
     slug="tea-corner",
@@ -123,6 +124,13 @@ def shops(monkeypatch: pytest.MonkeyPatch) -> set[str]:
         return SHOP if host in hosts else None
 
     monkeypatch.setattr(net, "shop_for_host", shop_for_host)
+    # Indexed UCP serving hosts: the listed shop, and a merchant that is not on the network.
+    bindings = {SHOP_HOST, OTHER_MERCHANT}
+
+    async def find_serving_binding(host: str) -> object | None:
+        return object() if host in bindings else None
+
+    monkeypatch.setattr(store, "find_serving_binding", find_serving_binding)
     monkeypatch.setattr(settings, "custom_domain_firebase_enabled", False)
     return hosts
 
@@ -163,10 +171,66 @@ def test_through_firebase_only_a_verified_forwarded_host_counts(
     assert response.json()["path"] == "/" and response.json()["host"] == SERVICE_HOST
 
 
-def test_a_lookup_failure_leaves_the_path_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_another_merchants_host_answers_404_without_reaching_the_application(shops: set[str]) -> None:
+    for path in ("/", "/robots.txt", "/products/x-0000000000", "/feeds/google.xml"):
+        response = _get(path, host=OTHER_MERCHANT)
+        assert response.status_code == 404, path
+        assert response.json() == {"detail": "Not Found"}
+        assert response.headers["x-agenticorg-shop-site"] == "not-listed"
+        assert response.headers["cache-control"] == "no-store"
+    # Agent paths on that host still reach the application.
+    assert _get("/api/v1/thing", host=OTHER_MERCHANT).json()["path"] == "/api/v1/thing"
+
+
+def test_a_listed_shop_answers_404_while_the_network_is_off(shops: set[str]) -> None:
+    shops.clear()  # shop_for_host is None while the network is off
+    response = _get("/", host=SHOP_HOST)
+    assert response.status_code == 404 and response.headers["x-agenticorg-shop-site"] == "not-listed"
+
+
+def test_a_verified_firebase_domain_that_is_not_listed_answers_404(
+    shops: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "custom_domain_firebase_enabled", True)
+    monkeypatch.setattr(settings, "custom_domain_firebase_site", "merchant-domains-example")
+    monkeypatch.setattr(settings, "custom_domain_cloud_run_project", "example-project")
+    monkeypatch.setattr(store, "firebase_domain_active", AsyncMock(return_value=True))
+    # Not indexed as a serving host either: the verified Firebase domain alone makes it a merchant host.
+    response = _get("/robots.txt", host=SERVICE_HOST, forwarded="new.merchant.example")
+    assert response.status_code == 404 and response.headers["x-agenticorg-shop-site"] == "not-listed"
+
+
+def test_a_lookup_failure_answers_503_with_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "custom_domain_firebase_enabled", False)
     monkeypatch.setattr(net, "shop_for_host", AsyncMock(side_effect=RuntimeError("database unavailable")))
-    assert _get("/", host=SHOP_HOST).json()["path"] == "/"
+    response = _get("/", host=SHOP_HOST)
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "60"
+    assert response.headers["x-agenticorg-shop-site"] == "unavailable"
+    assert response.headers["cache-control"] == "no-store"
+    # Agent and API paths are not affected by the shop-site lookup.
+    assert _get("/api/v1/thing", host=SHOP_HOST).json()["path"] == "/api/v1/thing"
+
+
+def test_a_failed_firebase_domain_lookup_answers_503_on_site_paths(
+    shops: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "custom_domain_firebase_enabled", True)
+    monkeypatch.setattr(settings, "custom_domain_firebase_site", "merchant-domains-example")
+    monkeypatch.setattr(settings, "custom_domain_cloud_run_project", "example-project")
+    monkeypatch.setattr(store, "firebase_domain_active", AsyncMock(side_effect=RuntimeError("database unavailable")))
+    response = _get("/", host=SERVICE_HOST, forwarded=SHOP_HOST)
+    assert response.status_code == 503 and response.headers["x-agenticorg-shop-site"] == "unavailable"
+
+
+def test_the_full_app_never_answers_401_on_a_merchant_hosts_site_paths(shops: set[str]) -> None:
+    from fastapi.testclient import TestClient
+
+    from api.main import app
+
+    client = TestClient(app, base_url=f"https://{OTHER_MERCHANT}")
+    response = client.get("/", headers={"host": OTHER_MERCHANT})
+    assert response.status_code == 404 and response.headers["x-agenticorg-shop-site"] == "not-listed"
 
 
 # --- routes -------------------------------------------------------------------------------------
@@ -266,6 +330,7 @@ def test_network_feed_index_lists_each_shops_feed(monkeypatch: pytest.MonkeyPatc
         return ShopSite(slug="spice-hub", name="Spice Hub", host=host, catalog_verified=False)
 
     monkeypatch.setattr(shop_site_store, "load_site", load_site)
+    network_api.reset_feed_index_cache()
     app = FastAPI()
     app.include_router(network_api.router, prefix="/api/v1")
 
@@ -274,6 +339,7 @@ def test_network_feed_index_lists_each_shops_feed(monkeypatch: pytest.MonkeyPatc
             return await client.get("/api/v1/network/feeds")
 
     body: dict[str, Any] = asyncio.run(run()).json()
+    network_api.reset_feed_index_cache()
     assert body["count"] == 2 and body["format"] == "rss-2.0-google-merchant"
     tea, spice = body["shops"]
     assert tea == {
@@ -286,6 +352,41 @@ def test_network_feed_index_lists_each_shops_feed(monkeypatch: pytest.MonkeyPatc
         "eligible_items": 1,
     }
     assert (spice["catalog_verified"], spice["eligible_items"]) == (False, 0)
+
+
+def test_network_feed_index_is_built_once_per_ttl_with_bounded_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "network_enabled", True)
+    directory = [{"slug": f"shop-{i}", "name": f"Shop {i}", "host": f"shop-{i}.agenticorg.ai"} for i in range(10)]
+    monkeypatch.setattr(net, "directory", AsyncMock(return_value=directory))
+    loads: list[str] = []
+    running = {"now": 0, "most": 0}
+
+    async def load_site(host: str) -> ShopSite | None:
+        loads.append(host)
+        running["now"] += 1
+        running["most"] = max(running["most"], running["now"])
+        await asyncio.sleep(0.01)
+        running["now"] -= 1
+        return None
+
+    monkeypatch.setattr(shop_site_store, "load_site", load_site)
+    network_api.reset_feed_index_cache()
+
+    async def run() -> list[dict[str, Any]]:
+        # Five callers at once and one after: a single build serves them all.
+        first = await asyncio.gather(*(network_api._feed_index() for _ in range(5)))
+        return [*first, await network_api._feed_index()]
+
+    results = asyncio.run(run())
+    assert len(loads) == 10 and len(set(loads)) == 10
+    assert running["most"] <= network_api.FEED_INDEX_CONCURRENCY
+    assert all(result is results[0] for result in results) and results[0]["count"] == 10
+    # After the TTL the index is built again.
+    monkeypatch.setattr(network_api, "FEED_INDEX_TTL_SECONDS", -1.0)
+    network_api.reset_feed_index_cache()
+    asyncio.run(network_api._feed_index())
+    assert len(loads) == 20
+    network_api.reset_feed_index_cache()
 
 
 def test_network_feed_index_is_404_while_the_network_is_off(monkeypatch: pytest.MonkeyPatch) -> None:

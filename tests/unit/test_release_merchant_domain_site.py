@@ -69,15 +69,25 @@ def test_release_creates_finalizes_and_releases_the_agent_only_version(
     assert f"released sites/{SITE}/releases/r1" in capsys.readouterr().out
 
 
-def _answer(status: int, content_type: str, text: str) -> SimpleNamespace:
-    return SimpleNamespace(status_code=status, headers={"content-type": content_type}, text=text)
+def _answer(status: int, content_type: str, text: str, marker: str | None = None) -> SimpleNamespace:
+    headers = {"content-type": content_type}
+    if marker:
+        headers["x-agenticorg-shop-site"] = marker
+    return SimpleNamespace(status_code=status, headers=headers, text=text)
+
+
+ROBOTS = "User-agent: *\nSitemap: https://x/s.xml\n"
 
 
 @pytest.mark.parametrize(
     ("answer", "expected"),
     [
-        (_answer(200, "text/plain; charset=utf-8", "Sitemap: https://x/s.xml\n"), "shop site live"),
-        (_answer(404, "application/json", '{"detail":"Not Found"}'), "reaches AgenticOrg, not a listed network shop"),
+        (_answer(200, "text/plain; charset=utf-8", ROBOTS), "shop site live"),
+        (_answer(404, "application/json", '{"detail":"Not Found"}', "not-listed"), "not a listed network shop (404)"),
+        (_answer(503, "application/json", "{}", "unavailable"), "shop lookup failed; check again in a minute (503)"),
+        (_answer(401, "application/json", '{"detail":"Missing"}'), "deploy this release first (401)"),
+        # The API's own 404 without the marker is not the shop-site answer.
+        (_answer(404, "application/json", '{"detail":"Not Found"}'), "not reaching AgenticOrg yet (HTTP 404"),
         (_answer(404, "text/html", "<h1>Page Not Found</h1>"), "not reaching AgenticOrg yet (HTTP 404, text/html)"),
     ],
 )

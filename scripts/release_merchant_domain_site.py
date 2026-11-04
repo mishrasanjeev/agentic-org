@@ -16,8 +16,10 @@ Hosting applies a site's release to every custom domain already connected to
 the site, so one release re-applies the paths to every live merchant domain and
 platform subdomain. ``--check-host`` then reads ``/robots.txt`` on each named
 host and reports whether it reaches AgenticOrg (a listed network shop answers
-200 with its robots file; any other AgenticOrg host answers the API's own 404;
-Firebase's 404 page means the release has not reached the host yet):
+200 with its robots file; another merchant host answers 404 and a failed shop
+lookup 503, both marked ``X-AgenticOrg-Shop-Site``; a 401 means the API serving
+the host predates the shop site; Firebase's own 404 page means the release has
+not reached the host yet):
 
     python scripts/release_merchant_domain_site.py --project PROJECT_ID --site SITE_ID
     python scripts/release_merchant_domain_site.py --project PROJECT_ID --site SITE_ID --dry-run
@@ -88,11 +90,17 @@ def check_host(host: str, *, get: Any = None) -> str:
     except Exception as exc:
         return f"{host}: no answer ({type(exc).__name__})"
     content_type = str(response.headers.get("content-type", ""))
-    if response.status_code == 200 and content_type.startswith("text/plain") and "Sitemap:" in response.text:
+    marker = str(response.headers.get("x-agenticorg-shop-site", ""))
+    status = response.status_code
+    if status == 200 and content_type.startswith("text/plain") and "Sitemap:" in response.text:
         return f"{host}: shop site live (robots.txt 200)"
-    if response.status_code == 404 and content_type.startswith("application/json"):
+    if status == 404 and marker == "not-listed":
         return f"{host}: reaches AgenticOrg, not a listed network shop (404)"
-    return f"{host}: not reaching AgenticOrg yet (HTTP {response.status_code}, {content_type or 'no content type'})"
+    if status == 503 and marker == "unavailable":
+        return f"{host}: reaches AgenticOrg, shop lookup failed; check again in a minute (503)"
+    if status == 401 and content_type.startswith("application/json"):
+        return f"{host}: reaches an AgenticOrg API without the shop site; deploy this release first (401)"
+    return f"{host}: not reaching AgenticOrg yet (HTTP {status}, {content_type or 'no content type'})"
 
 
 def main(argv: list[str] | None = None) -> int:
