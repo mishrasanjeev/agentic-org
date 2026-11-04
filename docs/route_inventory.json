@@ -4064,7 +4064,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 515,
+    "source_line": 580,
     "tenant_required": true
   },
   {
@@ -4082,7 +4082,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 533,
+    "source_line": 598,
     "tenant_required": true
   },
   {
@@ -4100,7 +4100,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 618,
+    "source_line": 683,
     "tenant_required": true
   },
   {
@@ -9990,6 +9990,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "network.feeds.read",
+    "auth_required": false,
+    "function": "list_network_feeds",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/network/feeds api/v1/network.py:list_network_feeds",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/network.py",
+    "path": "/api/v1/network/feeds",
+    "public_exempt_reason": "network-feed-index-lists-only-published-opted-in-shops",
+    "rate_limit": "public-read",
+    "scope": "public:network.directory.read",
+    "source_line": 155,
+    "tenant_required": false
+  },
+  {
     "audit_event": "network.directory.read",
     "auth_required": false,
     "function": "list_network_merchants",
@@ -10004,7 +10022,7 @@
     "public_exempt_reason": "network-directory-lists-only-published-opted-in-shops",
     "rate_limit": "public-read",
     "scope": "public:network.directory.read",
-    "source_line": 135,
+    "source_line": 139,
     "tenant_required": false
   },
   {
@@ -10022,7 +10040,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 316,
+    "source_line": 359,
     "tenant_required": false
   },
   {
@@ -10040,7 +10058,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.read",
-    "source_line": 330,
+    "source_line": 373,
     "tenant_required": false
   },
   {
@@ -10058,7 +10076,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 344,
+    "source_line": 387,
     "tenant_required": false
   },
   {
@@ -10076,7 +10094,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler-payment-handoff-only-never-executes",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 358,
+    "source_line": 401,
     "tenant_required": false
   },
   {
@@ -10094,7 +10112,7 @@
     "public_exempt_reason": "telegram-webhook-secret-checked-in-handler",
     "rate_limit": "provider-webhook",
     "scope": "public:network.telegram.webhook",
-    "source_line": 288,
+    "source_line": 331,
     "tenant_required": false
   },
   {

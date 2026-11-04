@@ -61,10 +61,23 @@ def test_firebase_domains_need_no_search_console_owner() -> None:
     assert cd.search_console_step(HOST)["required"] is True
 
 
-def test_the_site_config_rewrites_only_the_agent_paths() -> None:
+def test_the_site_config_rewrites_only_the_agent_and_shop_site_paths() -> None:
     config = cd.firebase_site_config()
     globs = [rule["glob"] for rule in config["rewrites"]]
-    assert globs == ["/.well-known/ucp", "/.well-known/ucp/**", "/ucp/**", "/acp/**", "/.well-known/agenticorg-host"]
+    assert globs == [
+        "/.well-known/ucp",
+        "/.well-known/ucp/**",
+        "/ucp/**",
+        "/acp/**",
+        "/.well-known/agenticorg-host",
+        # The network shop's own storefront and feed (api/v1/shop_site.py).
+        "/",
+        "/products/**",
+        "/sitemap.xml",
+        "/robots.txt",
+        "/llms.txt",
+        "/feeds/**",
+    ]
     assert "**" not in globs and "/**" not in globs  # no catch-all: nothing else of the API is on a merchant host
     assert all(
         rule["run"] == {"serviceId": "agenticorg-api", "region": "asia-southeast1"} for rule in config["rewrites"]

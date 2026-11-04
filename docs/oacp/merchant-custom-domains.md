@@ -155,11 +155,18 @@ Every write still needs its own credentials.
 `Cache-Control: no-store` to any response without a policy, including auth
 refusals. The UCP profile keeps its own `public, max-age=300`.
 
-**Agent paths only.** The site serves no files. Its configuration
+**Agent paths and the shop site only.** The site serves no files. Its configuration
 (`core.commerce.custom_domains.firebase_site_config`) rewrites only the agent
-paths to `agenticorg-api`. Every other path on a merchant domain is Firebase's
-own 404, so no AgenticOrg page or API route is reachable on a merchant host.
-Cloud Run domain mappings cannot do this.
+paths and a network shop's own storefront and feed (`/`, `/products/**`,
+`/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/feeds/**`, served by
+`api/v1/shop_site.py`) to `agenticorg-api`. The storefront paths answer only
+on a listed, servable network shop's host; elsewhere they reach the API
+unchanged and find nothing. Every other path on a merchant domain is
+Firebase's own 404, so no AgenticOrg application page or API route is
+reachable on a merchant host. Cloud Run domain mappings cannot do this.
+Hosting applies a release to every domain on the site, so one run of the
+release script below updates every connected domain; `--check-host HOST`
+reports what each host answers afterwards.
 
 ### Owner setup (once)
 

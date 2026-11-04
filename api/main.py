@@ -140,6 +140,7 @@ from api.v1 import auth_mfa as v1_auth_mfa
 from api.v1 import demo as v1_demo
 from api.v1 import network as v1_network
 from api.v1 import org as v1_org
+from api.v1 import shop_site as v1_shop_site
 from api.v1 import (
     status as status_mod,
 )
@@ -357,6 +358,9 @@ app.include_router(commerce_acp.router)
 # UCP business surfaces live at the merchant serving host's root (/.well-known/ucp, /ucp/...).
 app.include_router(ucp_discovery.well_known_router)
 app.include_router(ucp_discovery.ucp_router)
+# A listed network shop's storefront and product feed on its own host: the merchant-host middleware
+# sends /, /products/*, /sitemap.xml, /robots.txt, /llms.txt and /feeds/* there (api/v1/shop_site.py).
+app.include_router(v1_shop_site.router)
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
