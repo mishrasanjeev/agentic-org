@@ -17,7 +17,7 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 | ChatGPT, Claude and other AI apps | They add AgenticOrg's server, `https://mcp.agenticorg.ai/mcp`, once as a custom MCP server. They can then list the network's shops, search them, open or update a checkout and get the payment link | Nothing |
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot. The page shows your exact link | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
-| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
+| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | AgenticOrg registers the whole network with each program, which then reads your shop's own pages and product feed at your web address. The page shows where each one stands for your shop | Keep a price, stock and an image on each product |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
 ## Watch it end to end
@@ -197,10 +197,41 @@ The page lists each surface and where it stands:
 | Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
 | Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
-| Coming: registration in progress | AgenticOrg is still registering with that program. |
+| Coming: AgenticOrg has not registered yet | Your shop qualifies; AgenticOrg has not registered the network with that program yet. |
+| Submitted, waiting for approval | AgenticOrg has applied to that program for the network (or for your shop) and is waiting for its answer. |
+| Not eligible yet | Your shop does not qualify yet. The row says why: Sell everywhere is off, your web address is not live yet, Grantex has not verified your catalog yet, or no product has a price, a stock figure and an image. |
 | Off | Sell everywhere is paused or not turned on. For Payments: you have not chosen where buyers pay. |
 
+The ChatGPT, Claude and other AI apps row also shows where the AgenticOrg app stands in the ChatGPT app
+directory. While it is not listed there, buyers add the server address themselves.
+
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
+
+## Your shop pages and product feed
+
+Once your shop is on the network and your web address is live, the address also serves a small shop
+site built from your catalog, for search engines, shopping programs and AI agents:
+
+| Address | What it shows |
+| --- | --- |
+| `https://<your address>/` | Your shop name, your products with price and stock, your shipping and returns text, and how to buy |
+| `https://<your address>/products/...` | One page per product: price, stock, images, description, your product details, shipping and returns, and the product's structured data (barcode and shipping included when you gave them) |
+| `https://<your address>/feeds/google.xml` | Your product feed, in the format Google Merchant Center and Microsoft Merchant Center read |
+| `https://<your address>/sitemap.xml`, `/robots.txt`, `/llms.txt` | The list of your pages for crawlers and AI agents |
+
+Everything comes from your catalog as buyer agents see it: the newest read of each source (Shopify or
+your upload), only while Grantex verifies your catalog, prices and stock. While it does not, the pages
+answer "try again in a few minutes", so the programs keep what they already have.
+
+The feed lists each product option with its price and stock. A product is left out of the feed when
+it has no price, a price of zero, no stock figure or no image. Add the barcode (GTIN) where your products
+have one; without it the feed says the product has no standard identifier. Your flat shipping fee goes in
+the feed for the countries you named; Shopify shipping rates are set in the merchant center instead. A
+used or refurbished item needs a product detail named `condition` with the value `used` or
+`refurbished`; otherwise items are listed as new.
+
+The product pages have no basket of their own. They link to your own store's product page when your
+catalog gives one, to the AgenticOrg shopping bot on Telegram and to the MCP server address.
 
 ### How a search across shops is ordered
 
@@ -248,7 +279,7 @@ Choose **Pause** on the page. New network checkouts are refused at once, and you
 
 - **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat; when it is ready, the buyer gets a link to your own Shopify checkout or Plural payment page and pays you there. See [Getting paid](/docs/oacp-getting-paid).
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
-- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else.
+- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else. Your web address also shows your shop's pages and product feed, built from the catalog, policies and shop details you publish to buyers.
 
 Agents never pay on a buyer's behalf here. The AI apps and the Telegram bot have no tool that pays, and a
 network Complete that carries a payment instrument, decision or mandate is refused.

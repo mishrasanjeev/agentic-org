@@ -82,7 +82,7 @@ getting-paid-handoff | The buyer pays on your page | When the checkout is ready,
 
 **Can I stop selling this way?** Yes. Choose **Pause** on the Sell everywhere page and your shop leaves the network at once. Your shop name and web address stay yours.
 
-**Am I in Google Gemini, Microsoft Copilot or Perplexity?** Not yet. AgenticOrg is registering with each of them for every shop on the network; the Sell everywhere page shows each one as it comes.
+**Am I in Google Gemini, Microsoft Copilot or Perplexity?** The Sell everywhere page shows where each one stands for your shop: not registered yet, submitted, live, or not eligible yet with the reason. Your web address already serves your shop's pages and a product feed, which each program reads once AgenticOrg is registered with it; see [Your shop pages and product feed](/docs/oacp-sell-everywhere#your-shop-pages-and-product-feed).
 
 ## Go deeper
 

@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased - Network registrations: shop pages, product feeds, program status and directory readiness
+
+- A listed network shop's web address (its platform subdomain or its own domain) now serves a small shop site
+  built from its verified catalog: `/` (the shop and its products), `/products/<handle>` (price, stock, images,
+  description, details, shipping and returns, and schema.org `Product` or `ProductGroup` JSON-LD with `gtin` and
+  `shippingDetails`), `/sitemap.xml`, `/robots.txt` and `/llms.txt`. The products are the newest snapshot of every
+  catalog source with the shop's source precedence, as `/ucp/catalog/search` serves them, and only while Grantex
+  verifies the catalog; otherwise the pages answer 503 with `Retry-After`. Every catalog text is escaped for its
+  context; pages carry a restrictive Content-Security-Policy and `Cache-Control: private`.
+- `/feeds/google.xml` on the same host is the shop's product feed (RSS 2.0, `g:` namespace) for Google Merchant
+  Center and Microsoft Merchant Center: one item per sellable variant with id, title, description, link (the
+  product page), image, availability, price and sale price, brand, gtin or `identifier_exists`, condition,
+  product type, item group and the shop's flat-rate shipping per country. Variants with no price, a zero price,
+  no stock figure or no image are left out. `GET /api/v1/network/feeds` lists every servable shop's website,
+  feed, sitemap and eligible item count.
+- `api/middleware/merchant_host.py` sends those paths to the new `/shop-site` routes only when the request's host
+  is a listed, servable network shop (`core.commerce.network.shop_for_host`); other hosts are unchanged. The
+  Firebase Hosting config rewrites the new paths too, and `scripts/release_merchant_domain_site.py --check-host`
+  reports whether each host reaches the shop site after a release.
+- The Sell everywhere page's Google, Microsoft and Perplexity rows, and a new ChatGPT app directory line, read
+  `AGENTICORG_NETWORK_REGISTRATIONS` (`not_started`, `submitted` or `live` per program, optionally per shop) and
+  the shop's own eligibility: listed, web address live, catalog verified and at least one eligible feed item.
+  They show Coming, Submitted, Live or Not eligible yet with the reason, and the shop's feed address.
+- The hosted MCP server in network mode now has a title, website, icons and instructions, every tool declares the
+  no-auth security scheme, and `MCP_OPENAI_APPS_CHALLENGE` serves the ChatGPT domain-verification token.
+  `mcp-server/shopping/server.json` registers the hosted endpoint in the MCP registry as
+  `io.github.mishrasanjeev/agenticorg-shopping`; `mcp-server/shopping/openai-plugin/` is the ChatGPT app
+  directory package.
+- The privacy notice gains a "Shopping network buyers" section (what the MCP server and the Telegram bot handle
+  and keep, and for how long), and a draft `/network-terms` page sets out the network terms for buyers and shops
+  (version 2026-10-25).
+- New runbook `docs/runbooks/network-registrations.md`: the owner's steps for each program, the sources read on
+  2026-11-04, and how to record each program's status.
+
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 
 - The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,
