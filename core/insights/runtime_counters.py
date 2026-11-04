@@ -55,7 +55,9 @@ TOOL_STATUSES = ("success", "failed", "refused", "replayed")
 # idempotency conflicts, guardrails); every other code is a failure of the call itself.
 REFUSAL_CODES = frozenset({"E1003", "E1007", "E1008", "E1009", "E1011", "E1016"})
 
+# enterprise-gate: process-local-ok reason=strong-refs-to-in-flight-tool-call-writes-bounded
 _PENDING: set[asyncio.Task[Any]] = set()
+# enterprise-gate: process-local-ok reason=analytics-counts-buffered-seconds-before-the-upsert-never-a-control
 _COUNTS: dict[tuple[Any, ...], int] = defaultdict(int)
 _FLUSHER: asyncio.Task[Any] | None = None
 
@@ -258,7 +260,7 @@ def count_security_event(tenant_id: Any, kind: str) -> None:
         if tid is None:
             return
         _add(("security", tid, _today(), kind))
-    # enterprise-gate: broad-except-ok reason=a-security-counter-never-changes-the-request-outcome
+    # enterprise-gate: broad-except-ok reason=security-counter-failure-is-logged-and-never-changes-the-request
     except Exception as exc:
         logger.warning("insights_counter_dropped", error_type=type(exc).__name__)
 
@@ -272,7 +274,7 @@ def count_guardrail_event(tenant_id: Any, stage: str, detector: str, action: str
         if tid is None:
             return
         _add(("guardrail", tid, _today(), _cut(stage, 16), _cut(detector, 64), _cut(action, 16), _cut(mode, 16)))
-    # enterprise-gate: broad-except-ok reason=a-guardrail-counter-never-changes-the-guardrail-outcome
+    # enterprise-gate: broad-except-ok reason=guardrail-counter-failure-is-logged-and-never-changes-the-outcome
     except Exception as exc:
         logger.warning("insights_counter_dropped", error_type=type(exc).__name__)
 
