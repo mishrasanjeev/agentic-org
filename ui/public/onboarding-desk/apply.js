@@ -66,6 +66,19 @@
       linkInvalid: "This link has expired. Ask {partner} for a new one.",
       sessionEnded: "Your session ended. Open the link from your message again.",
       closed: "This application is no longer open.",
+      agentReadyTitle: "Make your business ready for AI agents",
+      agentReadyName: "Your full name",
+      agentReadyRole: "Your role at the business",
+      agentReadyContact: "Your email or phone",
+      agentReadyAgree: "I agree to share this business verification for agent enrolment.",
+      agentReadyAccept: "Accept",
+      agentReadyConfirm: "Confirm your consent",
+      agentReadyContinue: "I have confirmed",
+      agentReadyPending: "Waiting for your confirmation.",
+      agentReadyShared: "Your business was sent for agent enrolment. Reference: {ref}",
+      agentReadyRefused: "The enrolment was not accepted. {partner} will be in touch.",
+      agentReadyWithdraw: "Withdraw my consent",
+      agentReadyWithdrawn: "Your consent is withdrawn. Nothing more will be shared.",
     },
     fr: {
       title: "Demande auprès de {partner}",
@@ -114,6 +127,19 @@
       linkInvalid: "Ce lien a expiré. Demandez-en un nouveau à {partner}.",
       sessionEnded: "Votre session a pris fin. Ouvrez de nouveau le lien de votre message.",
       closed: "Cette demande n'est plus ouverte.",
+      agentReadyTitle: "Rendre votre entreprise accessible aux agents IA",
+      agentReadyName: "Votre nom complet",
+      agentReadyRole: "Votre rôle dans l'entreprise",
+      agentReadyContact: "Votre courriel ou téléphone",
+      agentReadyAgree: "J'accepte de transmettre cette vérification d'entreprise pour l'inscription auprès des agents.",
+      agentReadyAccept: "Accepter",
+      agentReadyConfirm: "Confirmer votre accord",
+      agentReadyContinue: "J'ai confirmé",
+      agentReadyPending: "En attente de votre confirmation.",
+      agentReadyShared: "Votre entreprise a été transmise pour l'inscription auprès des agents. Référence : {ref}",
+      agentReadyRefused: "L'inscription n'a pas été acceptée. {partner} communiquera avec vous.",
+      agentReadyWithdraw: "Retirer mon accord",
+      agentReadyWithdrawn: "Votre accord est retiré. Rien de plus ne sera transmis.",
     },
   };
 
@@ -188,6 +214,20 @@
       },
       submit: function () {
         return call("POST", "/submit");
+      },
+      agentReadyAccept: function (person) {
+        return call("POST", "/agent-ready/accept", {
+          name: person.name,
+          role: person.role,
+          contact: person.contact,
+          accept: true,
+        });
+      },
+      agentReadyContinue: function () {
+        return call("POST", "/agent-ready/continue");
+      },
+      agentReadyWithdraw: function () {
+        return call("POST", "/agent-ready/withdraw");
       },
       hasSession: function () {
         return Boolean(session);
@@ -365,6 +405,7 @@
       }
       if (application.status === "submitted") {
         this._wrap.appendChild(el("p", "message", this._t("submitted", { partner: this._partner })));
+        if (application.agent_ready) this._wrap.appendChild(this._agentReady(application.agent_ready));
         return;
       }
       this._progress = el("div", "progress");
@@ -748,6 +789,91 @@
       submitRow.appendChild(this._submitHint);
       footer.appendChild(submitRow);
       return footer;
+    };
+
+    // Shown only after a person approved the application, when the partner offers it. It never
+    // changes the application or its decision.
+    OnboardingElement.prototype._agentReady = function (offer, consentUrl) {
+      var self = this;
+      var box = el("section", "agent-ready");
+      box.setAttribute("data-role", "agent-ready");
+      box.appendChild(el("h2", null, this._t("agentReadyTitle")));
+      var feedback = el("p", "error");
+      function refresh(result) {
+        self._client.application().then(function (application) {
+          if (application.agent_ready) {
+            box.replaceWith(self._agentReady(application.agent_ready, result && result.consent_url));
+          }
+        });
+      }
+      function failed(error) {
+        var text = self._fail(error);
+        if (typeof text === "string") feedback.textContent = text;
+      }
+      if (offer.status === "reverify_required") {
+        box.appendChild(el("p", "message", offer.message || ""));
+        return box;
+      }
+      if (offer.status === "offered") {
+        box.appendChild(el("p", "intro", offer.offer || ""));
+        var name = input("", { autocomplete: "name", maxlength: "120" });
+        var role = input("", { maxlength: "80" });
+        var contact = input("", { autocomplete: "email", maxlength: "254" });
+        box.appendChild(field(this._t("agentReadyName"), name));
+        box.appendChild(field(this._t("agentReadyRole"), role));
+        box.appendChild(field(this._t("agentReadyContact"), contact));
+        var agree = input("", { type: "checkbox" });
+        box.appendChild(field(this._t("agentReadyAgree"), agree));
+        var accept = el("button", "primary", this._t("agentReadyAccept"));
+        accept.setAttribute("data-role", "agent-ready-accept");
+        accept.addEventListener("click", function () {
+          if (!agree.checked) return;
+          accept.disabled = true;
+          self._client
+            .agentReadyAccept({ name: name.value, role: role.value, contact: contact.value })
+            .then(refresh, function (error) {
+              accept.disabled = false;
+              failed(error);
+            });
+        });
+        box.appendChild(accept);
+        box.appendChild(feedback);
+        return box;
+      }
+      var enrolment = offer.enrolment || {};
+      if (offer.status === "consent_pending") {
+        box.appendChild(el("p", "message", this._t("agentReadyPending")));
+        // The consent page from this accept, or the one the server kept while approval is pending.
+        var url = consentUrl || offer.consent_url;
+        if (url && /^https:\/\//.test(url)) {
+          var link = el("a", "primary", this._t("agentReadyConfirm"));
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          box.appendChild(link);
+        }
+        var next = el("button", "secondary", this._t("agentReadyContinue"));
+        next.setAttribute("data-role", "agent-ready-continue");
+        next.addEventListener("click", function () {
+          self._client.agentReadyContinue().then(refresh, failed);
+        });
+        box.appendChild(next);
+      } else if (offer.status === "shared") {
+        box.appendChild(el("p", "message", this._t("agentReadyShared", { ref: enrolment.provider_ref || "" })));
+      } else {
+        box.appendChild(el("p", "message", this._t("agentReadyRefused", { partner: this._partner })));
+      }
+      var withdraw = el("button", "secondary", this._t("agentReadyWithdraw"));
+      withdraw.setAttribute("data-role", "agent-ready-withdraw");
+      withdraw.addEventListener("click", function () {
+        self._client.agentReadyWithdraw().then(function () {
+          box.textContent = "";
+          box.appendChild(el("p", "message", self._t("agentReadyWithdrawn")));
+        }, failed);
+      });
+      box.appendChild(withdraw);
+      box.appendChild(feedback);
+      return box;
     };
 
     if (!root.customElements.get("agenticorg-onboarding")) {

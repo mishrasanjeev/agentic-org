@@ -15,6 +15,8 @@ exercise; ``summary`` reads the rows for a tenant.
   and on each channel.
 - Checks per merchant: provider calls the case agents made, per case with a
   completed run (mean and maximum), and screening results per case.
+- Agent ready (only while agent identity is on): applications whose verified
+  business was handed to the identity provider for agent enrolment.
 """
 
 from __future__ import annotations
@@ -99,6 +101,7 @@ def summarise(
     applications: Iterable[Any],
     consents: Iterable[Any],
     cases: Iterable[Any],
+    enrolments: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
     lead_rows = list(leads)
     lead_ids = {lead.id for lead in lead_rows}
@@ -131,6 +134,12 @@ def summarise(
     calls = [sum(len((r or {}).get("tool_calls") or []) for r in c.agent_records) for c in run_cases]
     screenings = [len(c.screening_results or []) for c in run_cases]
 
+    funnel_extra: dict[str, int] = {}
+    if enrolments is not None:
+        app_ids = {a.id for a in app_rows}
+        funnel_extra["agent_ready"] = len(
+            {e.application_id for e in enrolments if e.status == "shared" and e.application_id in app_ids}
+        )
     return {
         "period": period.to_dict(),
         "funnel": {
@@ -142,6 +151,7 @@ def summarise(
             "cases_by_state": dict(sorted(Counter(c.state for c in linked).items())),
             "approved": decisions.get("approve", 0),
             "declined": decisions.get("decline", 0),
+            **funnel_extra,
         },
         "hours_to_submission": {
             "count": len(to_submission),
@@ -170,8 +180,14 @@ def summarise(
 async def summary(tenant_id: uuid.UUID, period: Period) -> dict[str, Any]:
     from sqlalchemy import select
 
+    from core.agent_identity.guard import enabled as identity_on
     from core.models.governed_case import GovernedCase
-    from core.models.onboarding_desk import OnboardingApplication, OnboardingConsent, OnboardingLead
+    from core.models.onboarding_desk import (
+        OnboardingApplication,
+        OnboardingConsent,
+        OnboardingEnrolment,
+        OnboardingLead,
+    )
 
     async with store._session(tenant_id) as session:
         leads = list(
@@ -227,4 +243,21 @@ async def summary(tenant_id: uuid.UUID, period: Period) -> dict[str, Any]:
             if refs
             else []
         )
-    return summarise(period, leads, apps, consents, cases)
+        enrolments: list[Any] | None = None
+        if identity_on():
+            app_ids = [a.id for a in apps]
+            enrolments = (
+                list(
+                    (
+                        await session.execute(
+                            select(OnboardingEnrolment).where(
+                                OnboardingEnrolment.tenant_id == tenant_id,
+                                OnboardingEnrolment.application_id.in_(app_ids),
+                            )
+                        )
+                    ).scalars()
+                )
+                if app_ids
+                else []
+            )
+    return summarise(period, leads, apps, consents, cases, enrolments)

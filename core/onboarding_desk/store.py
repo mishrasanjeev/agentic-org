@@ -611,8 +611,23 @@ async def decrypt_contact(lead: Any) -> str:
     return await _decrypt(lead.contact_ciphertext)
 
 
+def _identity_fields(row: Any) -> dict[str, Any]:
+    """The acting agent's identity on a record, or nothing when agent identity was off."""
+    identifier = getattr(row, "agent_identity_id", None)
+    if not identifier:
+        return {}
+    return {
+        "agent_identity": {
+            "agent_identity_id": identifier,
+            "attestation_sha256": getattr(row, "agent_attestation_sha256", None),
+            "trust_tier": getattr(row, "agent_trust_tier", None),
+        }
+    }
+
+
 def attempt_view(row: Any) -> dict[str, Any]:
     return {
+        **_identity_fields(row),
         "id": str(row.id),
         "channel": row.channel,
         "kind": row.kind,
@@ -643,8 +658,19 @@ async def list_attempts(tenant_id: uuid.UUID, lead_id: uuid.UUID) -> list[Any]:
         )
 
 
-async def claim_attempt(tenant_id: uuid.UUID, lead_id: uuid.UUID, channel: str, kind: str, *, now: datetime) -> Any:
-    """A queued attempt, claimed under a lock on the lead; refused while another attempt is in flight."""
+async def claim_attempt(
+    tenant_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    channel: str,
+    kind: str,
+    *,
+    now: datetime,
+    identity: dict[str, str] | None = None,
+) -> Any:
+    """A queued attempt, claimed under a lock on the lead; refused while another attempt is in flight.
+
+    ``identity`` is the acting agent's identity stamp when agent identity is on.
+    """
     from sqlalchemy import func, select
 
     from core.models.onboarding_desk import OnboardingContactAttempt as Attempt
@@ -686,9 +712,86 @@ async def claim_attempt(tenant_id: uuid.UUID, lead_id: uuid.UUID, channel: str, 
             status="queued",
             attempt_no=int(count) + 1,
             created_at=now,
+            **_identity_columns(identity),
         )
         session.add(row)
     return row
+
+
+def _identity_columns(identity: dict[str, str] | None) -> dict[str, Any]:
+    if not identity:
+        return {}
+    return {
+        "agent_identity_id": str(identity.get("agent_identity_id") or "")[:256] or None,
+        "agent_attestation_sha256": str(identity.get("attestation_sha256") or "")[:80] or None,
+        "agent_trust_tier": str(identity.get("trust_tier") or "")[:64] or None,
+    }
+
+
+async def record_agent_action(
+    tenant_id: uuid.UUID,
+    *,
+    role: str,
+    action: str,
+    check: Any,
+    lead_id: uuid.UUID | None = None,
+    application_id: uuid.UUID | None = None,
+    channel: str | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Record one desk agent action and the identity check it ran under (agent identity on only)."""
+    from core.models.onboarding_desk import OnboardingAgentAction
+
+    if not getattr(check, "enabled", False):
+        return
+    async with _session(tenant_id) as session:
+        session.add(
+            OnboardingAgentAction(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                lead_id=lead_id,
+                application_id=application_id,
+                role=role[:64],
+                action=action[:32],
+                channel=channel[:16] if channel else None,
+                outcome=check.outcome,
+                reason=(check.reason or None) and check.reason[:64],
+                grant_id=(check.grant_id or None) and check.grant_id[:128],
+                created_at=now or datetime.now(UTC),
+                **_identity_columns(check.stamp_dict()),
+            )
+        )
+
+
+def agent_action_view(row: Any) -> dict[str, Any]:
+    return {
+        **_identity_fields(row),
+        "role": row.role,
+        "action": row.action,
+        "channel": row.channel,
+        "outcome": row.outcome,
+        "reason": row.reason,
+        "grant_id": row.grant_id,
+        "at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+async def list_agent_actions(tenant_id: uuid.UUID, lead_id: uuid.UUID) -> list[Any]:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingAgentAction as Action
+
+    async with _session(tenant_id) as session:
+        return list(
+            (
+                await session.execute(
+                    select(Action)
+                    .where(Action.tenant_id == tenant_id, Action.lead_id == lead_id)
+                    .order_by(Action.created_at)
+                    .limit(MAX_LIST)
+                )
+            ).scalars()
+        )
 
 
 async def finish_attempt(
@@ -821,8 +924,10 @@ async def mark_engaged(tenant_id: uuid.UUID, phone: str) -> int:
     return count
 
 
-async def open_leads_by_phone(tenant_id: uuid.UUID, phone: str) -> list[Any]:
-    """Leads with this phone that are still open: not opted out, submitted or closed."""
+async def open_leads_by_phone(
+    tenant_id: uuid.UUID, phone: str, *, statuses: tuple[str, ...] = ("new", "contacted", "engaged", "applying")
+) -> list[Any]:
+    """Leads with this phone that are still open: not opted out, submitted or closed (or in ``statuses``)."""
     from sqlalchemy import select
 
     from core.models.onboarding_desk import OnboardingLead
@@ -840,7 +945,7 @@ async def open_leads_by_phone(tenant_id: uuid.UUID, phone: str) -> list[Any]:
                     select(OnboardingLead).where(
                         OnboardingLead.tenant_id == tenant_id,
                         OnboardingLead.phone_hash == _hash(tenant_id, "phone", normalised),
-                        OnboardingLead.status.in_(("new", "contacted", "engaged", "applying")),
+                        OnboardingLead.status.in_(statuses),
                     )
                 )
             ).scalars()

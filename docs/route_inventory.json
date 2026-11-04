@@ -10352,6 +10352,78 @@
   {
     "audit_event": null,
     "auth_required": true,
+    "function": "agent_identity_status",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/agent-identity api/v1/onboarding_desk.py:agent_identity_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/agent-identity",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.agent_identity.read",
+    "source_line": 1500,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.agent_identity.bind",
+    "auth_required": true,
+    "function": "bind_agent_identity",
+    "idempotency": "idempotent-an-active-key-is-left-alone",
+    "key": "POST /api/v1/onboarding-desk/agent-identity/{role}/bind api/v1/onboarding_desk.py:bind_agent_identity",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/agent-identity/{role}/bind",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.agent_identity.write",
+    "source_line": 1531,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_agent_ready_settings",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/agent-ready-settings api/v1/onboarding_desk.py:get_agent_ready_settings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/agent-ready-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.agent_ready.read",
+    "source_line": 1464,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.agent_ready_settings.update",
+    "auth_required": true,
+    "function": "put_agent_ready_settings",
+    "idempotency": "idempotent-replaces-the-agent-ready-settings",
+    "key": "PUT /api/v1/onboarding-desk/agent-ready-settings api/v1/onboarding_desk.py:put_agent_ready_settings",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/agent-ready-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.agent_ready.write",
+    "source_line": 1482,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
     "function": "get_application_policy",
     "idempotency": null,
     "key": "GET /api/v1/onboarding-desk/application-policy api/v1/onboarding_desk.py:get_application_policy",
@@ -10364,7 +10436,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1047,
+    "source_line": 1132,
     "tenant_required": true
   },
   {
@@ -10382,7 +10454,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.write",
-    "source_line": 1065,
+    "source_line": 1150,
     "tenant_required": true
   },
   {
@@ -10400,7 +10472,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1081,
+    "source_line": 1166,
     "tenant_required": true
   },
   {
@@ -10418,7 +10490,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1099,
+    "source_line": 1184,
     "tenant_required": true
   },
   {
@@ -10436,7 +10508,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.cases.write",
-    "source_line": 1253,
+    "source_line": 1338,
     "tenant_required": true
   },
   {
@@ -10454,7 +10526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1116,
+    "source_line": 1201,
     "tenant_required": true
   },
   {
@@ -10472,8 +10544,62 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.cases.read",
-    "source_line": 1298,
+    "source_line": 1383,
     "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.apply.agent_ready_accept",
+    "auth_required": false,
+    "function": "applicant_agent_ready_accept",
+    "idempotency": "idempotent-one-live-enrolment-per-application",
+    "key": "POST /api/v1/onboarding-desk/apply/agent-ready/accept api/v1/onboarding_desk.py:applicant_agent_ready_accept",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/agent-ready/accept",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 926,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.agent_ready_continue",
+    "auth_required": false,
+    "function": "applicant_agent_ready_continue",
+    "idempotency": "idempotent-a-shared-enrolment-is-never-sent-again",
+    "key": "POST /api/v1/onboarding-desk/apply/agent-ready/continue api/v1/onboarding_desk.py:applicant_agent_ready_continue",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/agent-ready/continue",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 949,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.agent_ready_withdraw",
+    "auth_required": false,
+    "function": "applicant_agent_ready_withdraw",
+    "idempotency": "idempotent-a-withdrawn-consent-stays-withdrawn",
+    "key": "POST /api/v1/onboarding-desk/apply/agent-ready/withdraw api/v1/onboarding_desk.py:applicant_agent_ready_withdraw",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/agent-ready/withdraw",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 970,
+    "tenant_required": false
   },
   {
     "audit_event": "onboarding_desk.apply.answers",
@@ -10490,7 +10616,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 906,
+    "source_line": 991,
     "tenant_required": false
   },
   {
@@ -10508,7 +10634,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 888,
+    "source_line": 899,
     "tenant_required": false
   },
   {
@@ -10526,7 +10652,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 933,
+    "source_line": 1018,
     "tenant_required": false
   },
   {
@@ -10544,7 +10670,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 981,
+    "source_line": 1066,
     "tenant_required": false
   },
   {
@@ -10562,7 +10688,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 959,
+    "source_line": 1044,
     "tenant_required": false
   },
   {
@@ -10580,7 +10706,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 1003,
+    "source_line": 1088,
     "tenant_required": false
   },
   {
@@ -10598,7 +10724,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 852,
+    "source_line": 863,
     "tenant_required": false
   },
   {
@@ -10616,7 +10742,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 1025,
+    "source_line": 1110,
     "tenant_required": false
   },
   {
@@ -10670,7 +10796,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.cases.read",
-    "source_line": 1208,
+    "source_line": 1293,
     "tenant_required": true
   },
   {
@@ -10688,7 +10814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.cases.write",
-    "source_line": 1225,
+    "source_line": 1310,
     "tenant_required": true
   },
   {
@@ -10706,7 +10832,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.cases.read",
-    "source_line": 1278,
+    "source_line": 1363,
     "tenant_required": true
   },
   {
@@ -10724,7 +10850,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.crm.read",
-    "source_line": 1371,
+    "source_line": 1569,
     "tenant_required": true
   },
   {
@@ -10742,7 +10868,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.crm.write",
-    "source_line": 1392,
+    "source_line": 1590,
     "tenant_required": true
   },
   {
@@ -10760,7 +10886,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.crm.write",
-    "source_line": 1414,
+    "source_line": 1612,
     "tenant_required": true
   },
   {
@@ -10778,7 +10904,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.evidence_key",
-    "source_line": 1327,
+    "source_line": 1412,
     "tenant_required": false
   },
   {
@@ -10796,7 +10922,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1142,
+    "source_line": 1227,
     "tenant_required": true
   },
   {
@@ -10814,7 +10940,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.write",
-    "source_line": 1167,
+    "source_line": 1252,
     "tenant_required": true
   },
   {
@@ -11120,7 +11246,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.reports.read",
-    "source_line": 1343,
+    "source_line": 1428,
     "tenant_required": true
   },
   {

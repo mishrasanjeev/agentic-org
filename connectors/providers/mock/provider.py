@@ -142,6 +142,7 @@ class _State:
 
 class MockProvider(VerificationProvider):
     name = PROVIDER_NAME
+    accepts_presented_identity = True
 
     def __init__(self, config: MockConfig | None = None, dataset: MockDataset | None = None) -> None:
         self.config = config or MockConfig()
@@ -343,11 +344,14 @@ class MockProvider(VerificationProvider):
         existing = self._state.verifications.get(verification_id)
         if existing is not None:
             return existing.handle
+        presented = opts.presented_identity
         handle = VerificationHandle(
             provider=self.name,
             verification_id=verification_id,
             ref=self._ref(record),
             requested_at=self.config.clock(),
+            # A presented agent identity is echoed back, so a caller can see the provider took it.
+            accepted_identity=presented.identifier if presented is not None else None,
         )
         self._state.verifications[verification_id] = _Verification(handle=handle, opts=opts)
         return handle
