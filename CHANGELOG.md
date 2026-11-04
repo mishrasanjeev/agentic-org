@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - WhatsApp report delivery through an approved template, and BI tool guides
+
+- Scheduled reports sent on WhatsApp go as the approved template named by `AGENTICORG_WHATSAPP_REPORT_TEMPLATE`
+  (the file as its document header, the report's name as its body variable), which WhatsApp delivers outside the
+  24-hour window. Without a template the file goes as a plain document, as before.
+- Every WhatsApp response is now checked: a refusal fails the channel with WhatsApp's code and title (131047
+  outside the window says to set a template) instead of being reported as sent. ZIP packs are skipped with the
+  reason (WhatsApp does not accept them). Logs keep only a number's last four digits. The Graph API version is
+  a setting (`AGENTICORG_WHATSAPP_GRAPH_API_VERSION`, default `v23.0`; it was v18.0, hard-coded).
+- Activation needs the organisation's WhatsApp Business account, token and an approved template:
+  `docs/runbooks/whatsapp-report-delivery.md`.
+- The BI access runbook adds Power BI (Desktop and the gateway) and Looker Studio over the same `insights_bi` views.
+
 ## Unreleased - Insights opt-in cross-tenant benchmarks
 
 - An administrator can opt the organisation in to benchmarks (the card on the Executive, Finance and Operations

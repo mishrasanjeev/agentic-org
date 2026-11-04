@@ -840,6 +840,18 @@ class Settings(BaseSettings):
     # 503 ``export_storage_unconfigured``; inline exports (up to 50,000 rows) still
     # work. Env: AGENTICORG_INSIGHTS_EXPORT_BUCKET.
     insights_export_bucket: str = ""
+    # WhatsApp delivery of scheduled reports (core/reports/delivery.py, Cloud API with
+    # WHATSAPP_TOKEN and WHATSAPP_PHONE_ID). WhatsApp refuses a business-initiated
+    # free-form message to anyone who has not written in the last 24 hours, so a
+    # scheduled report is sent as this approved template (a document header, and one
+    # body variable for the report name unless the body flag is off). Unset: the file
+    # goes as a plain document, delivered only inside that 24-hour window.
+    # Env: AGENTICORG_WHATSAPP_REPORT_TEMPLATE, AGENTICORG_WHATSAPP_REPORT_TEMPLATE_LANGUAGE,
+    # AGENTICORG_WHATSAPP_REPORT_TEMPLATE_BODY_TEXT, AGENTICORG_WHATSAPP_GRAPH_API_VERSION.
+    whatsapp_report_template: str = Field(default="", max_length=512, pattern=r"^[a-z0-9_]*$")
+    whatsapp_report_template_language: str = Field(default="en", pattern=r"^[a-z]{2,3}(_[A-Z]{2})?$")
+    whatsapp_report_template_body_text: bool = True
+    whatsapp_graph_api_version: str = Field(default="v23.0", pattern=r"^v\d{2}\.\d$")
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;
