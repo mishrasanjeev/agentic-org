@@ -1,5 +1,5 @@
 /**
- * CMODashboard Component Tests
+ * Marketing operations (formerly the CMO dashboard) component tests
  *
  * Tests rendering states and KPI cards using mocked API responses
  * that match the current CMOKPIData interface (basic metrics shape).
