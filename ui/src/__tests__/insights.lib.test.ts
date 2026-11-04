@@ -174,7 +174,8 @@ describe("metric keys used by the Insights page", () => {
       const target = METRIC_PRESENTATION[key].action.to;
       const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
       if (explorer) expect(cfoExplorers, key).toContain(explorer);
-      else expect(["/dashboard/insights/value"], key).toContain(target);
+      // The CFO's pages: money saved and budgets (the CFO sets budgets).
+      else expect(["/dashboard/insights/value", "/dashboard/insights/budgets"], key).toContain(target);
     }
   });
 });

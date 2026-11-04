@@ -53,4 +53,5 @@ been seen on the deployed service.
 - Criterion 6 on staging, criterion 7 (time), and the manual part of criterion 9.
 - The Phase 2 and Phase 3 usability sessions need real participants (docs/insights/phase2-usability-test.md,
   docs/insights/phase3-acceptance.md); nothing here simulates them.
-- No UI or API creates budget alerts, so the cost views say that spend is not tracked against a limit.
+- Budgets can now be set (Phase 5 release A, `/dashboard/insights/budgets`); until an organisation sets one, the
+  cost views say that spend is not tracked against a limit.

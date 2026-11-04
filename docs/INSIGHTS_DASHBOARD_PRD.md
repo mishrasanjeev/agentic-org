@@ -35,6 +35,17 @@ The auditor sign-off was done in production on 3 November 2026 (two period evide
 
 **Phase 4, in progress (3 November 2026).** Six releases (spec decisions recorded with the build): (1) foundation: the reconciled-nights streak no longer resets on today's pending rollup, run-metric `filter[...]` and two-level `group_by`, a server role check on the legacy partner dashboard, tenant-isolation tests across every read and export path, Hindi parity for every Insights namespace, explorer keys enforced, and the API reference; (2) the Domain and Back-office views, Level 3 entity pages, breadcrumbs, Ctrl/Cmd-K search and the what-changed strip; (3) saved views and the Partner view with the partner client pack; (4) rehoming and retiring the legacy dashboard pages; (5) the performance seeder and benchmark, Playwright and accessibility checks, chart PDF and the remaining exports, and the dashboard's own metrics; (6) the runtime counters (`tool_calls` writer, `guardrail_events`, `security_events_daily`). All six releases are built; each criterion's evidence and what is still open is in `docs/insights/phase4-acceptance.md`.
 
+**Phase 5, in progress (4 November 2026): the items listed as Later in Decisions, and the open budget gap.**
+Five releases: (1) budgets an administrator or the CFO sets (`/dashboard/insights/budgets`; email and in-app alerts
+only, and the budget evaluator no longer posts Slack or webhook alerts to a platform-wide URL) and the
+forecast-above-budget alert; (2) views as PPTX and tables as Parquet; (3) opt-in cross-tenant benchmarks, published
+only for cohorts of at least 20 opted-in tenants; (4) Hindi for the pages Insights actions open (approvals, agents,
+workflows, the report scheduler) and connection guides for Power BI and Looker Studio over the existing BI views;
+(5) WhatsApp delivery of scheduled reports through an approved template (activation needs the organisation's own
+WhatsApp Business account). Found while building release 1 and fixed first: every Insights action other than
+reading was refused to all roles but the administrator (the route family's write scope was the administrator's);
+the Insights roles now hold `insights:write`.
+
 Later phases are unchanged. In v1 the legacy dashboard pages stay: deleting them would remove working features that need a new home first, namely the CMO work queue, approvals, connector setup and promotion gates; the Observability run debugger and synthetic-check management; the Company management list, bulk upload and archive; and ABM account upload and campaign launch.
 
 ## Personas and what each must find end to end

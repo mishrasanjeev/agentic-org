@@ -706,6 +706,28 @@ Kinds: `metric` (params as the metric route: `key`, `from`, `to`, `granularity`,
 | `GET /api/v1/insights/alerts?state=open\|acked` | The caller's alerts; `POST /api/v1/insights/alerts/{id}/ack` acknowledges one |
 | `GET`, `POST /api/v1/insights/bi-access`; `DELETE /api/v1/insights/bi-access/{role_name}` | Per-tenant read-only BI database logins over the `insights_*` views (administrators) |
 
+### Budgets
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/budgets?company_id=` | The organisation's budgets (one company's with `company_id`), each with this period's ledger spend, percent used and state; administrators, the CFO and auditors |
+| `POST /api/v1/insights/budgets` | `{"name", "period", "threshold_usd", "warn_at_percent", "company_id", "cost_center_id", "notify_channels"}`; administrators and the CFO, signed in (not an API key); 409 when the name is taken |
+| `PATCH /api/v1/insights/budgets/{id}` | Change any of those fields; a new limit, period or scope may warn again this period |
+| `DELETE /api/v1/insights/budgets/{id}` | Delete it; the signed `insights.budget.deleted` audit row keeps its values |
+
+`period` is `daily`, `weekly` or `monthly` (UTC); `threshold_usd` is more than 0 and at most 10,000,000;
+`warn_at_percent` is 1 to 100 (default 80); a company or cost centre must be the organisation's own. The only
+channel is `email` (the company's alert address, else the first administrator); `slack` and `webhook` are
+refused. Every change writes a signed `insights.budget.created|updated|deleted` audit row with the values before
+and after. Breaches raise the `cost.budget` alert, and a tenant-wide monthly budget the month's forecast is above
+raises `cost.forecast_over_budget`.
+
+Scopes: every Insights role holds `insights:read`, and every one except the auditor `insights:write`. Route
+enforcement asks for `insights:write` on Insights changes (acknowledging an alert, budgets) and only
+`insights:read` on the `insights_personal` actions that change no organisation state (background exports, saved
+views, the last visit, signing an evidence pack). BI logins and the money-saved changes are the `insights_admin`
+family, whose writes need `agenticorg:admin` at the route as well. Each handler then decides who may act.
+
 ## NL Query (Chat)
 
 ### Submit Query
