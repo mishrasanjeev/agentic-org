@@ -58,7 +58,7 @@ logger = structlog.get_logger()
 
 HOSTED_EXECUTOR = "plural_hosted"
 PROVIDER = "plural_hosted"
-UNMATCHED_REFUND_EVENT = "commerce.payment.unmatched_refund"
+UNMATCHED_REFUND_EVENT = "commerce.ucp.payment.unmatched_refund"
 SUCCEEDED = frozenset({"PROCESSED", "CAPTURED", "SUCCESS", "REFUNDED"})
 PENDING = frozenset({"PENDING", "INITIATED", "CREATED"})
 # Refund states Plural reports for a refund it did not make.
@@ -999,7 +999,7 @@ async def reconcile_all(*, now: datetime | None = None) -> dict[str, int]:
 
 
 REFUND_CHECK_EVENT = "commerce.ucp.order.refund_check"
-UNMATCHED_REFUND_CHECK_EVENT = "commerce.payment.unmatched_refund_check"
+UNMATCHED_REFUND_CHECK_EVENT = "commerce.ucp.payment.unmatched_refund_check"
 
 
 async def check_unmatched_refund(

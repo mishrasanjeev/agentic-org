@@ -4806,7 +4806,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": "commerce.payment.unmatched_refund",
+    "audit_event": "commerce.ucp.payment.unmatched_refund",
     "auth_required": true,
     "function": "refund_unmatched_payment",
     "idempotency": "unmatched-payment-refunded-once",
@@ -4824,7 +4824,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": "commerce.payment.unmatched_refund_check",
+    "audit_event": "commerce.ucp.payment.unmatched_refund_check",
     "auth_required": true,
     "function": "check_unmatched_refund",
     "idempotency": "reads-plural-and-records-a-known-outcome-once",

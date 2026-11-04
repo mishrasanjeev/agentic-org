@@ -828,7 +828,7 @@ class UnmatchedRefundRequest(BaseModel):
     scope="commerce.runtime.ucp.orders.write",
     rate_limit="commerce-runtime-write",
     idempotency="unmatched-payment-refunded-once",
-    audit_event="commerce.payment.unmatched_refund",
+    audit_event="commerce.ucp.payment.unmatched_refund",
 )
 async def refund_unmatched_payment(
     payment_id: str, body: UnmatchedRefundRequest, tenant_id: str = Depends(get_current_tenant)
@@ -904,7 +904,7 @@ async def check_order_refunds(order_id: str, tenant_id: str = Depends(get_curren
     scope="commerce.runtime.ucp.orders.write",
     rate_limit="commerce-runtime-write",
     idempotency="reads-plural-and-records-a-known-outcome-once",
-    audit_event="commerce.payment.unmatched_refund_check",
+    audit_event="commerce.ucp.payment.unmatched_refund_check",
 )
 async def check_unmatched_refund(payment_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """Ask Plural again about an unmatched payment's refund whose outcome is unknown."""

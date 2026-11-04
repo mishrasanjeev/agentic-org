@@ -248,6 +248,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         merchant_custom_domains,
         network,
     )
+    from core.commerce import hosted_refunds
     from core.commerce import network as commerce_network
     from core.commerce.acp import checkout as acp_checkout
     from core.commerce.ucp import handlers as ucp_handlers
@@ -266,6 +267,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         + inspect.getsource(network)
         + inspect.getsource(commerce_network)
         + inspect.getsource(commerce_payments)
+        + inspect.getsource(hosted_refunds)
     )
     checked = 0
     for route in http_routes(app):

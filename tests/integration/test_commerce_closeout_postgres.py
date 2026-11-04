@@ -379,7 +379,7 @@ async def test_a_payment_no_order_matches_is_kept_emailed_from_the_outbox_and_re
     assert once.status == "refused" and once.reason == "refund_already_requested"
     assert len(plural.refunds()) == 1
     events = await _ledger(db, tenant)
-    assert events.count("commerce.payment.unmatched_refund") == 2 and "commerce.plural.refund" in events
+    assert events.count("commerce.ucp.payment.unmatched_refund") == 2 and "commerce.plural.refund" in events
     assert await _rows(db, "SELECT id FROM commerce_orders WHERE tenant_id = :t", t=tenant) == []
 
 

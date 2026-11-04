@@ -210,6 +210,8 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
         "source": "catalog_upload",
         "shop_domain": None,
         "product_count": 2,
+        "read_limit": None,
+        "at_read_limit": False,
         "last_synced_at": None,
         "currency": "INR",
         "last_error": None,

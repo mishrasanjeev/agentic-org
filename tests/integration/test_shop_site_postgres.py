@@ -42,11 +42,13 @@ async def test_a_live_listed_shop_host_resolves_to_its_storefront(db, network, m
     # While the address is being mapped the host is not a shop host yet.
     assert await net.shop_for_host(host) is None
     view = await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
-    assert view["surfaces"]["google"] == {"status": "not_eligible", "reason": reg.WEB_ADDRESS_NOT_LIVE, "feed_url": None}
+    google = view["surfaces"]["google"]
+    assert google == {"status": "not_eligible", "reason": reg.WEB_ADDRESS_NOT_LIVE, "feed_url": None}
 
     await _web_address_live(tenant, host)
     shop = await net.shop_for_host(host)
-    assert shop is not None and (shop.slug, shop.tenant_id, shop.merchant_id, shop.host) == (slug, tenant, MERCHANT, host)
+    assert shop is not None
+    assert (shop.slug, shop.tenant_id, shop.merchant_id, shop.host) == (slug, tenant, MERCHANT, host)
     assert await net.shop_for_host(f"other-{slug}.shops.example") is None
 
     site = await shop_site_store.load_site(host)
@@ -58,7 +60,8 @@ async def test_a_live_listed_shop_host_resolves_to_its_storefront(db, network, m
     assert [(rate.amount_minor_units, rate.currency) for rate in site.rates] == [(4000, "INR")]
 
     view = await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
-    assert view["surfaces"]["google"] == {"status": "not_eligible", "reason": reg.CATALOG_NOT_VERIFIED, "feed_url": None}
+    google = view["surfaces"]["google"]
+    assert google == {"status": "not_eligible", "reason": reg.CATALOG_NOT_VERIFIED, "feed_url": None}
     assert view["surfaces"]["chatgpt"]["reason"] == reg.CATALOG_NOT_VERIFIED
 
     monkeypatch.setattr(settings, "network_enabled", True)
