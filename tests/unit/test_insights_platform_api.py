@@ -600,6 +600,7 @@ def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> N
                            params={"dataset": "daily", "format": "csv", "from": "2026-10-30", "to": "2026-10-31"})
         tenants = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "json"})
         workbook = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "xlsx"})
+        table = client.get("/api/v1/platform/insights/export", params={"dataset": "daily", "format": "parquet"})
         refused = client.get("/api/v1/platform/insights/export", params={"dataset": "runs", "format": "csv"})
         audits = client.sessions["user"].added
     assert daily.status_code == 200 and "platform-daily" in daily.headers["content-disposition"]
@@ -608,6 +609,8 @@ def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> N
     body = json.loads(tenants.content)
     assert [r["tenant_name"] for r in body["rows"]][0] == "Synthetic Traders"
     assert workbook.content[:2] == b"PK"
+    assert table.status_code == 200 and table.content[:4] == b"PAR1"
+    assert table.headers["content-type"].startswith("application/vnd.apache.parquet")
     assert refused.status_code == 422
-    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 3
+    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 4
     assert audits[0].details["row_count"] == 2 and audits[0].details["dataset"] == "daily"
