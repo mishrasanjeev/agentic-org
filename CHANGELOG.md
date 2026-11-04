@@ -4,27 +4,29 @@
 
 - The Sell everywhere page shows a catalog check under **Your catalog** (`core.commerce.catalog_health`, in the
   merchant setup view as `catalog.health`): products and variants counted, problems that keep a variant from being
-  offered (no usable price, a SKU shared by several variants, stock below zero) and warnings (no SKU, stock not
+  offered (no usable price, stock below zero) and warnings (a SKU shared by several variants, no SKU, stock not
   tracked, out of stock, no image, no description, no barcode, a very short title), each with examples and a
   one-line fix. It is for the merchant only; search order stays random.
-- A SKU shared by several variants of one catalog source is no longer listed in the UCP catalog or the ACP feed, and
-  the checkout no longer sells it, so stock and prices kept per SKU cannot land on the wrong item. A variant without
-  a usable price stays unlisted and unsold, as before.
+- A SKU shared by several variants of one catalog source (`core.commerce.sku_keys`) no longer names an item: the
+  variants stay listed and on sale under their own ids, but a catalog lookup or checkout item addressed by that SKU
+  is not resolved (it used to pick the first variant), and per-SKU price and stock facts in `source_facts` do not
+  apply to them. A variant without a usable price stays unlisted and unsold, as before.
 - Shopify syncs record when a variant's stock is not tracked (`inventory_tracked: false`, read with the details query).
 - Catalog uploads return `warnings` for products with no image, description or barcode; the upload is still stored.
-- Shopify delivery zones that name states or provinces are followed: the destination's `address_region` must be one of
-  them (by code or name), and the buyer is asked for the state when it is missing.
+- Shopify delivery zones that cover only some states or provinces of a country (`includeAllProvinces: false`) are
+  followed: the destination's `address_region` must be one of them (by code or name, accents ignored), and the buyer
+  is asked for the state when it is missing. A zone with the whole country serves any address there, as before.
 - Merchants can set a local delivery area, a list of up to 50 postal code prefixes, in the policies step
   (`delivery_postal_prefixes`, stored at `provider_policy.ucp.fulfillment.postal_code_prefixes`). Outside it, or without
   a postal code, the checkout offers no shipping option and says why, so no payment link is issued. Pickup is not
-  affected.
+  affected. A UK district prefix such as `SW1` covers that district only (SW1A, SW1P), not SW10 to SW19.
 - The hosted MCP server's `search_catalog` takes `exclude_shops` and `only_shops` (up to 50 shop slugs each), applied
   before the random shuffle and echoed as `shops_excluded`, `only_shops` and `unknown_shops`; a one-shop search of an
-  excluded shop is refused with `shop_excluded`.
+  excluded shop is refused with `shop_excluded`, and one outside a given `only_shops` with `shop_not_in_only_shops`.
 - The Telegram shopper keeps a per-chat avoid list: `/avoid <shop>`, `/avoid`, `/avoid clear`, `/allow <shop>`, and
   `avoid_shop`/`allow_shop` tools when the buyer says so in words. Avoided shops are left out of network searches,
-  and opening a checkout or getting a payment link there is refused. The system prompt asks the assistant to offer
-  the shop choice.
+  no checkout tool (open, read, update, pickup, payment link) acts there, and avoiding the chosen shop unpicks it.
+  The system prompt asks the assistant to offer the shop choice.
 
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 

@@ -4614,13 +4614,13 @@ These variants are **not offered to buyers** until you fix them:
 | Problem | Why |
 | --- | --- |
 | No usable price | A variant with no price, a price that is not a number, or no currency is never listed and never checks out. |
-| SKU used by more than one variant | One SKU on several variants of your catalog could sell the wrong item or the wrong stock, so none of them is listed or sold. Give every variant its own SKU. A variant with no SKU is still offered. |
 | Stock below zero | Shown as out of stock, so it cannot be ordered. Correct the count in Shopify. |
 
 These are offered, but buyers or their AI assistants get less to go on:
 
 | Warning | What it means |
 | --- | --- |
+| SKU used by more than one variant | The variants are still offered under their own item ids, but the SKU names no one item: a buyer's AI app that asks for that SKU is told it was not found, and a price or stock you set per SKU does not apply to them. Give every variant its own SKU. |
 | No SKU | Orders are harder to match to your own records. |
 | Stock not tracked | Shopify does not track the quantity, so buyers cannot be told whether it is in stock. Tick **Track quantity** under Inventory in Shopify. |
 | Out of stock | Listed as out of stock until you restock it. |
@@ -4638,8 +4638,9 @@ ship free. Buyers are offered this fee at checkout, and Sell everywhere stays of
 Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
 
 A Shopify shipping zone that covers only some states or provinces of a country is followed too: a buyer's
-address must name a state in that zone, by code or name (`KA` or `Karnataka`). When the zone names states
-and the address has none, the buyer's AI app is asked for the state before any shipping option is offered.
+address must name a state in that zone, by code or name (`KA` or `Karnataka`; accents do not matter). When
+the zone covers only some states and the address has none, the buyer's AI app is asked for the state before
+any shipping option is offered. A zone that covers the whole country serves every address there.
 
 ### Delivery area
 
@@ -4647,6 +4648,10 @@ A local shop can deliver only to some postal codes. In the policies step, enter 
 codes you deliver to under **Delivers only to postal codes starting with**, separated by commas. For
 example, `5600, 5601` covers Indian PIN codes 560001 to 560199. Up to 50 prefixes, each up to 10 letters or
 digits; spaces and hyphens are ignored. Leave it empty to deliver wherever your shipping rates reach.
+
+UK postcodes: a prefix of letters and a district number, such as `SW1` or `E1`, covers that district only.
+`SW1` covers SW1A and SW1P postcodes but not SW10 to SW19, and `E1` does not cover E10. A prefix of letters
+only, such as `SW`, covers the whole postcode area.
 
 With a delivery area set, the checkout checks the buyer's postal code before it offers shipping, for
 Shopify rates and your own fee alike:

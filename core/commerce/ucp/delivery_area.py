@@ -10,6 +10,13 @@ means the shop's shipping rates alone decide where it delivers.
 
 Postal codes are compared without spaces or hyphens and in upper case, so ``"560 001"``
 matches ``"5600"`` and a UK prefix ``"SW1"`` matches ``"sw1a 1aa"``.
+
+UK postcodes: a prefix written as a UK area and district (letters, then a digit, then
+optionally a digit or letter, such as ``SW1``, ``E1`` or ``SW1A``) names that district only.
+For a full UK postcode (the outward code, then the inward code of a digit and two letters)
+the outward code must start with the prefix and must not continue with another digit, so
+``SW1`` covers ``SW1A 1AA`` and ``SW1P 3BT`` but not ``SW10 9AA``, and ``E1`` covers
+``E1 6AN`` but not ``E10 5AA``. A prefix of letters only (``SW``) covers the whole area.
 """
 
 from __future__ import annotations
@@ -22,6 +29,10 @@ MAX_POSTAL_PREFIXES = 50
 MAX_PREFIX_CHARS = 10
 SHOWN_PREFIXES = 8
 _PREFIX = re.compile(r"^[A-Z0-9]{1,10}$")
+# A full UK postcode, compacted: outward code (area, district digit, optional digit or letter), inward code.
+_UK_POSTCODE = re.compile(r"^([A-Z]{1,2}[0-9][A-Z0-9]?)([0-9][A-Z]{2})$")
+# A prefix that names a UK area and district (an outward code or its digit-ending start).
+_UK_DISTRICT_PREFIX = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]?$")
 _SEPARATORS = re.compile(r"[\s-]+")
 
 
@@ -66,12 +77,29 @@ def stored_postal_prefixes(value: Any) -> tuple[str, ...]:
     return tuple(out[:MAX_POSTAL_PREFIXES])
 
 
+def _matches(code: str, prefix: str) -> bool:
+    if not code.startswith(prefix):
+        return False
+    if not _UK_DISTRICT_PREFIX.match(prefix):
+        return True
+    uk = _UK_POSTCODE.match(code)
+    # A full postcode's outward code, or an outward code given alone ("SW10").
+    outward = uk.group(1) if uk else (code if _UK_DISTRICT_PREFIX.match(code) else None)
+    if outward is None:
+        return True
+    if len(prefix) > len(outward):
+        return False
+    # "SW1" is the SW1 district (SW1A, SW1P ...), never SW10 to SW19.
+    rest = outward[len(prefix) :]
+    return not rest or not rest[0].isdigit()
+
+
 def in_area(postal_code: Any, prefixes: Sequence[str]) -> bool:
-    """True when there is no area, or the postal code starts with one of its prefixes."""
+    """True when there is no area, or the postal code starts with one of its prefixes (UK districts whole)."""
     if not prefixes:
         return True
     code = compact_postal_code(postal_code)
-    return bool(code) and any(code.startswith(prefix) for prefix in prefixes)
+    return bool(code) and any(_matches(code, prefix) for prefix in prefixes)
 
 
 def describe_area(prefixes: Sequence[str]) -> str:

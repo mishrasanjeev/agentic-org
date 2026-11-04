@@ -166,3 +166,52 @@ async def test_the_buyer_can_ask_in_words_and_the_prompt_names_the_avoided_shops
     assert "The buyer chooses the shop." in bot.SYSTEM_PROMPT
     bound = set(model.bind_tools(bot._langchain_tools(bot.ShopperTools(None))).bound_tool_names)
     assert {"avoid_shop", "allow_shop"} <= bound
+
+
+@pytest.mark.asyncio
+async def test_avoiding_the_chosen_shop_in_words_unpicks_it_so_later_searches_span_the_network(world, monkeypatch):
+    asked = []
+
+    async def search(entry, query):
+        asked.append(entry["slug"])
+        return []
+
+    monkeypatch.setattr(bot, "_catalog_search", search)
+    await bot.respond("42", "/start tea-corner")
+    model = ScriptedChatModel(
+        steps=[
+            tool_call("avoid_shop", shop="tea-corner"),
+            tool_call("search", query="chai"),
+            final("I'll leave Tea Corner out."),
+        ]
+    )
+    assert await bot.respond("42", "not Tea Corner please", model_factory=lambda: model) == "I'll leave Tea Corner out."
+    # The search in the same turn already went to the rest of the network, not the avoided shop.
+    assert sorted(asked) == ["kettle-works", "spice-hub"]
+    state = await bot.load_state(bot.chat_key("42"))
+    assert "shop" not in state and "shop_name" not in state and state["avoid"] == ["tea-corner"]
+
+
+@pytest.mark.asyncio
+async def test_no_checkout_tool_reads_or_changes_a_checkout_at_an_avoided_shop(world, monkeypatch):
+    calls = []
+
+    async def checkout(slug, operation, body, session_id=None):
+        calls.append((slug, operation))
+        return {
+            "http_status": 200,
+            "id": "chk_1",
+            "status": "requires_escalation",
+            "continue_url": "https://kettle-works.myshopify.com/cart/1:1",
+        }
+
+    monkeypatch.setattr(api, "network_checkout", checkout)
+    tools = bot.ShopperTools("kettle-works", ["kettle-works"])
+    for answer in (
+        await tools.get_checkout("kettle-works", "chk_1"),
+        await tools.get_checkout("", "chk_1"),
+        await tools.update_checkout("kettle-works", "chk_1", {"fulfillment": {}}),
+        await tools.choose_pickup("kettle-works", "chk_1"),
+    ):
+        assert "avoid" in answer["error"] and "continue_url" not in answer
+    assert calls == []

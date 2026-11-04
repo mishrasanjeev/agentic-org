@@ -374,13 +374,13 @@ describe("Sell everywhere", () => {
       status: "problems",
       problems: [
         {
-          code: "duplicate_sku",
-          label: "SKU used by more than one variant",
+          code: "no_price",
+          label: "No usable price",
           count: 2,
           counts: "variants",
           examples: ["Masala Chai (250 g)", "Masala Chai (500 g)"],
-          effect: "Not offered to buyers: one SKU on several items could sell the wrong item or the wrong stock.",
-          fix: "In Shopify, open each product and give every variant its own SKU, then read the catalog again.",
+          effect: "Not offered to buyers.",
+          fix: "In Shopify, open the product and enter a price for each variant, then read the catalog again.",
         },
       ],
       warnings: [
@@ -407,9 +407,9 @@ describe("Sell everywhere", () => {
     const panel = await screen.findByRole("region", { name: "Catalog check" });
     expect(panel).toHaveTextContent("3 of 5 variants in 3 products are offered to buyers.");
     const blocked = screen.getByRole("list", { name: "Not offered to buyers" });
-    expect(blocked).toHaveTextContent("SKU used by more than one variant: 2 variants");
+    expect(blocked).toHaveTextContent("No usable price: 2 variants");
     expect(blocked).toHaveTextContent("For example: Masala Chai (250 g), Masala Chai (500 g)");
-    expect(blocked).toHaveTextContent("give every variant its own SKU");
+    expect(blocked).toHaveTextContent("enter a price for each variant");
     expect(screen.getByRole("list", { name: "Worth fixing" })).toHaveTextContent("No image: 1 product");
     expect(panel).toHaveTextContent("never ranks or hides shops");
   }, 20000);

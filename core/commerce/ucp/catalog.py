@@ -34,6 +34,7 @@ from core.commerce.c6z_runtime_vertical import (
 )
 from core.commerce.catalog_upload import gtin_or_none
 from core.commerce.oacp_artifacts import OacpPersistentArtifactCacheRecord, is_verified_oacp_cache_record
+from core.commerce.sku_keys import ambiguous_skus, sku_is_ambiguous
 
 # The artifact types (Grantex families merchant_profile, seller_agent_card, catalog_snapshot,
 # offer_price_snapshot, inventory_snapshot) that back catalog search and lookup, as in the
@@ -470,8 +471,16 @@ def lookup_catalog(
 
     A variant id or SKU resolves ``exact`` to that variant; a product id resolves
     ``featured`` to its first available variant (else its first variant). Every
-    returned variant carries ``inputs`` naming the request ids it answers.
+    returned variant carries ``inputs`` naming the request ids it answers. A SKU that
+    several variants of one catalog source share (``core.commerce.sku_keys``) resolves
+    nothing: it names no one item.
     """
+    ambiguous = ambiguous_skus(products)
+    shared: set[str] = set()
+    for product in products:
+        for variant in product.get("variants") or ():
+            if isinstance(variant, Mapping) and sku_is_ambiguous(product, variant, ambiguous):
+                shared.add(str(ucp_variant_id(variant) or ""))
     rendered_by_id: dict[str, dict[str, Any]] = {}
     for product in products:
         rendered = ucp_product(product, shop_details)
@@ -482,7 +491,7 @@ def lookup_catalog(
     for product_id, rendered in rendered_by_id.items():
         for variant in rendered["variants"]:
             variant_index[variant["id"]] = product_id
-            if variant.get("sku"):
+            if variant.get("sku") and variant["id"] not in shared:
                 sku_index.setdefault(variant["sku"], (product_id, variant["id"]))
     selected: dict[str, dict[str, list[dict[str, str]]]] = {}
     order: list[str] = []

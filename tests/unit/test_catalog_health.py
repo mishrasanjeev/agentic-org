@@ -9,8 +9,10 @@ from typing import Any
 import pytest
 
 from core.commerce.c6z_runtime_vertical import normalize_shopify_product_node
-from core.commerce.catalog_health import ambiguous_skus, catalog_health_report, without_ambiguous_skus
+from core.commerce.catalog_health import catalog_health_report
 from core.commerce.catalog_upload import parse_catalog_upload, upload_warnings
+from core.commerce.sku_keys import ambiguous_skus
+from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.catalog import lookup_catalog, search_catalog
 from core.commerce.ucp.items import ProductEvidenceCatalog
 from tests import ucp_txn_fixtures as uf
@@ -82,19 +84,18 @@ def test_problems_say_the_variant_is_not_offered_and_warnings_say_what_buyers_mi
     assert (report["product_count"], report["inactive_product_count"], report["variant_count"]) == (6, 1, 8)
     problems = {item["code"]: item for item in report["problems"]}
     warnings = {item["code"]: item for item in report["warnings"]}
-    assert {code: item["count"] for code, item in problems.items()} == {
-        "no_price": 2,
-        "duplicate_sku": 2,
-        "negative_stock": 1,
-    }
+    assert {code: item["count"] for code, item in problems.items()} == {"no_price": 2, "negative_stock": 1}
     assert problems["no_price"]["examples"] == ["Masala Chai (1 kg)", "Ginger Tea Leaves"]
-    assert problems["duplicate_sku"]["examples"] == ["Masala Chai (250 g)", "Masala Chai (500 g)"]
-    assert problems["duplicate_sku"]["effect"].startswith("Not offered to buyers")
     assert problems["no_price"]["effect"] == "Not offered to buyers."
-    assert problems["duplicate_sku"]["fix"].startswith("In Shopify, open each product")
-    # Not offered: the two shared-SKU variants, two without a price and the one below zero.
-    assert report["offered_variant_count"] == 3
+    # A shared SKU is a warning: the variants stay on sale, the SKU names neither of them.
+    assert warnings["duplicate_sku"]["examples"] == ["Masala Chai (250 g)", "Masala Chai (500 g)"]
+    assert warnings["duplicate_sku"]["effect"].startswith("Offered under each variant's own id")
+    assert "refused as ambiguous" in warnings["duplicate_sku"]["effect"]
+    assert warnings["duplicate_sku"]["fix"].startswith("In Shopify, open each product")
+    # Not offered: two without a price and the one below zero.
+    assert report["offered_variant_count"] == 5
     assert {code: item["count"] for code, item in warnings.items()} == {
+        "duplicate_sku": 2,
         "no_sku": 1,
         "stock_unknown": 2,
         "zero_stock": 1,
@@ -132,42 +133,60 @@ def test_a_sku_is_ambiguous_only_within_one_source() -> None:
     shopify = _product("a", "Masala Chai", _variant("1", sku="CHAI"), _variant("2", sku="CHAI"), _variant("3"))
     upload = _product("u", "Masala Chai", _variant("9", sku="CHAI-UP"), source_system="catalog_upload")
     same_sku_other_source = _product("v", "Chai", _variant("8", sku="SKU-3"), source_system="catalog_upload")
-    assert ambiguous_skus([shopify, upload, same_sku_other_source]) == {("shopify", "CHAI")}
-    kept = without_ambiguous_skus([shopify, upload, same_sku_other_source])
-    assert [v["sku"] for v in kept[0]["variants"]] == ["SKU-3"]
-    assert kept[1] is upload and kept[2] is same_sku_other_source
-    assert without_ambiguous_skus([upload]) == [upload]
+    archived = _product("x", "Old Chai", _variant("7", sku="SKU-3"), status="ARCHIVED")
+    assert ambiguous_skus([shopify, upload, same_sku_other_source, archived]) == {("shopify", "CHAI")}
 
 
-def test_the_catalog_does_not_list_a_shared_sku_or_a_variant_without_a_price() -> None:
-    products = without_ambiguous_skus(
-        [
-            _product("a", "Masala Chai", _variant("1", sku="CHAI"), _variant("2", sku="CHAI"), _variant("3")),
-            _product("b", "Ginger Tea", _variant("4", price=None)),
-        ]
-    )
+def _shared_sku_catalog() -> list[dict[str, Any]]:
+    return [
+        _product(
+            "a",
+            "Masala Chai",
+            _variant("1", title="250 g", sku="CHAI"),
+            _variant("2", title="500 g", sku="CHAI"),
+            _variant("3", title="1 kg"),
+        ),
+        _product("b", "Ginger Tea", _variant("4", price=None)),
+    ]
+
+
+def test_shared_sku_variants_stay_listed_but_the_sku_names_none_of_them() -> None:
+    products = _shared_sku_catalog()
     [listed] = search_catalog(products, query="chai", categories=None, price_min=None, price_max=None)
-    assert [v["sku"] for v in listed["variants"]] == ["SKU-3"]
+    assert [v["sku"] for v in listed["variants"]] == ["CHAI", "CHAI", "SKU-3"]
+    assert len({v["id"] for v in listed["variants"]}) == 3
+    # A variant without a usable price is still never listed.
     assert search_catalog(products, query="ginger", categories=None, price_min=None, price_max=None) == []
-    found, missing = lookup_catalog(products, ["CHAI", "SKU-3"])
-    assert missing == [0] and [v["sku"] for v in found[0]["variants"]] == ["SKU-3"]
+    found, missing = lookup_catalog(products, ["CHAI", "SKU-3", listed["variants"][1]["id"]])
+    assert missing == [0], "the shared SKU resolves nothing rather than the first variant"
+    assert [v["title"] for v in found[0]["variants"]] == ["500 g", "1 kg"]
 
 
 @pytest.mark.asyncio
-async def test_the_checkout_never_sells_a_shared_sku_or_a_variant_without_a_price() -> None:
-    products = [
-        _product("a", "Masala Chai", _variant("1", sku="CHAI"), _variant("2", sku="CHAI"), _variant("3")),
-        _product("b", "Ginger Tea", _variant("4", price="")),
-    ]
+async def test_the_checkout_sells_shared_sku_variants_by_their_own_ids_only() -> None:
+    products = _shared_sku_catalog()
 
     async def loader(_merchant: Any) -> list[dict[str, Any]]:
         return products
 
-    found = await ProductEvidenceCatalog(loader).lookup(
-        uf.merchant(TENANT), ["CHAI", "1", "gid://shopify/ProductVariant/2", "SKU-4", "SKU-3"]
-    )
-    assert set(found) == {"SKU-3"}
+    [listed] = search_catalog(products, query="chai", categories=None, price_min=None, price_max=None)
+    ucp_id = listed["variants"][0]["id"]
+    wanted = ["CHAI", ucp_id, "gid://shopify/ProductVariant/2", "1", "SKU-4", "SKU-3"]
+    found = await ProductEvidenceCatalog(loader).lookup(uf.merchant(TENANT), wanted)
+    # An open checkout holding the variant by its UCP id still resolves; the shared SKU does not.
+    assert set(found) == {ucp_id, "gid://shopify/ProductVariant/2", "1", "SKU-3"}
+    assert found[ucp_id].title == "Masala Chai (250 g)" and found["1"].title == "Masala Chai (250 g)"
+    assert found["gid://shopify/ProductVariant/2"].title == "Masala Chai (500 g)"
     assert found["SKU-3"].price_minor_units == 10000
+
+
+def test_a_fact_saved_for_a_shared_sku_lands_on_none_of_its_variants() -> None:
+    policy = {
+        "source_precedence": {"price": ["erp", "shopify"]},
+        "source_facts": {"erp": {"price": {"CHAI": "1.00", "SKU-3": "90.00"}}},
+    }
+    [chai, _ginger] = products_with_precedence(_shared_sku_catalog(), policy)
+    assert [v["price"] for v in chai["variants"]] == ["100.00", "100.00", "90.00"]
 
 
 def test_a_shopify_variant_whose_stock_is_not_tracked_is_marked() -> None:

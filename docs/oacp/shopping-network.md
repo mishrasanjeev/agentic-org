@@ -101,8 +101,9 @@ header and queues the update (`core.tasks.network_tasks`); the worker answers it
 - Anything else goes to a tool-calling model with nine tools: list shops, search (one shop or the
   network), open, read and update a checkout, choose pickup, get the payment link, and avoid or allow a
   shop (when the buyer says so in words). A network search leaves the avoided shops out before the
-  random shuffle and says so (`shops_avoided_by_buyer`); opening a checkout or asking for the payment
-  link at an avoided shop is refused in code, not only by the prompt. The checkout
+  random shuffle and says so (`shops_avoided_by_buyer`); every checkout tool (open, read, update,
+  pickup, payment link) refuses an avoided shop in code, not only by the prompt, and avoiding the chosen
+  shop unpicks it. The checkout
   tools use the same network path as the gateway. Once a checkout is ready the model asks for the
   payment link (the hand-off) and gives the buyer `summary.continue_url`, the shop's own payment page.
   There is no cancel or payment tool, and the model is told never to ask for payment details.

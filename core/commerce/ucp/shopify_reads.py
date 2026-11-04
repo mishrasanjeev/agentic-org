@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 import time
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -56,7 +57,7 @@ query UcpDeliveryProfiles {
             zone {
               id
               name
-              countries { code { countryCode restOfWorld } provinces { code name } }
+              countries { code { countryCode restOfWorld } includeAllProvinces provinces { code name } }
             }
             methodDefinitions(first: 20) {
               nodes {
@@ -79,17 +80,23 @@ query UcpDeliveryProfiles {
 
 
 def _region_key(value: Any) -> str:
-    """A state or province name or code compared without case, spaces or punctuation."""
-    return re.sub(r"[^0-9a-z]+", "", str(value or "").casefold())
+    """A state or province name or code compared without case, accents, spaces or punctuation.
+
+    NFKD first and the combining marks dropped, so "Québec" and "Quebec" are the same key.
+    """
+    decomposed = unicodedata.normalize("NFKD", str(value or ""))
+    plain = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return re.sub(r"[^0-9a-z]+", "", plain.casefold())
 
 
 @dataclass(frozen=True)
 class DeliveryRate:
     """One flat-rate shipping method of a delivery zone.
 
-    ``provinces`` lists ``(country, code, name)`` for a zone that names states or provinces
-    (a Shopify zone may cover only some states of a country): a destination in that country
+    ``provinces`` lists ``(country, code, name)`` for a zone that covers only some states or
+    provinces of a country (Shopify ``includeAllProvinces: false``): a destination in that country
     is served only when its ``address_region`` is one of them, by code (``KA``, ``IN-KA``) or name.
+    A zone that covers the whole country records no provinces, so any address there is served.
     """
 
     id: str
@@ -225,6 +232,10 @@ def normalize_delivery_profiles(data: Mapping[str, Any]) -> list[DeliveryRate]:
                     elif code.get("countryCode"):
                         country_code = str(code["countryCode"]).upper()
                         countries.append(country_code)
+                        # Shopify lists every province when the whole country is in the zone
+                        # (includeAllProvinces: true); only a partial selection restricts by state.
+                        if (country or {}).get("includeAllProvinces") is not False:
+                            continue
                         for province in (country or {}).get("provinces") or []:
                             if isinstance(province, Mapping) and province.get("code"):
                                 entry = (country_code, str(province["code"]).upper(), str(province.get("name") or ""))

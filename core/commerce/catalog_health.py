@@ -10,23 +10,25 @@ Two tiers:
 
 * **Problems** (``severity: blocking``): the variant is not offered to buyers.
   A variant with no usable price (missing, unreadable, negative, or no currency)
-  is never listed and never checks out. A SKU shared by several variants of one
-  catalog is ambiguous: stock and prices kept per SKU could land on the wrong
-  item, so those variants are not offered either (``without_ambiguous_skus``,
-  applied by the UCP catalog and the checkout item lookup). A negative stock
-  count is shown as out of stock, so the variant cannot be ordered.
+  is never listed and never checks out. A negative stock count is shown as out
+  of stock, so the variant cannot be ordered.
 * **Warnings**: the variant is offered, but buyers or their AI assistants get
-  less to go on: no SKU, stock not tracked (buyers cannot be told what is in
-  stock), zero stock, no image, no description, no barcode (GTIN), a very short title.
+  less to go on: a SKU shared by several variants of one catalog (the variants
+  stay on sale under their own ids, but the SKU cannot name one of them: a lookup
+  or checkout by that SKU is not resolved and per-SKU overrides do not apply,
+  ``core.commerce.sku_keys``), no SKU, stock not tracked (buyers cannot be told
+  what is in stock), zero stock, no image, no description, no barcode (GTIN), a
+  very short title.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from core.commerce.catalog_upload import gtin_or_none
+from core.commerce.sku_keys import ambiguous_skus, sku_of, source_of
 from core.commerce.ucp.catalog import minor_units
 
 MAX_EXAMPLES = 3
@@ -54,20 +56,21 @@ CHECKS: tuple[HealthCheck, ...] = (
         "Fill the price column for these products and upload the file again.",
     ),
     HealthCheck(
-        "duplicate_sku",
-        "blocking",
-        "SKU used by more than one variant",
-        "Not offered to buyers: one SKU on several items could sell the wrong item or the wrong stock.",
-        "In Shopify, open each product and give every variant its own SKU, then read the catalog again.",
-        "Give every row its own sku and upload the file again.",
-    ),
-    HealthCheck(
         "negative_stock",
         "blocking",
         "Stock below zero",
         "Shown as out of stock, so buyers cannot order it.",
         "In Shopify, open the product and correct the available quantity under Inventory.",
         "Correct the quantity column (0 or more) and upload the file again.",
+    ),
+    HealthCheck(
+        "duplicate_sku",
+        "warning",
+        "SKU used by more than one variant",
+        "Offered under each variant's own id, but a lookup or order by this SKU is refused as ambiguous, "
+        "and price or stock you set per SKU does not apply to these variants.",
+        "In Shopify, open each product and give every variant its own SKU, then read the catalog again.",
+        "Give every row its own sku and upload the file again.",
     ),
     HealthCheck(
         "no_sku",
@@ -132,54 +135,12 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _sku(variant: Mapping[str, Any]) -> str:
-    return _text(variant.get("sku"))
-
-
 def _variants(product: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [v for v in product.get("variants") or () if isinstance(v, Mapping)]
 
 
-def _source(product: Mapping[str, Any]) -> str:
-    return str(product.get("source_system") or "")
-
-
 def _active(product: Mapping[str, Any]) -> bool:
     return str(product.get("status") or "").upper() not in _INACTIVE_STATUSES
-
-
-def ambiguous_skus(products: Iterable[Mapping[str, Any]]) -> set[tuple[str, str]]:
-    """``(source_system, sku)`` pairs that more than one variant of one catalog source uses."""
-    seen: dict[tuple[str, str], int] = {}
-    for product in products:
-        if not isinstance(product, Mapping) or not _active(product):
-            continue
-        for variant in _variants(product):
-            sku = _sku(variant)
-            if sku:
-                key = (_source(product), sku)
-                seen[key] = seen.get(key, 0) + 1
-    return {key for key, count in seen.items() if count > 1}
-
-
-def without_ambiguous_skus(products: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    """The products with every variant whose SKU another variant of the same source shares left out.
-
-    Different sources (a Shopify store and an upload kept for source precedence) may carry the
-    same SKU on purpose; only a SKU repeated within one source is ambiguous.
-    """
-    ambiguous = ambiguous_skus(products)
-    if not ambiguous:
-        return list(products)
-    out: list[Mapping[str, Any]] = []
-    for product in products:
-        if not isinstance(product, Mapping):
-            continue
-        source = _source(product)
-        variants = product.get("variants") or ()
-        kept = [v for v in variants if not (isinstance(v, Mapping) and _sku(v) and (source, _sku(v)) in ambiguous)]
-        out.append(product if len(kept) == len(variants) else {**product, "variants": tuple(kept)})
-    return out
 
 
 def _price_usable(variant: Mapping[str, Any], product: Mapping[str, Any], currency: str | None) -> bool:
@@ -252,12 +213,11 @@ def catalog_health_report(
             if not _price_usable(variant, product, currency):
                 flag("no_price", product, variant)
                 blocked = True
-            sku = _sku(variant)
+            sku = sku_of(variant)
             if not sku:
                 flag("no_sku", product, variant)
-            elif (_source(product), sku) in ambiguous:
+            elif (source_of(product), sku) in ambiguous:
                 flag("duplicate_sku", product, variant)
-                blocked = True
             stock = _stock(variant)
             if stock is None or variant.get("inventory_tracked") is False:
                 flag("stock_unknown", product, variant)

@@ -231,7 +231,8 @@ The buyer chooses the shop. `search_catalog` takes `exclude_shops` (shop slugs t
 and `only_shops` (the only shops to ask), up to 50 slugs each. Both apply before the random pick and
 order, so the shops that remain are still asked in a fresh random order. The result echoes them as
 `shops_excluded` and `only_shops`, and lists any slug not in the directory as `unknown_shops`. A
-one-shop search (`shop`) for a shop in `exclude_shops` is refused with `shop_excluded` before any call.
+one-shop search (`shop`) for a shop in `exclude_shops` is refused with `shop_excluded`, and one for a shop
+outside a given `only_shops` with `shop_not_in_only_shops`, before any call.
 The tool description tells the AI app never to open a checkout at a shop the buyer excluded.
 
 | Setting | Meaning |

@@ -276,6 +276,20 @@ try {
     assert.equal(refused.structuredContent.error.code, "shop_excluded");
     assert.equal(calls.length, before, "nothing is asked of a shop the buyer excluded");
 
+    const outside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "broken-shop", request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.equal(outside.isError, true);
+    assert.equal(outside.structuredContent.error.code, "shop_not_in_only_shops");
+    assert.match(outside.structuredContent.error.content, /kettle-works, tea-corner/);
+    assert.equal(calls.length, before, "nothing is asked of a shop outside only_shops");
+    const inside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, only_shops: ["tea-corner"] },
+    });
+    assert.equal(inside.structuredContent.shop, "tea-corner");
+
     const tooMany = await client.callTool({
       name: "search_catalog",
       arguments: { request: { query: "chai" }, exclude_shops: Array.from({ length: 51 }, (_, i) => `shop-${i}0`) },

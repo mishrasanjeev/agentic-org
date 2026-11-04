@@ -435,6 +435,13 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
             content: `"${shop}" is in exclude_shops: the buyer does not want this shop. Ask the buyer before searching it.`,
           });
         }
+        if (only && !only.has(shop)) {
+          return errorResult({
+            status: 400,
+            code: "shop_not_in_only_shops",
+            content: `"${shop}" is not in only_shops: the buyer asked to keep to ${[...only].sort().join(", ")}. Ask the buyer before searching it.`,
+          });
+        }
         const one = shops.find((s) => s.slug === shop);
         if (!one) return unknownShop(shop);
         const result = await publicCatalogCall(net, one, "/catalog/search", CATALOG_SEARCH, request, SEARCH_TIMEOUT_MS * 6);

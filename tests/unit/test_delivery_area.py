@@ -79,6 +79,18 @@ def test_prefixes_are_compacted_upper_cased_and_deduplicated() -> None:
     assert stored_postal_prefixes("5600") == ()
 
 
+def test_a_uk_district_prefix_covers_that_district_only() -> None:
+    assert in_area("SW1A 1AA", ("SW1",)) and in_area("sw1p 3bt", ("SW1",))
+    assert not in_area("SW10 9AA", ("SW1",)) and not in_area("SW19 5AE", ("SW1",))
+    assert in_area("E1 6AN", ("E1",)) and not in_area("E10 5AA", ("E1",))
+    assert in_area("SW1A 1AA", ("SW1A",)) and not in_area("SW1P 3BT", ("SW1A",))
+    # Letters only: the whole postcode area. An outward code given alone follows the district rule.
+    assert in_area("SW10 9AA", ("SW",)) and in_area("SW1A 1AA", ("SW",))
+    assert not in_area("SW10", ("SW1",)) and in_area("SW1A", ("SW1",))
+    # Digit-only prefixes (Indian PIN codes) are plain prefixes.
+    assert in_area("560034", ("5600",)) and not in_area("561034", ("5600",))
+
+
 def test_a_postal_code_is_in_the_area_when_it_starts_with_a_prefix() -> None:
     assert in_area("560 001", ("5600",)) and in_area("sw1a 1aa", ("SW1",))
     assert not in_area("570001", ("5600", "5601")) and not in_area("", ("5600",))
@@ -184,9 +196,10 @@ def test_shopify_zone_provinces_are_parsed() -> None:
             [
                 {
                     "code": {"countryCode": "IN"},
+                    "includeAllProvinces": False,
                     "provinces": [{"code": "KA", "name": "Karnataka"}, {"code": "TN", "name": "Tamil Nadu"}],
                 },
-                {"code": {"countryCode": "LK"}, "provinces": []},
+                {"code": {"countryCode": "LK"}, "includeAllProvinces": False, "provinces": []},
             ]
         )
     )
@@ -197,6 +210,47 @@ def test_shopify_zone_provinces_are_parsed() -> None:
         assert rate.serves("IN", region), region
     assert not rate.serves("IN", "MH") and not rate.serves("IN", "Maharashtra") and not rate.serves("IN", None)
     assert rate.serves("LK") and not rate.serves("US", "KA")
+
+
+def test_a_zone_with_the_whole_country_serves_an_address_without_a_state() -> None:
+    # Shopify lists every province of a country selected in full, and marks it includeAllProvinces.
+    every_state = [{"code": code, "name": name} for code, name in (("KA", "Karnataka"), ("MH", "Maharashtra"))]
+    [rate] = normalize_delivery_profiles(
+        _profiles([{"code": {"countryCode": "IN"}, "includeAllProvinces": True, "provinces": every_state}])
+    )
+    assert rate.provinces == () and not rate.needs_region("IN")
+    assert rate.serves("IN", None) and rate.serves("IN", "MH")
+    # A response without the flag (an older read) is not taken as a partial zone either.
+    [unflagged] = normalize_delivery_profiles(_profiles([{"code": {"countryCode": "IN"}, "provinces": every_state}]))
+    assert unflagged.serves("IN", None)
+
+
+@pytest.mark.asyncio
+async def test_checkout_offers_a_whole_country_zone_to_an_address_without_a_state() -> None:
+    every_state = [{"code": "KA", "name": "Karnataka"}, {"code": "TN", "name": "Tamil Nadu"}]
+    rates = normalize_delivery_profiles(
+        _profiles([{"code": {"countryCode": "IN"}, "includeAllProvinces": True, "provinces": every_state}])
+    )
+    result = await _build(_shipping(region=None), rates=rates)
+    group = result.state["methods"][0]["groups"][0]
+    assert [o["id"] for o in group["options"]] == ["ship-7"]
+    assert not any(m["code"] == "missing" for m in result.messages)
+
+
+def test_state_names_match_with_or_without_accents() -> None:
+    rate = DeliveryRate(
+        id="ship-qc",
+        title="Quebec",
+        description=None,
+        amount_minor_units=1000,
+        currency="CAD",
+        countries=("CA",),
+        rest_of_world=False,
+        provinces=(("CA", "QC", "Québec"),),
+    )
+    for region in ("Québec", "Quebec", "QUÉBEC", "QC", "CA-QC"):
+        assert rate.serves("CA", region), region
+    assert not rate.serves("CA", "Qubec")
 
 
 def test_a_zone_without_provinces_serves_the_whole_country_as_before() -> None:

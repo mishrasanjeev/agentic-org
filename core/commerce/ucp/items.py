@@ -10,9 +10,10 @@ catalog's ISO 4217 minor-unit conversion. Price, stock and title go through the
 merchant's per-fact-family source precedence
 (``core.commerce.source_precedence.products_with_precedence``), exactly as the
 catalog routes do; without a precedence table or saved facts Shopify's stand.
-A variant whose SKU another variant of the same catalog shares is not offered
-(``core.commerce.catalog_health.without_ambiguous_skus``), as the catalog leaves it out,
-and neither is one without a usable price.
+A SKU that several variants of one catalog share does not address an item
+(``core.commerce.sku_keys``): those variants are found by their own ids, and an item
+id equal to the shared SKU is not found rather than resolved to one of them. A
+variant without a usable price is never found.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from core.commerce.catalog_health import without_ambiguous_skus
+from core.commerce.sku_keys import ambiguous_skus, sku_is_ambiguous
 from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.catalog import minor_units, ucp_variant_id
 from core.commerce.ucp.merchant import MerchantUcp
@@ -86,13 +87,15 @@ class ProductEvidenceCatalog:
         if not wanted:
             return {}
         policy = merchant.raw_config.get("provider_policy") if isinstance(merchant.raw_config, Mapping) else None
-        products = products_with_precedence(without_ambiguous_skus(await self._loader(merchant)), policy)
+        loaded = await self._loader(merchant)
+        ambiguous = ambiguous_skus(loaded)
+        products = products_with_precedence(loaded, policy)
         found: dict[str, CatalogItem] = {}
         for product in products:
             for variant in product.get("variants") or ():
                 if not isinstance(variant, Mapping):
                     continue
-                keys = _variant_keys(variant)
+                keys = _variant_keys(variant, sku_key=not sku_is_ambiguous(product, variant, ambiguous))
                 for item_id in wanted & keys:
                     item = _catalog_item(merchant, product, variant, item_id)
                     if item is not None:
@@ -100,9 +103,13 @@ class ProductEvidenceCatalog:
         return found
 
 
-def _variant_keys(variant: Mapping[str, Any]) -> set[str]:
-    """The ids an item may be addressed by: the catalog's UCP variant id first, then the SKU and source ids."""
-    keys = {str(ucp_variant_id(variant) or ""), str(variant.get("sku") or ""), str(variant.get("variant_id") or "")}
+def _variant_keys(variant: Mapping[str, Any], *, sku_key: bool = True) -> set[str]:
+    """The ids an item may be addressed by: the catalog's UCP variant id first, then the SKU and source ids.
+
+    ``sku_key`` is False for a SKU another variant of the same catalog shares: it names no one item.
+    """
+    sku = str(variant.get("sku") or "") if sku_key else ""
+    keys = {str(ucp_variant_id(variant) or ""), sku, str(variant.get("variant_id") or "")}
     gid = str(variant.get("variant_id") or "")
     if gid.startswith("gid://shopify/ProductVariant/"):
         keys.add(gid.rsplit("/", 1)[-1])
