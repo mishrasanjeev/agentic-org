@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from api.middleware.merchant_host import MerchantHostMiddleware, is_shop_site_path
+from api.middleware.merchant_host import SHOP_SITE_PREFIX, MerchantHostMiddleware, is_shop_site_path
 from api.v1 import network as network_api
 from api.v1 import shop_site as routes
 from core.commerce import network as net
@@ -74,6 +74,10 @@ def _site(verified: bool = True) -> ShopSite:
 )
 def test_shop_site_paths(path: str, site: bool) -> None:
     assert is_shop_site_path(path) is site
+
+
+def test_the_middleware_and_the_routes_share_one_prefix() -> None:
+    assert routes.router.prefix == SHOP_SITE_PREFIX == "/shop-site"
 
 
 # --- middleware -------------------------------------------------------------------------------

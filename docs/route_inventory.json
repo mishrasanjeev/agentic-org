@@ -13140,6 +13140,114 @@
     "tenant_required": true
   },
   {
+    "audit_event": "none-public-shop-site-home",
+    "auth_required": false,
+    "function": "shop_site_home",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site api/v1/shop_site.py:shop_site_home",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 76,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-feed",
+    "auth_required": false,
+    "function": "shop_site_google_feed",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/feeds/google.xml api/v1/shop_site.py:shop_site_google_feed",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/feeds/google.xml",
+    "public_exempt_reason": "shop-product-feed-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 162,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-llms",
+    "auth_required": false,
+    "function": "shop_site_llms",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/llms.txt api/v1/shop_site.py:shop_site_llms",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/llms.txt",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 145,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-product",
+    "auth_required": false,
+    "function": "shop_site_product",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/products/{handle} api/v1/shop_site.py:shop_site_product",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/products/{handle}",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 93,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-robots",
+    "auth_required": false,
+    "function": "shop_site_robots",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/robots.txt api/v1/shop_site.py:shop_site_robots",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/robots.txt",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 130,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-sitemap",
+    "auth_required": false,
+    "function": "shop_site_sitemap",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/sitemap.xml api/v1/shop_site.py:shop_site_sitemap",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/sitemap.xml",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 113,
+    "tenant_required": false
+  },
+  {
     "audit_event": "none-read-only-placeholder",
     "auth_required": true,
     "function": "list_sops",

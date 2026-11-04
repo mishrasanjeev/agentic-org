@@ -34,8 +34,8 @@ from core.commerce.shop_site import (
 from core.commerce.shop_site_store import load_site
 from core.commerce.ucp.authority import normalize_host
 
-SHOP_SITE_PREFIX = "/shop-site"
-router = APIRouter(prefix=SHOP_SITE_PREFIX, tags=["Shop site"])
+# The same prefix as api.middleware.merchant_host.SHOP_SITE_PREFIX (a literal, so the route inventory reads it).
+router = APIRouter(prefix="/shop-site", tags=["Shop site"])
 
 CACHE_CONTROL = "private, max-age=300"
 RETRY_AFTER_SECONDS = "600"
