@@ -59,6 +59,7 @@ interface Setup {
     last_error: string | null;
     webhook_status: string | null;
     webhook_path: string | null;
+    health?: CatalogHealth | null;
   };
   policies: {
     status: string;
@@ -66,6 +67,7 @@ interface Setup {
     shipping: string;
     pickup: string;
     shipping_rate?: { fee: string; currency: string; countries: string[] } | null;
+    delivery_postal_prefixes?: string[];
   };
   shop_details?: ShopDetail[];
   order_limits: {
@@ -80,6 +82,27 @@ interface Setup {
 }
 
 type UploadProblem = { row: number | null; column: string | null; message: string };
+type UploadWarning = { column: string; count: number; rows: number[]; message: string };
+
+interface HealthItem {
+  code: string;
+  label: string;
+  count: number;
+  counts: "products" | "variants";
+  examples: string[];
+  effect: string;
+  fix: string;
+}
+
+/** core/commerce/catalog_health.py: for the merchant only, never used to rank shops. */
+interface CatalogHealth {
+  product_count: number;
+  variant_count: number;
+  offered_variant_count: number;
+  status: "ok" | "warnings" | "problems";
+  problems: HealthItem[];
+  warnings: HealthItem[];
+}
 type ShopDetail = { label: string; value: string };
 
 // Matches MAX_SHOP_DETAILS, MAX_SHOP_DETAIL_VALUE and MAX_ATTRIBUTE_NAME in core/commerce/catalog_upload.py.
@@ -129,6 +152,43 @@ const MISSING_LABEL: Record<string, string> = {
   order_limits: "your order limits",
   shipping_rate: "your shipping fee",
 };
+
+function HealthList({ items, tone, label }: { items: HealthItem[]; tone: string; label: string }) {
+  if (!items.length) return null;
+  return (
+    <ul className="space-y-2" aria-label={label}>
+      {items.map((item) => (
+        <li key={item.code} className="rounded-md border p-3">
+          <p className={`font-medium ${tone}`}>
+            {item.label}: {item.count} {item.count === 1 ? item.counts.replace(/s$/, "") : item.counts}
+          </p>
+          <p className="text-muted-foreground">{item.effect}</p>
+          {item.examples.length ? <p className="text-muted-foreground">For example: {item.examples.join(", ")}</p> : null}
+          <p>{item.fix}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The catalog check: what is not offered to buyers, and what buyers' AI assistants get less of. */
+function CatalogHealthPanel({ health }: { health: CatalogHealth }) {
+  return (
+    <section className="space-y-2 border-t pt-3 text-sm" aria-label="Catalog check">
+      <p className="font-medium">Catalog check</p>
+      <p>
+        {health.offered_variant_count} of {health.variant_count} variants in {health.product_count} products are offered
+        to buyers.
+      </p>
+      {health.status === "ok" ? <p className="text-muted-foreground">No problems found.</p> : null}
+      <HealthList items={health.problems} tone="text-destructive" label="Not offered to buyers" />
+      <HealthList items={health.warnings} tone="" label="Worth fixing" />
+      <p className="text-xs text-muted-foreground">
+        Only you see this check. The network never ranks or hides shops by it.
+      </p>
+    </section>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const known = STATUS[status] ?? { label: status.replace(/_/g, " "), variant: "secondary" as const };
@@ -224,6 +284,7 @@ export default function SellEverywhere() {
   const [shopToken, setShopToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [uploadProblems, setUploadProblems] = useState<UploadProblem[]>([]);
+  const [uploadWarnings, setUploadWarnings] = useState<UploadWarning[]>([]);
 
   const [returnsPolicy, setReturnsPolicy] = useState("");
   const [shippingPolicy, setShippingPolicy] = useState("");
@@ -231,6 +292,7 @@ export default function SellEverywhere() {
   const [shippingFee, setShippingFee] = useState("");
   const [shippingCurrency, setShippingCurrency] = useState("");
   const [shippingCountries, setShippingCountries] = useState("");
+  const [deliveryPrefixes, setDeliveryPrefixes] = useState("");
   const [shopDetails, setShopDetails] = useState<ShopDetail[]>([]);
   const [shopDetailProblems, setShopDetailProblems] = useState<UploadProblem[]>([]);
 
@@ -250,6 +312,7 @@ export default function SellEverywhere() {
     setShippingFee(data.policies.shipping_rate?.fee ?? "");
     setShippingCurrency(data.policies.shipping_rate?.currency ?? data.catalog.currency ?? "");
     setShippingCountries((data.policies.shipping_rate?.countries ?? []).join(", "));
+    setDeliveryPrefixes((data.policies.delivery_postal_prefixes ?? []).join(", "));
     setShopDetails(data.shop_details ?? []);
     setCurrency(data.order_limits.currency ?? data.catalog.currency ?? "");
     setMaxOrder(data.order_limits.max_order_amount ?? "");
@@ -378,6 +441,7 @@ export default function SellEverywhere() {
   const uploadFile = (file: File) =>
     run("upload", async () => {
       setUploadProblems([]);
+      setUploadWarnings([]);
       const content = await file.text();
       const format = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
       try {
@@ -385,6 +449,7 @@ export default function SellEverywhere() {
         applySetup(data.setup);
         const details: string[] = Array.isArray(data.details) ? data.details : [];
         const skipped: string[] = Array.isArray(data.skipped_columns) ? data.skipped_columns : [];
+        setUploadWarnings(Array.isArray(data.warnings) ? data.warnings : []);
         setNotice(
           `${data.upload.product_count} products uploaded.` +
             (details.length ? ` Buyers' AI assistants will also read: ${details.join(", ")}.` : "") +
@@ -415,6 +480,10 @@ export default function SellEverywhere() {
         shipping_countries: shippingCountries
           .split(",")
           .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
+        delivery_postal_prefixes: deliveryPrefixes
+          .split(",")
+          .map((p) => p.trim().toUpperCase())
           .filter(Boolean),
       });
       applySetup(data);
@@ -679,6 +748,16 @@ export default function SellEverywhere() {
                     ))}
                   </ul>
                 ) : null}
+                {uploadWarnings.length ? (
+                  <ul className="list-disc space-y-1 pl-5" aria-label="Warnings about the file">
+                    {uploadWarnings.map((warning) => (
+                      <li key={warning.column}>
+                        {warning.message} Rows {warning.rows.join(", ")}
+                        {warning.count > warning.rows.length ? " and more" : ""}.
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
 
@@ -699,6 +778,7 @@ export default function SellEverywhere() {
                 ) : null}
               </div>
             ) : null}
+            {setup.catalog.health ? <CatalogHealthPanel health={setup.catalog.health} /> : null}
           </Step>
 
           <Step number={3} title="Your policies" status={setup.policies.status}>
@@ -756,7 +836,20 @@ export default function SellEverywhere() {
                   onChange={(e) => setShippingCountries(e.target.value)}
                 />
               </label>
+              <label className="flex flex-col gap-1">
+                Delivers only to postal codes starting with (empty for anywhere)
+                <input
+                  className={`${inputClass} w-72 uppercase`}
+                  placeholder="5600, 5601"
+                  value={deliveryPrefixes}
+                  onChange={(e) => setDeliveryPrefixes(e.target.value.replace(/[^0-9A-Za-z, ]/g, ""))}
+                />
+              </label>
             </div>
+            <p className="text-xs text-muted-foreground">
+              With a delivery area, a buyer whose postal code is outside it is told so before any payment link, for
+              Shopify rates and your own fee alike. Store pickup is not affected.
+            </p>
             {setup.catalog.source !== "shopify" ? (
               <p className="text-xs text-muted-foreground">
                 Buyers are offered this fee at checkout. Enter 0 to ship free. Shopify shops use their Shopify shipping

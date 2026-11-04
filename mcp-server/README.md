@@ -227,6 +227,14 @@ part of a word, then the rest). `same_products` also lists one product (the same
 verified) sold by two or more shops, one offer per shop: in the currency most of the offers use, lowest
 price first, then the other offers in the order the shops answered.
 
+The buyer chooses the shop. `search_catalog` takes `exclude_shops` (shop slugs the buyer does not want)
+and `only_shops` (the only shops to ask), up to 50 slugs each. Both apply before the random pick and
+order, so the shops that remain are still asked in a fresh random order. The result echoes them as
+`shops_excluded` and `only_shops`, and lists any slug not in the directory as `unknown_shops`. A
+one-shop search (`shop`) for a shop in `exclude_shops` is refused with `shop_excluded`, and one for a shop
+outside a given `only_shops` with `shop_not_in_only_shops`, before any call.
+The tool description tells the AI app never to open a checkout at a shop the buyer excluded.
+
 | Setting | Meaning |
 |---|---|
 | `MCP_NETWORK_DIRECTORY_URL` | The network directory (https, path ending in `/network/merchants`). The list is cached for a minute and each shop's profile for five; a failed refresh keeps the last good copy. |

@@ -37,6 +37,8 @@ from typing import Any
 
 import structlog
 
+from core.commerce.sku_keys import ambiguous_skus, sku_is_ambiguous
+
 logger = structlog.get_logger()
 
 FAMILIES: tuple[str, ...] = ("price", "inventory", "policy", "catalog", "location")
@@ -176,7 +178,9 @@ def products_with_precedence(
 ) -> list[Mapping[str, Any]]:
     """Synced product evidence with each variant's price, stock and title taken from the winning source.
 
-    Facts are keyed by SKU (else the source variant id). Without a precedence
+    Facts are keyed by SKU (else the source variant id); a SKU that several variants of
+    one source share (``core.commerce.sku_keys``) is keyed by each variant's own id, so a
+    fact saved for that SKU lands on none of them. Without a precedence
     table or saved facts the products are returned unchanged. Disagreements are
     logged as an irregularity with the family and the sources only.
     """
@@ -184,13 +188,17 @@ def products_with_precedence(
         return list(products)
     out: list[Mapping[str, Any]] = []
     disagreements: dict[tuple[str, str, tuple[str, ...]], int] = {}
+    ambiguous = ambiguous_skus(products)
     for product in products:
         variants = []
         for variant in product.get("variants") or ():
             if not isinstance(variant, Mapping):
                 variants.append(variant)
                 continue
-            key = str(variant.get("sku") or variant.get("variant_id") or "")
+            if sku_is_ambiguous(product, variant, ambiguous):
+                key = str(variant.get("variant_id") or "")
+            else:
+                key = str(variant.get("sku") or variant.get("variant_id") or "")
             updated = dict(variant)
             for family, field_name in (("price", "price"), ("inventory", "inventory_quantity_snapshot")):
                 resolution = resolve(family, key, {"shopify": variant.get(field_name)}, provider_policy=provider_policy)

@@ -10,8 +10,13 @@ are response-only. Each method has one group holding its line items (the
 default when the platform does not declare ``supports_multi_group``).
 
 Options: shipping rates come from the merchant's Shopify delivery profiles
-(flat-rate method definitions per zone, matched on the destination country
-and the checkout currency); pickup is free at the selected location. The
+(flat-rate method definitions per zone, matched on the destination country,
+on its state or province when the zone names them, and on the checkout
+currency); pickup is free at the selected location. A shop with a local
+delivery area (``FulfillmentSettings.postal_code_prefixes``) is offered no
+shipping option for a destination outside it, or without a postal code, and
+the message names the area, so the checkout never becomes ready for a payment
+link there. Pickup is not affected. The
 business config decides multi-destination and method combinations
 (``allows_multi_destination``/``allows_method_combinations`` in 2026-04-08,
 ``multi_destination[]``/``method_combinations`` in 2026-08-25).
@@ -26,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.commerce.ucp import messages as msg
+from core.commerce.ucp.delivery_area import in_area, outside_area_message, postal_code_needed_message
 from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.shopify_reads import DeliveryRate
 
@@ -159,24 +165,23 @@ async def build_fulfillment(
                     {"id": f"pickup-{destination['id']}", "title": f"Pick up at {destination['name']}", "amount": 0}
                 ]
             else:
-                if rates is None:
-                    rates = list(await rates_source(merchant)) if rates_source is not None else []
-                group["options"] = _shipping_options(
-                    rates,
-                    destination,
-                    currency,
-                    subtotal_minor_units,
-                    merchant.fulfillment.free_shipping_min_subtotal_minor_units,
-                )
-                if not group["options"]:
-                    messages.append(
-                        msg.error(
-                            "address_undeliverable",
-                            "No shipping option reaches this destination.",
-                            path=f"{path}.selected_destination_id",
-                        )
-                    )
+                area_problem = _area_problem(merchant.fulfillment.postal_code_prefixes, destination, path)
+                if area_problem is not None:
+                    messages.append(area_problem)
                     ready = False
+                else:
+                    if rates is None:
+                        rates = list(await rates_source(merchant)) if rates_source is not None else []
+                    group["options"] = _shipping_options(
+                        rates,
+                        destination,
+                        currency,
+                        subtotal_minor_units,
+                        merchant.fulfillment.free_shipping_min_subtotal_minor_units,
+                    )
+                    if not group["options"]:
+                        messages.append(_no_option_message(rates, destination, currency, path))
+                        ready = False
             wanted_option = (group_raw or {}).get("selected_option_id", (prior_group or {}).get("selected_option_id"))
             option_ids = {o["id"] for o in group["options"]}
             if wanted_option in option_ids:
@@ -262,6 +267,41 @@ def _shipping_destinations(requested: Any, prior: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _area_problem(prefixes: Sequence[str], destination: Mapping[str, Any], path: str) -> dict[str, Any] | None:
+    """The message for a destination outside the shop's local delivery area (None inside it, or with no area)."""
+    if not prefixes:
+        return None
+    postal_code = (destination.get("address") or {}).get("postal_code")
+    if not postal_code:
+        return msg.error("missing", postal_code_needed_message(prefixes), path=f"{path}.destinations")
+    if in_area(postal_code, prefixes):
+        return None
+    return msg.error(
+        "address_undeliverable", outside_area_message(postal_code, prefixes), path=f"{path}.selected_destination_id"
+    )
+
+
+def _no_option_message(
+    rates: Sequence[DeliveryRate], destination: Mapping[str, Any], currency: str | None, path: str
+) -> dict[str, Any]:
+    address = destination.get("address") or {}
+    country = address.get("address_country")
+    if not address.get("address_region") and any(
+        rate.needs_region(country) and (not currency or rate.currency == currency) for rate in rates
+    ):
+        # The shop's zones for this country name the states they cover: the state decides.
+        return msg.error(
+            "missing",
+            "This shop delivers only to some states or provinces. Add the state (address_region) to the address.",
+            path=f"{path}.destinations",
+        )
+    return msg.error(
+        "address_undeliverable",
+        "No shipping option reaches this destination.",
+        path=f"{path}.selected_destination_id",
+    )
+
+
 def _shipping_options(
     rates: Sequence[DeliveryRate],
     destination: Mapping[str, Any],
@@ -269,11 +309,13 @@ def _shipping_options(
     subtotal: int,
     free_threshold: int | None,
 ) -> list[dict[str, Any]]:
-    country = (destination.get("address") or {}).get("address_country")
+    address = destination.get("address") or {}
+    country = address.get("address_country")
+    region = address.get("address_region")
     free = free_threshold is not None and subtotal >= free_threshold
     options = []
     for rate in rates:
-        if not rate.serves(country) or (currency and rate.currency != currency):
+        if not rate.serves(country, region) or (currency and rate.currency != currency):
             continue
         option: dict[str, Any] = {"id": rate.id, "title": rate.title, "amount": 0 if free else rate.amount_minor_units}
         if rate.description:

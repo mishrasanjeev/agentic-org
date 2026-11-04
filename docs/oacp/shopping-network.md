@@ -25,7 +25,10 @@ force. Payments are not part of the network: the buyer pays with the shop.
 
 The gateway runs the same UCP handlers as `https://<host>/ucp` (`api.v1.commerce_ucp.run_ucp_operation`)
 in the shop's tenant on its published host, so idempotency, the arbiter and the ledger behave the same.
-Network checkouts answer to the network platform only (`AGENTICORG_NETWORK_AGENT_PROFILE`). Complete is
+Network checkouts answer to the network platform only (`AGENTICORG_NETWORK_AGENT_PROFILE`).
+A checkout for a shop with a local delivery area (postal code prefixes set in the merchant setup) offers
+no shipping option for an address outside it, or without a postal code, and says why, so it never becomes
+ready for the hand-off there; Shopify zones that name states are matched on the address's state. Complete is
 the payment hand-off only: a body with a payment instrument, decision or mandate is refused (422
 `payment_execution_not_allowed`), and a shop without a hand-off configured answers
 `payment_handoff_unavailable` instead of running an executor. There is no cancel or payment route.
@@ -51,6 +54,15 @@ undoing an earlier one:
 
 `GET` shows `grantex_enrolment`, `publication` (`published`, `host`, `refusal`), `artifacts` (`ready` or
 `missing` with the reason) and `setup` (what is still missing).
+
+## Buyer choice of shops
+
+The network never ranks shops and the buyer picks the shop. The hosted MCP server's `search_catalog`
+takes `exclude_shops` and `only_shops` (up to 50 slugs each), applied before the random pick and order
+and echoed in the result (`shops_excluded`, `only_shops`, `unknown_shops`); see
+[mcp-server/README.md](../../mcp-server/README.md). The Telegram bot keeps a per-chat avoid list
+(`/avoid`, below). The merchant's catalog check (`core.commerce.catalog_health`) is shown to the
+merchant only and plays no part in search order.
 
 ## Data
 
@@ -83,12 +95,20 @@ header and queues the update (`core.tasks.network_tasks`); the worker answers it
 (`core.commerce.network_telegram`).
 
 - `t.me/<bot>?start=<slug>` picks a shop; `/shops` lists the network; `/stop` forgets the chat.
-- Anything else goes to a tool-calling model with seven tools: list shops, search (one shop or the
-  network), open, read and update a checkout, choose pickup, and get the payment link. The checkout
+- `/avoid <shop>` (slug or shop name) leaves a shop out of the chat's searches and checkouts; `/avoid`
+  lists the avoided shops, `/avoid clear` empties the list and `/allow <shop>` takes one off it. Picking
+  a shop with `/start` takes it off the list. Up to 50 shops.
+- Anything else goes to a tool-calling model with nine tools: list shops, search (one shop or the
+  network), open, read and update a checkout, choose pickup, get the payment link, and avoid or allow a
+  shop (when the buyer says so in words). A network search leaves the avoided shops out before the
+  random shuffle and says so (`shops_avoided_by_buyer`); every checkout tool (open, read, update,
+  pickup, payment link) refuses an avoided shop in code, not only by the prompt, and avoiding the chosen
+  shop unpicks it. The checkout
   tools use the same network path as the gateway. Once a checkout is ready the model asks for the
   payment link (the hand-off) and gives the buyer `summary.continue_url`, the shop's own payment page.
   There is no cancel or payment tool, and the model is told never to ask for payment details.
-- Chat state (the chosen shop and the last six turns, never tool output) is kept in Redis under a
+- Chat state (the chosen shop, the avoided shops and the last six turns, never tool output) is kept
+  in Redis under a
   SHA-256 of the chat id; turns expire after 30 minutes of quiet, the state after seven days.
 - Limits: 20 messages per chat per hour and 60 per minute for the bot, then a short "try later".
   The platform Gemini spend cap applies. Replies pass the channel answer filter (no secrets, no echo

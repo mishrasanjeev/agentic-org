@@ -304,6 +304,8 @@ export const merchantSetupApi = {
       shipping_fee?: string | null;
       shipping_currency?: string | null;
       shipping_countries?: string[];
+      // The local delivery area: postal code prefixes; empty delivers wherever the rates reach.
+      delivery_postal_prefixes?: string[];
     },
   ) =>
     api.put(`${merchantPath(merchantId)}/setup/policies`, data),

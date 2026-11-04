@@ -228,6 +228,81 @@ try {
     await client.close();
   });
 
+  await check("exclude_shops and only_shops apply before the shuffle and are echoed in the result", async () => {
+    const client = await connect();
+    let before = calls.length;
+    const excluded = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: ["tea-corner", "gone-shop"] },
+    });
+    assert.notEqual(excluded.isError, true);
+    const body = excluded.structuredContent;
+    assert.deepEqual(body.results.map((r) => r.shop), ["kettle-works"]);
+    assert.deepEqual(body.shops_excluded, ["gone-shop", "tea-corner"]);
+    assert.deepEqual(body.unknown_shops, ["gone-shop"]);
+    assert.equal(body.shops_searched, 2);
+    assert.equal(body.shops_in_network, 3);
+    assert.equal(body.same_products, undefined, "the excluded shop's offer is not grouped in either");
+    const asked = calls.slice(before).filter((c) => c.path === "/ucp/catalog/search").map((c) => c.shop).sort();
+    assert.deepEqual(asked, ["broken-shop", "kettle-works"], "an excluded shop is never asked");
+
+    before = calls.length;
+    const only = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.deepEqual(only.structuredContent.only_shops, ["kettle-works", "tea-corner"]);
+    assert.deepEqual(only.structuredContent.unavailable, []);
+    assert.equal(only.structuredContent.shops_searched, 2);
+    assert.equal(calls.slice(before).filter((c) => c.shop === "broken-shop").length, 0);
+
+    // The shops that remain still come back in a fresh random order.
+    const firsts = new Set();
+    for (let i = 0; i < 24; i += 1) {
+      const again = await client.callTool({
+        name: "search_catalog",
+        arguments: { request: { query: "chai" }, exclude_shops: ["broken-shop"] },
+      });
+      firsts.add(again.structuredContent.results[0].shop);
+    }
+    assert.deepEqual([...firsts].sort(), ["kettle-works", "tea-corner"]);
+
+    before = calls.length;
+    const refused = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, exclude_shops: ["tea-corner"] },
+    });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.error.code, "shop_excluded");
+    assert.equal(calls.length, before, "nothing is asked of a shop the buyer excluded");
+
+    const outside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "broken-shop", request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.equal(outside.isError, true);
+    assert.equal(outside.structuredContent.error.code, "shop_not_in_only_shops");
+    assert.match(outside.structuredContent.error.content, /kettle-works, tea-corner/);
+    assert.equal(calls.length, before, "nothing is asked of a shop outside only_shops");
+    const inside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, only_shops: ["tea-corner"] },
+    });
+    assert.equal(inside.structuredContent.shop, "tea-corner");
+
+    const tooMany = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: Array.from({ length: 51 }, (_, i) => `shop-${i}0`) },
+    });
+    assert.equal(tooMany.isError, true, "at most 50 shops in exclude_shops");
+    const badSlug = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["Not A Slug"] },
+    });
+    assert.equal(badSlug.isError, true);
+    await client.close();
+  });
+
   await check("shuffling is a permutation, and offers group by barcode across shops only", async () => {
     const items = Array.from({ length: 60 }, (_, i) => i);
     let seed = 7;

@@ -870,6 +870,7 @@ query C6ZProductsWithDetails($first: Int!, $after: String) {
           }
           inventoryItem {
             id
+            tracked
           }
         }
       }
@@ -877,6 +878,11 @@ query C6ZProductsWithDetails($first: Int!, $after: String) {
   }
 }
 """
+
+
+def _untracked(variant: Mapping[str, Any]) -> bool:
+    item = variant.get("inventoryItem")
+    return isinstance(item, Mapping) and item.get("tracked") is False
 
 
 def normalize_shopify_product_node(
@@ -909,6 +915,8 @@ def normalize_shopify_product_node(
                 ),
                 "updated_at": _safe_optional_text(variant.get("updatedAt")),
                 **({"gtin": gtin} if (gtin := variant_gtin(variant)) else {}),
+                # Shopify keeps selling an untracked item whatever its count says (read with the details query).
+                **({"inventory_tracked": False} if _untracked(variant) else {}),
                 "selected_options": tuple(
                     {
                         "name": _safe_optional_text(option.get("name")),
