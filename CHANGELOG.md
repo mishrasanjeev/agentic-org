@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Insights views as PowerPoint and tables as Parquet
+
+- **PowerPoint**: each landing view has a **PowerPoint** file next to its PDF (a background export kept on the
+  Downloads page for seven days): a title slide with the period, filters and data quality, the tiles as a table,
+  and for each chart a native PowerPoint chart with its text summary and its data as a table; the chart's
+  definition and source are in the slide notes. Figures with no data say so and why.
+- **Parquet**: every metric and explorer export (inline and background) also downloads as Parquet with typed
+  columns (whole numbers, numbers, flags and dates keep their types) and the definitions and filters in the file's
+  metadata. New dependency `pyarrow` 26.0.0.
+- Migration v6z116 lets `insights_exports` hold the `view_pptx` kind and the `pptx` and `parquet` formats;
+  downgrade refuses while such exports exist.
+
 ## Unreleased - Insights budgets you can set, and the forecast alert
 
 - **Budgets page** (`/dashboard/insights/budgets`, linked from the Insights header and the Finance view's budget

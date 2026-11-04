@@ -26,7 +26,7 @@ export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "
 export type MetricState = "ok" | "watch" | "act";
 export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
-export type ExportFormat = "csv" | "xlsx" | "json" | "pdf";
+export type ExportFormat = "csv" | "xlsx" | "json" | "parquet" | "pdf";
 
 export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "executive",
@@ -41,7 +41,7 @@ export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "domain",
   "partner",
 ];
-export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
+export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json", "parquet"];
 
 export interface ReportingSettings {
   timezone: string;

@@ -63,6 +63,11 @@ export default function ViewFiles({
         format: "pdf",
         params: { view, compare: filters.compare, ...period },
       })}
+      {button("pptx", t("insights.files.pptx"), {
+        kind: "view_pptx",
+        format: "pptx",
+        params: { view, compare: filters.compare, ...period },
+      })}
       {view === "finance" && FINANCE_PACK_ROLES.has(role)
         ? button("finance", t("insights.files.financePack"), { kind: "finance_pack", format: "zip", params: period })
         : null}

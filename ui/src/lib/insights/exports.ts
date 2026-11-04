@@ -12,6 +12,7 @@ export type ExportKind =
   | "explorer"
   | "run_bundle"
   | "view_pdf"
+  | "view_pptx"
   | "finance_pack"
   | "evidence_pack"
   | "partner_pack";

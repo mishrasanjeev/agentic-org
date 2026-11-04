@@ -191,13 +191,20 @@ def test_the_migration_follows_v6z109_and_matches_the_model() -> None:
     ]
     assert children == [path.name]
     source = path.read_text(encoding="utf-8")
-    v6z110_kinds = tuple(k for k in EXPORT_KINDS if k != "partner_pack")
-    for values in (v6z110_kinds, EXPORT_STATUSES, EXPORT_FORMATS):
+    v6z110_kinds = tuple(k for k in EXPORT_KINDS if k not in ("partner_pack", "view_pptx"))
+    v6z110_formats = tuple(f for f in EXPORT_FORMATS if f not in ("pptx", "parquet"))
+    for values in (v6z110_kinds, EXPORT_STATUSES, v6z110_formats):
         assert ",".join(f"'{v}'" for v in values) in source
     # v6z113 widens the kind check to the partner client pack.
     later = (path.parent / "v6_z113_insights_saved_views.py").read_text(encoding="utf-8")
     assert '_KINDS = _KINDS_V6Z110 + ",\'partner_pack\'"' in later
     assert f'_KINDS_V6Z110 = "{",".join(repr(k) for k in v6z110_kinds)}"' in later
+    # v6z116 adds the PowerPoint view and the pptx and parquet formats; the model lists end where it does.
+    v6z116 = (path.parent / "v6_z116_insights_export_formats.py").read_text(encoding="utf-8")
+    assert """_KINDS = _KINDS_V6Z113 + ",'view_pptx'\"""" in v6z116
+    assert """_FORMATS = _FORMATS_V6Z110 + ",'pptx','parquet'\"""" in v6z116
+    assert f'_FORMATS_V6Z110 = "{",".join(repr(f) for f in v6z110_formats)}"' in v6z116
+    assert EXPORT_KINDS[-1] == "view_pptx" and EXPORT_FORMATS[-2:] == ("pptx", "parquet")
     assert set(export_jobs.FORMATS_BY_KIND) == set(EXPORT_KINDS)
     assert "FORCE ROW LEVEL SECURITY" in source
 

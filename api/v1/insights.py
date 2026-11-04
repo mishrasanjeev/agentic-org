@@ -60,9 +60,9 @@ router = APIRouter(prefix="/insights", tags=["Insights"])
 
 Compare = Literal["previous", "none"]
 Granularity = Literal["day", "week", "month"]
-ExportFormat = Literal["csv", "xlsx", "json"]
+ExportFormat = Literal["csv", "xlsx", "json", "parquet"]
 # A metric (a chart) also exports as a one-page PDF: its title, period, filters, data quality and data.
-MetricExportFormat = Literal["csv", "xlsx", "json", "pdf"]
+MetricExportFormat = Literal["csv", "xlsx", "json", "parquet", "pdf"]
 FromDay = Annotated[date | None, Query(alias="from")]
 ToDay = Annotated[date | None, Query()]
 CompanyId = Annotated[str | None, Query(max_length=64)]

@@ -40,7 +40,7 @@ from core.insights.metrics import day_bounds, local_today
 
 KOLKATA = ZoneInfo("Asia/Kolkata")
 VERSIONS = Path(__file__).resolve().parents[2] / "migrations" / "versions"
-MIGRATIONS = ("v6_z106_insights_foundation.py", "v6_z110_insights_exports.py")
+MIGRATIONS = ("v6_z106_insights_foundation.py", "v6_z110_insights_exports.py", "v6_z116_insights_export_formats.py")
 PASSWORD = "local-test-password"  # noqa: S105 - a throwaway role in a disposable test database
 BASE_TABLES = (
     "tenants",
@@ -475,3 +475,49 @@ async def test_the_finance_pack_and_a_view_pdf(world, monkeypatch) -> None:
             api.ExportRequest(kind="view_pdf", format="pdf", params={"view": "compliance"}), CFO, tenant_id=seed.a
         )
     assert refused.value.status_code == 403
+
+
+async def test_a_view_as_powerpoint_and_tables_as_parquet(world, monkeypatch) -> None:
+    import io
+
+    import pyarrow.parquet as pq
+    from pptx import Presentation
+
+    from api.v1 import insights_exports as api
+    from core.insights import export_jobs
+
+    monkeypatch.setattr(api, "_enqueue", lambda _tid, _job: True)
+    seed = _seed(world)
+    job, deck = await _build_and_fetch(
+        api, export_jobs, seed.a, CFO, api.ExportRequest(kind="view_pptx", format="pptx", params={"view": "finance"})
+    )
+    assert deck[:2] == b"PK" and job["format"] == "pptx"
+    slides = list(Presentation(io.BytesIO(deck)).slides)
+    texts = [shape.text_frame.text for slide in slides for shape in slide.shapes if shape.has_text_frame]
+    assert texts[0].startswith("Insights - Finance") and any("Headline figures" in t for t in texts)
+    assert any(shape.has_chart for slide in slides for shape in slide.shapes) or any("No data" in t for t in texts)
+    assert all("Bravo" not in t for t in texts)
+    # The PowerPoint is a view export: the same view rules as the PDF.
+    with pytest.raises(HTTPException) as refused:
+        await api.create_export(
+            api.ExportRequest(kind="view_pptx", format="pptx", params={"view": "compliance"}), CFO, tenant_id=seed.a
+        )
+    assert refused.value.status_code == 403
+    with pytest.raises(HTTPException) as wrong:
+        await api.create_export(
+            api.ExportRequest(kind="view_pptx", format="pdf", params={"view": "finance"}), CFO, tenant_id=seed.a
+        )
+    assert wrong.value.status_code == 422
+
+    _metric_job, table = await _build_and_fetch(
+        api,
+        export_jobs,
+        seed.a,
+        CFO,
+        api.ExportRequest(kind="metric", format="parquet",
+                          params={"key": "cost.spend", "from": seed.today, "to": seed.today}),
+    )
+    parquet = pq.read_table(io.BytesIO(table))
+    meta = {k.decode(): v.decode() for k, v in (parquet.schema.metadata or {}).items()}
+    assert meta["insights.key"] == "cost.spend" and json.loads(meta["insights.filters"])["from"] == seed.today
+    assert table[:4] == b"PAR1"
