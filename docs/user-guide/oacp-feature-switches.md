@@ -63,6 +63,7 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_NETWORK_SERVICE_TOKEN` | Empty | The credential the hosted MCP server presents to the network checkout gateway (at least 32 characters, from the secret manager). Empty, the gateway refuses every call. |
 | `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The platform profile network checkouts are opened for. |
 | `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts when turning Sell everywhere on. |
+| `AGENTICORG_NETWORK_REGISTRATIONS` | Empty | Where the network stands with the ChatGPT app directory, Google, Microsoft and Perplexity, as JSON (`not_started`, `submitted` or `live`, optionally per shop). Empty, every program shows as not registered yet. |
 | `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the webhook of the public AgenticOrg shopping bot on Telegram. Off, it answers 404. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The bot's username, for each shop's `t.me/<bot>?start=<shop>` link. Empty, no Telegram link is shown. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN`, `AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret, from the secret manager. |
@@ -109,6 +110,7 @@ These switches belong to the path where AgenticOrg charges through a payment pro
 | --- | --- | --- |
 | MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
 | MCP server `MCP_NETWORK_DIRECTORY_URL` and `AGENTICORG_NETWORK_SERVICE_TOKEN` | Unset | Network mode: one hosted server serves every listed shop, with list, search, checkout and payment-link tools and no tool that pays. |
+| MCP server `MCP_OPENAI_APPS_CHALLENGE` | Unset | The ChatGPT app directory's domain-verification token, served at `/.well-known/openai-apps-challenge`. Unset, that path answers 404. |
 | Merchant `provider_policy.payments` | None | Where buyers pay: `shopify_cart` or `plural_hosted`, set in the Payments step of Sell Everywhere. None means no payment link. |
 | Merchant `provider_policy.arbiter` | None | Your order limits: per order, per day, items per order and currency, set in the Order limits step. |
 | Merchant `provider_policy.ucp.fulfillment.flat_rates` | None | Your flat shipping fee, for a shop without Shopify, set in the policies step. |

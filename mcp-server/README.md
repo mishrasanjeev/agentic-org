@@ -240,6 +240,15 @@ The tool description tells the AI app never to open a checkout at a shop the buy
 | `MCP_NETWORK_DIRECTORY_URL` | The network directory (https, path ending in `/network/merchants`). The list is cached for a minute and each shop's profile for five; a failed refresh keeps the last good copy. |
 | `AGENTICORG_NETWORK_SERVICE_TOKEN` | The credential the network checkout gateway accepts (at least 32 characters, from a secret). Sent only to the gateway, never to a shop. |
 | `AGENTICORG_UCP_AGENT_PROFILE` | The network platform profile sent as `UCP-Agent` on catalog calls. |
+| `MCP_OPENAI_APPS_CHALLENGE` | Optional. The domain-verification token the ChatGPT app directory shows the owner; served as plain text at `GET /.well-known/openai-apps-challenge`. Unset, that path is 404. |
+
+In network mode the server introduces itself as `AgenticOrg shopping network` with the website
+`https://agenticorg.ai`, two https icons and short instructions for the model (how search, checkout
+and the payment hand-off work, and the privacy and terms pages), and every tool carries
+`_meta.securitySchemes: [{"type": "noauth"}]`. The MCP registry entry for this hosted endpoint is
+`shopping/server.json` (`io.github.mishrasanjeev/agenticorg-shopping`, a `streamable-http` remote at
+`https://mcp.agenticorg.ai/mcp`), separate from this package's `server.json`; the ChatGPT app
+directory package is in `shopping/openai-plugin/`.
 
 `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_API_KEY` are not used in network mode. Catalog calls go
 to each shop's public `/ucp/catalog/*` routes with no credential, five shops at a time with a

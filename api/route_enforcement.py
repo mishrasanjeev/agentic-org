@@ -85,6 +85,10 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     # degrades to allow-with-warning so platform discovery keeps working.
     "ucp-discovery": (600, 60),
     "ucp-catalog-read": (120, 60),
+    # A listed network shop's storefront and feed on its own host (api/v1/shop_site.py), per
+    # client IP. Crawlers fetch whole sites, hence the higher figure; not "public-*", so a
+    # limiter outage degrades to allow-with-warning.
+    "shop-site-read": (300, 60),
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),
     "infra-health-probe": (600, 60),

@@ -69,6 +69,62 @@ def test_release_creates_finalizes_and_releases_the_agent_only_version(
     assert f"released sites/{SITE}/releases/r1" in capsys.readouterr().out
 
 
+def _answer(status: int, content_type: str, text: str, marker: str | None = None) -> SimpleNamespace:
+    headers = {"content-type": content_type}
+    if marker:
+        headers["x-agenticorg-shop-site"] = marker
+    return SimpleNamespace(status_code=status, headers=headers, text=text)
+
+
+ROBOTS = "User-agent: *\nSitemap: https://x/s.xml\n"
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (_answer(200, "text/plain; charset=utf-8", ROBOTS), "shop site live"),
+        (_answer(404, "application/json", '{"detail":"Not Found"}', "not-listed"), "not a listed network shop (404)"),
+        (_answer(503, "application/json", "{}", "unavailable"), "shop lookup failed; check again in a minute (503)"),
+        (_answer(401, "application/json", '{"detail":"Missing"}'), "deploy this release first (401)"),
+        # The API's own 404 without the marker is not the shop-site answer.
+        (_answer(404, "application/json", '{"detail":"Not Found"}'), "not reaching AgenticOrg yet (HTTP 404"),
+        (_answer(404, "text/html", "<h1>Page Not Found</h1>"), "not reaching AgenticOrg yet (HTTP 404, text/html)"),
+    ],
+)
+def test_check_host_reports_what_robots_txt_answers(answer: SimpleNamespace, expected: str) -> None:
+    seen: list[tuple[str, Any]] = []
+
+    def get(url: str, **kwargs: Any) -> SimpleNamespace:
+        seen.append((url, kwargs))
+        return answer
+
+    line = release.check_host("tea-corner.agenticorg.ai", get=get)
+    assert line.startswith("tea-corner.agenticorg.ai: ") and expected in line
+    assert seen == [("https://tea-corner.agenticorg.ai/robots.txt", {"timeout": 15, "follow_redirects": False})]
+
+
+def test_check_host_reports_a_host_that_does_not_answer() -> None:
+    def get(_url: str, **_kwargs: Any) -> SimpleNamespace:
+        raise TimeoutError
+
+    assert release.check_host("down.example", get=get) == "down.example: no answer (TimeoutError)"
+
+
+def test_release_then_checks_each_named_host(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(release, "_session", lambda _project: _Session())
+    checked: list[str] = []
+    monkeypatch.setattr(release, "check_host", lambda host: checked.append(host) or f"{host}: ok")
+    argv = ["--project", "example-project", "--site", SITE, "--check-host", "a.example", "--check-host", "b.example"]
+    assert release.main(argv) == 0
+    assert checked == ["a.example", "b.example"]
+    assert "a.example: ok" in capsys.readouterr().out
+    checked.clear()
+    assert release.main([*argv, "--dry-run"]) == 0
+    assert checked == []
+
+
 @pytest.mark.parametrize(("step", "label"), [("create", "create version"), ("finalize", "finalize version")])
 def test_a_refused_step_stops_with_its_name(monkeypatch: pytest.MonkeyPatch, step: str, label: str) -> None:
     session = _Session(fail_on=step)

@@ -4064,7 +4064,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 515,
+    "source_line": 610,
     "tenant_required": true
   },
   {
@@ -4082,7 +4082,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 533,
+    "source_line": 628,
     "tenant_required": true
   },
   {
@@ -4100,7 +4100,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 618,
+    "source_line": 713,
     "tenant_required": true
   },
   {
@@ -10062,6 +10062,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "network.feeds.read",
+    "auth_required": false,
+    "function": "list_network_feeds",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/network/feeds api/v1/network.py:list_network_feeds",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/network.py",
+    "path": "/api/v1/network/feeds",
+    "public_exempt_reason": "network-feed-index-lists-only-published-opted-in-shops",
+    "rate_limit": "public-read",
+    "scope": "public:network.directory.read",
+    "source_line": 158,
+    "tenant_required": false
+  },
+  {
     "audit_event": "network.directory.read",
     "auth_required": false,
     "function": "list_network_merchants",
@@ -10076,7 +10094,7 @@
     "public_exempt_reason": "network-directory-lists-only-published-opted-in-shops",
     "rate_limit": "public-read",
     "scope": "public:network.directory.read",
-    "source_line": 135,
+    "source_line": 142,
     "tenant_required": false
   },
   {
@@ -10094,7 +10112,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 316,
+    "source_line": 389,
     "tenant_required": false
   },
   {
@@ -10112,7 +10130,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.read",
-    "source_line": 330,
+    "source_line": 403,
     "tenant_required": false
   },
   {
@@ -10130,7 +10148,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 344,
+    "source_line": 417,
     "tenant_required": false
   },
   {
@@ -10148,7 +10166,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler-payment-handoff-only-never-executes",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 358,
+    "source_line": 431,
     "tenant_required": false
   },
   {
@@ -10166,7 +10184,7 @@
     "public_exempt_reason": "telegram-webhook-secret-checked-in-handler",
     "rate_limit": "provider-webhook",
     "scope": "public:network.telegram.webhook",
-    "source_line": 288,
+    "source_line": 361,
     "tenant_required": false
   },
   {
@@ -13318,6 +13336,114 @@
     "scope": "schemas.registry.sensitive.write",
     "source_line": 155,
     "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-shop-site-home",
+    "auth_required": false,
+    "function": "shop_site_home",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site api/v1/shop_site.py:shop_site_home",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 76,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-feed",
+    "auth_required": false,
+    "function": "shop_site_google_feed",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/feeds/google.xml api/v1/shop_site.py:shop_site_google_feed",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/feeds/google.xml",
+    "public_exempt_reason": "shop-product-feed-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 162,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-llms",
+    "auth_required": false,
+    "function": "shop_site_llms",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/llms.txt api/v1/shop_site.py:shop_site_llms",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/llms.txt",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 145,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-product",
+    "auth_required": false,
+    "function": "shop_site_product",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/products/{handle} api/v1/shop_site.py:shop_site_product",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/products/{handle}",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 93,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-robots",
+    "auth_required": false,
+    "function": "shop_site_robots",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/robots.txt api/v1/shop_site.py:shop_site_robots",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/robots.txt",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 130,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-shop-site-sitemap",
+    "auth_required": false,
+    "function": "shop_site_sitemap",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/shop-site/sitemap.xml api/v1/shop_site.py:shop_site_sitemap",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/shop_site.py",
+    "path": "/api/v1/shop-site/sitemap.xml",
+    "public_exempt_reason": "shop-storefront-public-host-bound-listed-shops-verified-catalog-only",
+    "rate_limit": "shop-site-read",
+    "scope": "public:network.storefront.read",
+    "source_line": 113,
+    "tenant_required": false
   },
   {
     "audit_event": "none-read-only-placeholder",

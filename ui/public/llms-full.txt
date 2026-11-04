@@ -833,6 +833,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Service Status](https://agenticorg.ai/status): The status page reports the current availability information exposed by AgenticOrg and provides a support path when an organization needs incident-specific help.
 - [Privacy Policy](https://agenticorg.ai/privacy): The privacy policy explains how AgenticOrg handles personal information and how people can submit questions or requests about that handling.
 - [Terms of Service](https://agenticorg.ai/terms): The terms of service describe the rules and responsibilities that apply when a customer or user accesses AgenticOrg services.
+- [Shopping Network Terms](https://agenticorg.ai/network-terms): The shopping network terms explain the roles of buyers, shops and AgenticOrg when buyers shop network shops from AI apps and Telegram.
 - [Refund and Cancellation Policy](https://agenticorg.ai/refund): The refund and cancellation policy describes how subscription cancellation and eligible billing requests are handled.
 - [AgenticOrg Documentation](https://agenticorg.ai/docs): The public user manual includes task-based setup and operating guides, source-verified product boundaries, troubleshooting and five end-to-end BFSI reference workflows.
 - [Start here](https://agenticorg.ai/docs/start-here): Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.
@@ -3781,7 +3782,7 @@ Figure: The buyer pays on your page. When the checkout is ready, AgenticOrg chec
 
 **Can I stop selling this way?** Yes. Choose **Pause** on the Sell everywhere page and your shop leaves the network at once. Your shop name and web address stay yours.
 
-**Am I in Google Gemini, Microsoft Copilot or Perplexity?** Not yet. AgenticOrg is registering with each of them for every shop on the network; the Sell everywhere page shows each one as it comes.
+**Am I in Google Gemini, Microsoft Copilot or Perplexity?** The Sell everywhere page shows where each one stands for your shop: not registered yet, submitted, live, or not eligible yet with the reason. Your web address already serves your shop's pages and a product feed, which each program reads once AgenticOrg is registered with it; see [Your shop pages and product feed](/docs/oacp-sell-everywhere#your-shop-pages-and-product-feed).
 
 #### Go deeper
 
@@ -4504,7 +4505,7 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 | ChatGPT, Claude and other AI apps | They add AgenticOrg's server, `https://mcp.agenticorg.ai/mcp`, once as a custom MCP server. They can then list the network's shops, search them, open or update a checkout and get the payment link | Nothing |
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot. The page shows your exact link | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
-| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
+| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | AgenticOrg registers the whole network with each program, which then reads your shop's own pages and product feed at your web address. The page shows where each one stands for your shop | Keep a price, stock and an image on each product |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
 #### Watch it end to end
@@ -4742,10 +4743,41 @@ The page lists each surface and where it stands:
 | Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
 | Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
-| Coming: registration in progress | AgenticOrg is still registering with that program. |
+| Coming: AgenticOrg has not registered yet | Your shop qualifies; AgenticOrg has not registered the network with that program yet. |
+| Submitted, waiting for approval | AgenticOrg has applied to that program for the network (or for your shop) and is waiting for its answer. |
+| Not eligible yet | Your shop does not qualify yet. The row says why: Sell everywhere is off, your web address is not live yet, Grantex has not verified your catalog yet, or no product has a price, a stock figure and an image. |
 | Off | Sell everywhere is paused or not turned on. For Payments: you have not chosen where buyers pay. |
 
+The ChatGPT, Claude and other AI apps row also shows where the AgenticOrg app stands in the ChatGPT app
+directory. While it is not listed there, buyers add the server address themselves.
+
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
+
+#### Your shop pages and product feed
+
+Once your shop is on the network and your web address is live, the address also serves a small shop
+site built from your catalog, for search engines, shopping programs and AI agents:
+
+| Address | What it shows |
+| --- | --- |
+| `https://<your address>/` | Your shop name, your products with price and stock, your shipping and returns text, and how to buy |
+| `https://<your address>/products/...` | One page per product: price, stock, images, description, your product details, shipping and returns, and the product's structured data (barcode and shipping included when you gave them) |
+| `https://<your address>/feeds/google.xml` | Your product feed, in the format Google Merchant Center and Microsoft Merchant Center read |
+| `https://<your address>/sitemap.xml`, `/robots.txt`, `/llms.txt` | The list of your pages for crawlers and AI agents |
+
+Everything comes from your catalog as buyer agents see it: the newest read of each source (Shopify or
+your upload), only while Grantex verifies your catalog, prices and stock. While it does not, the pages
+answer "try again in a few minutes", so the programs keep what they already have.
+
+The feed lists each product option with its price and stock. A product is left out of the feed when
+it has no price, a price of zero, no stock figure or no image. Add the barcode (GTIN) where your products
+have one; without it the feed says the product has no standard identifier. Your flat shipping fee goes in
+the feed for the countries you named; Shopify shipping rates are set in the merchant center instead. A
+used or refurbished item needs a product detail named `condition` with the value `used` or
+`refurbished`; otherwise items are listed as new.
+
+The product pages have no basket of their own. They link to your own store's product page when your
+catalog gives one, to the AgenticOrg shopping bot on Telegram and to the MCP server address.
 
 ### How a search across shops is ordered
 
@@ -4837,7 +4869,7 @@ Choose **Pause** on the page. New network checkouts are refused at once, and you
 
 - **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat; when it is ready, the buyer gets a link to your own Shopify checkout or Plural payment page and pays you there. See [Getting paid](/docs/oacp-getting-paid).
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
-- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else.
+- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else. Your web address also shows your shop's pages and product feed, built from the catalog, policies and shop details you publish to buyers.
 
 Agents never pay on a buyer's behalf here. The AI apps and the Telegram bot have no tool that pays, and a
 network Complete that carries a payment instrument, decision or mandate is refused.
@@ -5351,6 +5383,7 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_NETWORK_SERVICE_TOKEN` | Empty | The credential the hosted MCP server presents to the network checkout gateway (at least 32 characters, from the secret manager). Empty, the gateway refuses every call. |
 | `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The platform profile network checkouts are opened for. |
 | `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts when turning Sell everywhere on. |
+| `AGENTICORG_NETWORK_REGISTRATIONS` | Empty | Where the network stands with the ChatGPT app directory, Google, Microsoft and Perplexity, as JSON (`not_started`, `submitted` or `live`, optionally per shop). Empty, every program shows as not registered yet. |
 | `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the webhook of the public AgenticOrg shopping bot on Telegram. Off, it answers 404. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The bot's username, for each shop's `t.me/<bot>?start=<shop>` link. Empty, no Telegram link is shown. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN`, `AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret, from the secret manager. |
@@ -5397,6 +5430,7 @@ These switches belong to the path where AgenticOrg charges through a payment pro
 | --- | --- | --- |
 | MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
 | MCP server `MCP_NETWORK_DIRECTORY_URL` and `AGENTICORG_NETWORK_SERVICE_TOKEN` | Unset | Network mode: one hosted server serves every listed shop, with list, search, checkout and payment-link tools and no tool that pays. |
+| MCP server `MCP_OPENAI_APPS_CHALLENGE` | Unset | The ChatGPT app directory's domain-verification token, served at `/.well-known/openai-apps-challenge`. Unset, that path answers 404. |
 | Merchant `provider_policy.payments` | None | Where buyers pay: `shopify_cart` or `plural_hosted`, set in the Payments step of Sell Everywhere. None means no payment link. |
 | Merchant `provider_policy.arbiter` | None | Your order limits: per order, per day, items per order and currency, set in the Order limits step. |
 | Merchant `provider_policy.ucp.fulfillment.flat_rates` | None | Your flat shipping fee, for a shop without Shopify, set in the policies step. |

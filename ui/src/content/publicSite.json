@@ -137,6 +137,18 @@
       "keywords": ["AgenticOrg terms", "terms of service", "acceptable use", "software terms"]
     },
     {
+      "path": "/network-terms",
+      "name": "Shopping Network Terms",
+      "title": "AgenticOrg Shopping Network Terms",
+      "description": "Draft terms for buyers and shops on the AgenticOrg shopping network: each shop is the seller and takes payment itself; AgenticOrg lists shops and opens checkouts.",
+      "summary": "The shopping network terms explain the roles of buyers, shops and AgenticOrg when buyers shop network shops from AI apps and Telegram.",
+      "section": "Legal",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "What terms apply to buying from shops on the AgenticOrg shopping network?",
+      "keywords": ["AgenticOrg shopping network", "network terms", "buyer terms", "merchant listing terms"]
+    },
+    {
       "path": "/refund",
       "name": "Refund and Cancellation Policy",
       "title": "AgenticOrg Refund and Cancellation Policy",

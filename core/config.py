@@ -548,6 +548,12 @@ class Settings(BaseSettings):
     # Version of the network terms a merchant accepts when it turns the network on.
     # Env: AGENTICORG_NETWORK_TERMS_VERSION.
     network_terms_version: str = "2026-10-25"
+    # Where the network stands with each outside program (core/commerce/network_registrations.py),
+    # set by the operator as programs approve it: a JSON object mapping chatgpt, google, microsoft
+    # and perplexity to not_started, submitted or live, or to {"status": ..., "shops": {slug: status}}
+    # where a program approves shops one by one (a Google Merchant Center sub-account per shop).
+    # Empty or invalid: every program is not_started. Env: AGENTICORG_NETWORK_REGISTRATIONS.
+    network_registrations: str = ""
     # The public network Telegram bot's username (without @), for deep links
     # t.me/<bot>?start=<slug>. Empty: no Telegram link is shown.
     # Env: AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME.

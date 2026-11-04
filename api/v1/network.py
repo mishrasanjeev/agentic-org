@@ -6,6 +6,9 @@ Public, under ``/api/v1/network`` (no session; every route answers 404 while
 
 * ``GET /network/merchants`` - the listed shops that are servable right now: slug,
   name, categories, the UCP profile URL and the Telegram deep link.
+* ``GET /network/feeds`` - the same shops' web addresses and product feeds
+  (``https://<host>/feeds/google.xml``, ``api.v1.shop_site``) with the number of
+  eligible items, the index the operator adds to the Merchant Center accounts.
 * ``POST /network/shops/{slug}/checkout-sessions``, ``GET``/``PUT
   /network/shops/{slug}/checkout-sessions/{id}`` - open, read and update a
   checkout at a listed shop for the AgenticOrg network platform. Only the
@@ -46,10 +49,13 @@ step's failure undoes an earlier one; the page shows where it stopped.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
+import time
 import uuid
+import weakref
 from typing import Any
 
 import structlog
@@ -71,10 +77,11 @@ from api.v1.commerce_ucp_publishing import (
     publish_profile,
     publish_refusal,
 )
-from core.commerce import grantex_enrolment
+from core.commerce import grantex_enrolment, shop_site_store
 from core.commerce import network as net
 from core.commerce.c6z_runtime_vertical import DEMO_SOURCE_SYSTEM
 from core.commerce.ledger import record_commerce_event_in_own_transaction
+from core.commerce.network_registrations import FeedSummary
 from core.commerce.ucp.catalog import verified_catalog_source
 from core.commerce.ucp.state import attested_host, is_published, ucp_state
 from core.commerce.ucp.store import load_shared_cache_records
@@ -136,6 +143,72 @@ async def list_network_merchants() -> JSONResponse:
     _require_network()
     shops = await net.directory()
     return JSONResponse({"shops": shops, "count": len(shops)}, headers={"Cache-Control": "public, max-age=60"})
+
+
+@router.get("/feeds")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:network.directory.read",
+    rate_limit="public-read",
+    idempotency="read-only",
+    audit_event="network.feeds.read",
+    public_reason="network-feed-index-lists-only-published-opted-in-shops",
+)
+async def list_network_feeds() -> JSONResponse:
+    """Every servable shop's web address and product feed, for the operator's Merchant Center accounts.
+
+    One entry per shop in the public directory: its web address (the website a Merchant Center
+    sub-account claims), its feed URL, sitemap, and how many items the feed holds now. The whole
+    index is built at most once per FEED_INDEX_TTL_SECONDS per instance (one build at a time,
+    FEED_INDEX_CONCURRENCY shops at once), so repeated anonymous calls never load catalogs again.
+    """
+    _require_network()
+    return JSONResponse(await _feed_index(), headers={"Cache-Control": "public, max-age=300"})
+
+
+FEED_INDEX_TTL_SECONDS = 300.0
+FEED_INDEX_CONCURRENCY = 4
+# enterprise-gate: process-local-ok reason=feed index cache expires on its ttl; the database is the source of truth
+_FEED_INDEX: dict[str, tuple[float, dict[str, Any]]] = {}
+# One build at a time per event loop (an asyncio lock belongs to the loop that first waits on it).
+_FEED_INDEX_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = weakref.WeakKeyDictionary()
+
+
+def reset_feed_index_cache() -> None:
+    _FEED_INDEX.clear()
+
+
+async def _feed_entry(shop: dict[str, Any], gate: asyncio.Semaphore) -> dict[str, Any]:
+    host = str(shop["host"])
+    async with gate:
+        site = await shop_site_store.load_site(host)
+    summary = shop_site_store.feed_summary_of(site) if site is not None else None
+    return {
+        "slug": shop["slug"],
+        "name": shop["name"],
+        "website_url": f"https://{host}/",
+        "feed_url": f"https://{host}/feeds/google.xml",
+        "sitemap_url": f"https://{host}/sitemap.xml",
+        "catalog_verified": bool(summary and summary.catalog_verified),
+        "eligible_items": summary.eligible_items if summary else 0,
+    }
+
+
+async def _feed_index() -> dict[str, Any]:
+    cached = _FEED_INDEX.get("all")
+    if cached is not None and cached[0] > time.monotonic():
+        return cached[1]
+    lock = _FEED_INDEX_LOCKS.setdefault(asyncio.get_running_loop(), asyncio.Lock())
+    async with lock:
+        cached = _FEED_INDEX.get("all")
+        if cached is not None and cached[0] > time.monotonic():
+            return cached[1]
+        gate = asyncio.Semaphore(FEED_INDEX_CONCURRENCY)
+        feeds = list(await asyncio.gather(*(_feed_entry(shop, gate) for shop in await net.directory())))
+        index = {"format": "rss-2.0-google-merchant", "shops": feeds, "count": len(feeds)}
+        _FEED_INDEX["all"] = (time.monotonic() + FEED_INDEX_TTL_SECONDS, index)
+        return index
 
 
 # --- checkout gateway (network service credential) ----------------------------------------------
@@ -413,12 +486,13 @@ async def _view(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -
             )
     artifacts = verified_catalog_source(cache_records=shared, products=[], now_iso=runtime._now_iso())
     setup = await setup_view(tenant_id, config.merchant_id)
+    feed = await _feed_summary(tenant_id, config, listing, domain)
     return {
         "enabled": True,
         "terms_version": settings.network_terms_version,
         "suggested_slug": net.slugify(config.merchant_display_name or config.merchant_id),
         "listing": net.listing_view(listing),
-        "surfaces": net.surfaces_view(listing, config, domain),
+        "surfaces": net.surfaces_view(listing, config, domain, feed=feed),
         "platform_subdomains": {
             "apex": net.platform_apex() or None,
             "in_use": in_use,
@@ -432,6 +506,27 @@ async def _view(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -
         },
         "setup": {"missing": setup["missing"], "ready_to_turn_on": setup["ready_to_turn_on"]},
     }
+
+
+async def _feed_summary(tenant_id: str, config: Any, listing: Any, domain: Any) -> FeedSummary | None:
+    """What the shop's product feed holds now, once the shop is listed on a live web address (else None)."""
+    host = net.published_host(config)
+    if listing is None or listing.status != "listed" or host is None or not net.web_address_live(domain, host):
+        return None
+    try:
+        return await shop_site_store.feed_summary(
+            slug=listing.slug,
+            name=listing.display_name,
+            host=host,
+            tenant_id=tenant_id,
+            merchant_id=config.merchant_id,
+            seller_agent_id=config.seller_agent_id or "",
+            config=config,
+        )
+    # enterprise-gate: broad-except-ok reason=the-page-shows-the-catalog-as-not-verified-and-the-error-is-logged
+    except Exception as exc:
+        logger.warning("network_feed_summary_failed", error_type=type(exc).__name__)
+        return None
 
 
 def _publication_view(config: Any) -> dict[str, Any]:
