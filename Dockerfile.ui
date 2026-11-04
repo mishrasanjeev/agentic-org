@@ -1,7 +1,7 @@
 # SEC-010: production base images pinned by digest. Refresh via
 # scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
 # node:26-slim @ 2026-05-01
-FROM node:26-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS builder
+FROM node:26-slim@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39 AS builder
 WORKDIR /app/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -44,7 +44,7 @@ ENV VITE_NATIVE_CONNECTOR_PREFILL_ENABLED=$VITE_NATIVE_CONNECTOR_PREFILL_ENABLED
 RUN npm run build
 
 # nginx:alpine @ 2026-05-01
-FROM nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+FROM nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
 # CVE-2026-93990: the base ships libexpat 2.8.4-r0 and no nginx:alpine digest
 # carries the fix yet. Upgrade in place, and fail the build if the fixed
 # package is unavailable. Drop this once the base digest carries 2.8.5-r0.
