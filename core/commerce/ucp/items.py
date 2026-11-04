@@ -10,6 +10,9 @@ catalog's ISO 4217 minor-unit conversion. Price, stock and title go through the
 merchant's per-fact-family source precedence
 (``core.commerce.source_precedence.products_with_precedence``), exactly as the
 catalog routes do; without a precedence table or saved facts Shopify's stand.
+A variant whose SKU another variant of the same catalog shares is not offered
+(``core.commerce.catalog_health.without_ambiguous_skus``), as the catalog leaves it out,
+and neither is one without a usable price.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from core.commerce.catalog_health import without_ambiguous_skus
 from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.catalog import minor_units, ucp_variant_id
 from core.commerce.ucp.merchant import MerchantUcp
@@ -82,7 +86,7 @@ class ProductEvidenceCatalog:
         if not wanted:
             return {}
         policy = merchant.raw_config.get("provider_policy") if isinstance(merchant.raw_config, Mapping) else None
-        products = products_with_precedence(await self._loader(merchant), policy)
+        products = products_with_precedence(without_ambiguous_skus(await self._loader(merchant)), policy)
         found: dict[str, CatalogItem] = {}
         for product in products:
             for variant in product.get("variants") or ():

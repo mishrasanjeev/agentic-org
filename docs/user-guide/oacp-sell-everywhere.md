@@ -114,12 +114,63 @@ extra details. If a row has a problem, nothing is stored and the
 page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
 a store system. Upload again whenever your products change.
 
+A file can also be stored with warnings: products with no `image_url`, no `description` or no `barcode`.
+They are still offered to buyers, and the page lists the first rows of each so you can fill them in later.
+
+### Catalog check
+
+Under **Your catalog** the page checks the catalog AgenticOrg last read (your Shopify store or your file)
+and lists what to fix, with the number of products or variants, a few examples and how to fix each in
+Shopify or in your file. Only you see this check. The network never ranks or hides shops by it, and
+search order stays random.
+
+These variants are **not offered to buyers** until you fix them:
+
+| Problem | Why |
+| --- | --- |
+| No usable price | A variant with no price, a price that is not a number, or no currency is never listed and never checks out. |
+| SKU used by more than one variant | One SKU on several variants of your catalog could sell the wrong item or the wrong stock, so none of them is listed or sold. Give every variant its own SKU. A variant with no SKU is still offered. |
+| Stock below zero | Shown as out of stock, so it cannot be ordered. Correct the count in Shopify. |
+
+These are offered, but buyers or their AI assistants get less to go on:
+
+| Warning | What it means |
+| --- | --- |
+| No SKU | Orders are harder to match to your own records. |
+| Stock not tracked | Shopify does not track the quantity, so buyers cannot be told whether it is in stock. Tick **Track quantity** under Inventory in Shopify. |
+| Out of stock | Listed as out of stock until you restock it. |
+| No image, no description | Buyers' AI assistants show no photo, or have only the title. |
+| No barcode (GTIN) | The product cannot be matched to the same product at other shops. |
+| Very short title | Harder to find by search. A title such as brand, product and size works best. |
+
+Select **Read catalog again** after a fix in Shopify; upload the file again after a fix in your file.
+
 ### Shipping fee
 
 A shop that uploads its catalog sets one shipping fee per order in the policies step, with its currency and
 the countries it ships to (two-letter codes such as `IN`; leave them empty to ship everywhere). Enter 0 to
 ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
 Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
+
+A Shopify shipping zone that covers only some states or provinces of a country is followed too: a buyer's
+address must name a state in that zone, by code or name (`KA` or `Karnataka`). When the zone names states
+and the address has none, the buyer's AI app is asked for the state before any shipping option is offered.
+
+### Delivery area
+
+A local shop can deliver only to some postal codes. In the policies step, enter the start of the postal
+codes you deliver to under **Delivers only to postal codes starting with**, separated by commas. For
+example, `5600, 5601` covers Indian PIN codes 560001 to 560199. Up to 50 prefixes, each up to 10 letters or
+digits; spaces and hyphens are ignored. Leave it empty to deliver wherever your shipping rates reach.
+
+With a delivery area set, the checkout checks the buyer's postal code before it offers shipping, for
+Shopify rates and your own fee alike:
+
+- **Outside the area.** No shipping option is offered and no payment link is issued. The buyer's AI app
+  is told, for example "This shop delivers only to postal codes starting with 5600 or 5601; 570001 is
+  outside it."
+- **No postal code in the address.** The buyer's AI app is asked for it first.
+- **Store pickup** is not affected.
 
 ### Store pickup
 
@@ -213,6 +264,10 @@ sell the same product (the same barcode with a valid check digit), the answer al
 with each shop's price and stock for that item, lowest price first (in the currency most of those shops
 use). Adding the barcode to your products lets a buyer's AI app see that you sell the same item as
 another shop and compare the offers.
+
+The buyer chooses the shop. A buyer can leave shops out of a search, or keep to a few: AI apps pass the
+shops to leave out, and on Telegram the buyer sends `/avoid <shop>`. The other shops are still asked in a
+fresh random order, and the buyer is never sent to a checkout at a shop they left out.
 
 ### When a price or stock changes
 

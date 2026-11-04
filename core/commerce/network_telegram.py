@@ -11,8 +11,12 @@ hosted checkout), where the buyer pays. It has no tool that cancels or pays.
 
 * ``/start <slug>`` (the deep link ``t.me/<bot>?start=<slug>``) picks a shop for the chat;
   ``/shops`` lists the network; ``/stop`` forgets the chat; anything else goes to the shopper.
-* Chat state (the chosen shop and the last few turns, never tool output) lives in Redis under a
-  SHA-256 of the chat id for seven days; the turns expire after 30 minutes of quiet.
+* ``/avoid <shop>`` leaves a shop out of the chat's searches and checkouts (``/avoid`` lists the
+  avoided shops, ``/avoid clear`` empties the list, ``/allow <shop>`` takes one off it); the buyer
+  may also just say so, and the shopper's ``avoid_shop`` tool records it. Every other shop is
+  still searched in a fresh random order.
+* Chat state (the chosen shop, the avoided shops and the last few turns, never tool output) lives
+  in Redis under a SHA-256 of the chat id for seven days; the turns expire after 30 minutes of quiet.
 * Each chat may send ``network_telegram_chat_limit_per_hour`` messages an hour, and the bot as a
   whole ``network_telegram_global_limit_per_minute`` a minute; over either, a short "try later".
 * Telegram update ids are claimed once, so a resent update is never answered twice.
@@ -57,11 +61,14 @@ NETWORK_PRODUCTS = 20
 NETWORK_DESCRIPTION = 120
 SHOP_PRODUCTS = 5
 MAX_TEXT = 1000
+# At most this many shops on a chat's avoid list.
+MAX_AVOIDED_SHOPS = 50
 
 WELCOME = (
     "Hi! I can find products at shops on the AgenticOrg network and open a checkout for you. "
     "I never take payment: when your checkout is ready I give you a link to the shop's own payment page.\n\n"
-    'Try: "find masala chai". Send /shops to see the shops, or /stop to make me forget this chat.'
+    'Try: "find masala chai". Send /shops to see the shops, /avoid <shop> to leave a shop out, '
+    "or /stop to make me forget this chat."
 )
 BUSY = "I'm getting a lot of messages right now. Please try again in a little while."
 TOO_MANY = "You've sent a lot of messages this hour. Please try again a bit later."
@@ -97,6 +104,11 @@ SYSTEM_PROMPT = "\n".join(
         "- Shops come back in a random order on every search, and AgenticOrg does not rank them: never favour a",
         "  shop or product for being listed first. Compare what the buyer cares about (price, stock, details).",
         "  When same_product_at_several_shops lists one product at several shops, show the buyer the choice.",
+        "- The buyer chooses the shop. When products come from several shops, ask which shop they want before",
+        "  opening a checkout, and tell them they can leave a shop out (/avoid <shop>).",
+        "- If the buyer says they do not want a shop, call avoid_shop with it. Never search, open a checkout or",
+        "  get a payment link at a shop the buyer avoids; searches already leave those shops out. If the buyer",
+        "  wants an avoided shop again, call allow_shop first.",
     ]
 )
 
@@ -393,11 +405,56 @@ def _shuffle(items: list[Any]) -> None:
     random.shuffle(items)  # noqa: S311  # nosec B311 - not security-sensitive: the order of shops in one answer
 
 
-class ShopperTools:
-    """The bot's tools; ``shop`` defaults to the chat's chosen shop."""
+def _avoided_refusal(slug: str) -> dict[str, Any]:
+    return {
+        "error": f"The buyer asked to avoid the shop {slug!r}. Do not use it; offer another shop, "
+        "or call allow_shop only if the buyer asks for this shop again."
+    }
 
-    def __init__(self, chosen_shop: str | None) -> None:
+
+async def _find_shop(text: str) -> dict[str, Any] | None:
+    """The directory entry a buyer named, by slug or by shop name (case does not matter)."""
+    wanted = text.strip().lower()
+    if not wanted:
+        return None
+    shops = await net.directory()
+    return next((s for s in shops if s["slug"] == wanted), None) or next(
+        (s for s in shops if str(s.get("name") or "").strip().lower() == wanted), None
+    )
+
+
+class ShopperTools:
+    """The bot's tools; ``shop`` defaults to the chat's chosen shop.
+
+    ``avoided`` is the chat's avoid list (the same list object as the chat state's, so what the
+    ``avoid_shop`` and ``allow_shop`` tools change is saved with the turn).
+    """
+
+    def __init__(self, chosen_shop: str | None, avoided: list[str] | None = None) -> None:
         self.chosen_shop = chosen_shop
+        self.avoided: list[str] = avoided if avoided is not None else []
+
+    def _refused(self, slug: str | None) -> dict[str, Any] | None:
+        return _avoided_refusal(slug) if slug and slug in self.avoided else None
+
+    async def avoid_shop(self, shop: str) -> dict[str, Any]:
+        """Leave a shop out of this chat's searches and checkouts."""
+        found = await _find_shop(shop)
+        if found is None:
+            return {"error": f"No shop {shop!r} in the network."}
+        if found["slug"] not in self.avoided:
+            if len(self.avoided) >= MAX_AVOIDED_SHOPS:
+                return {"error": f"The buyer already avoids {MAX_AVOIDED_SHOPS} shops."}
+            self.avoided.append(found["slug"])
+        return {"avoided_shops": list(self.avoided)}
+
+    async def allow_shop(self, shop: str) -> dict[str, Any]:
+        """Take a shop off this chat's avoid list."""
+        found = await _find_shop(shop)
+        slug = found["slug"] if found else shop.strip().lower()
+        if slug in self.avoided:
+            self.avoided.remove(slug)
+        return {"avoided_shops": list(self.avoided)}
 
     async def list_shops(self) -> dict[str, Any]:
         shops = await net.directory()
@@ -405,14 +462,17 @@ class ShopperTools:
 
     async def search(self, query: str, shop: str | None = None) -> dict[str, Any]:
         slug = shop or self.chosen_shop
+        if refused := self._refused(slug):
+            return refused
         shops = await net.directory()
         if slug:
             targets = [s for s in shops if s["slug"] == slug]
             if not targets:
                 return {"error": f"No shop {slug!r} in the network."}
         else:
-            # A fresh random order each search: no shop is always first, or always past the limit.
-            targets = list(shops)
+            # The buyer's avoided shops are left out first; then a fresh random order each search,
+            # so no other shop is always first, or always past the limit.
+            targets = [s for s in shops if s["slug"] not in self.avoided]
             _shuffle(targets)
             targets = targets[:MAX_SEARCH_SHOPS]
         gate = asyncio.Semaphore(SEARCH_CONCURRENCY)
@@ -440,14 +500,19 @@ class ShopperTools:
         if not slug and len(shops) > len(targets):
             body["shops_searched"] = len(targets)
             body["shops_in_network"] = len(shops)
+        if not slug and self.avoided:
+            body["shops_avoided_by_buyer"] = list(self.avoided)
         return body
 
     async def open_checkout(self, shop: str, item_id: str, quantity: int = 1) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415 - the API module wires the UCP runtime
 
+        slug = shop or self.chosen_shop or ""
+        if refused := self._refused(slug):
+            return refused
         quantity = max(1, min(int(quantity), 20))
         body = {"line_items": [{"item": {"id": item_id}, "quantity": quantity}]}
-        return _for_model(await network_checkout(shop or self.chosen_shop or "", "create_checkout", body))
+        return _for_model(await network_checkout(slug, "create_checkout", body))
 
     async def get_checkout(self, shop: str, checkout_id: str) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415
@@ -470,6 +535,8 @@ class ShopperTools:
         from api.v1.network import network_checkout  # noqa: PLC0415
 
         slug = shop or self.chosen_shop or ""
+        if refused := self._refused(slug):
+            return refused
         return _for_model(await network_checkout(slug, "complete_checkout", None, checkout_id))
 
     async def choose_pickup(self, shop: str, checkout_id: str, location: str | None = None) -> dict[str, Any]:
@@ -606,6 +673,16 @@ def _langchain_tools(tools: ShopperTools) -> list[Any]:
             name="choose_pickup",
             description="Choose store pickup for a checkout; pass location only when the shop has several. No payment.",
         ),
+        StructuredTool.from_function(
+            coroutine=tools.avoid_shop,
+            name="avoid_shop",
+            description="The buyer does not want a shop (slug or name): leave it out of searches and checkouts.",
+        ),
+        StructuredTool.from_function(
+            coroutine=tools.allow_shop,
+            name="allow_shop",
+            description="The buyer wants a shop they avoided again: take it off the avoid list.",
+        ),
     ]
 
 
@@ -630,7 +707,7 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
         await assert_under_gemini_platform_cap(0.0)
     else:
         await assert_under_gemini_cap(0.0)
-    tools = ShopperTools(state.get("shop"))
+    tools = ShopperTools(state.get("shop"), _avoid_list(state))
     bound = _langchain_tools(tools)
     by_name = {t.name: t for t in bound}
     base = (model_factory or _default_model)()
@@ -638,6 +715,8 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
     system = SYSTEM_PROMPT
     if state.get("shop"):
         system += f"\n\nThe buyer chose the shop {state.get('shop_name') or state['shop']} (slug {state['shop']})."
+    if tools.avoided:
+        system += "\n\nThe buyer avoids these shops (slugs): " + ", ".join(tools.avoided) + "."
     messages: list[Any] = [SystemMessage(content=system)]
     for turn in state.get("turns") or []:
         messages.append(HumanMessage(content=str(turn.get("user", ""))))
@@ -681,6 +760,54 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
 
 # --- one update -------------------------------------------------------------------------------
 
+
+def _avoid_list(state: dict[str, Any]) -> list[str]:
+    """The chat state's avoid list (created when missing)."""
+    stored = state.get("avoid")
+    avoided = [slug for slug in stored if isinstance(slug, str)] if isinstance(stored, list) else []
+    state["avoid"] = avoided[:MAX_AVOIDED_SHOPS]
+    return state["avoid"]
+
+
+async def _avoid_command(state: dict[str, Any], command: str, argument: str) -> str:
+    """``/avoid``, ``/avoid <shop>``, ``/avoid clear`` and ``/allow <shop>`` (no model call)."""
+    avoided = _avoid_list(state)
+    if command == "/avoid" and not argument:
+        if not avoided:
+            return "You're not avoiding any shop. Send /avoid <shop> to leave a shop out of your searches."
+        return (
+            "I leave these shops out of your searches and checkouts: "
+            + ", ".join(avoided)
+            + ". Send /allow <shop> to shop at one again, or /avoid clear to clear the list."
+        )
+    if command == "/avoid" and argument.lower() == "clear":
+        avoided.clear()
+        return "Done. I'll search every shop again."
+    tools = ShopperTools(state.get("shop"), avoided)
+    if command == "/allow":
+        if not argument:
+            return "Send /allow <shop> with the shop to shop at again."
+        before = len(avoided)
+        await tools.allow_shop(argument)
+        if len(avoided) == before:
+            return "That shop isn't on your avoid list. Send /avoid to see the list."
+        return "Done. I'll include that shop in your searches again."
+    if len(avoided) >= MAX_AVOIDED_SHOPS:
+        return f"You're already avoiding {MAX_AVOIDED_SHOPS} shops. Send /avoid clear to start again."
+    found = await _find_shop(argument)
+    if found is None:
+        return "I couldn't find that shop. Send /shops to see the shops on the network."
+    await tools.avoid_shop(found["slug"])
+    if state.get("shop") == found["slug"]:
+        # The chosen shop was the one avoided: the chat shops the rest of the network again.
+        state.pop("shop", None)
+        state.pop("shop_name", None)
+    return (
+        f"OK. I'll leave {found['name']} out of your searches and never open a checkout there. "
+        f"Send /allow {found['slug']} to undo, or /avoid to see the list."
+    )
+
+
 Sender = Callable[[str, str], Awaitable[None]]
 
 
@@ -699,6 +826,10 @@ async def respond(chat_id: str, text: str, *, model_factory: ModelFactory | None
             return "No shops are open on the network right now."
         lines = [f"- {s['name']}: /start {s['slug']}" for s in shops[:20]]
         return "Shops on the AgenticOrg network:\n" + "\n".join(lines)
+    if command in ("/avoid", "/allow"):
+        reply = await _avoid_command(state, command, argument.strip())
+        await save_state(chat, state)
+        return reply
     if command in ("/start", "/help"):
         slug = argument.strip().lower()
         if slug:
@@ -707,6 +838,10 @@ async def respond(chat_id: str, text: str, *, model_factory: ModelFactory | None
             except net.NetworkError:
                 return "I couldn't find that shop. Send /shops to see the shops on the network."
             state.update(shop=shop.slug, shop_name=shop.display_name, turns=[])
+            # Picking a shop is the buyer's choice: it comes off the avoid list.
+            avoided = _avoid_list(state)
+            if shop.slug in avoided:
+                avoided.remove(shop.slug)
             await save_state(chat, state)
             return (
                 f'You\'re shopping at {shop.display_name}. Ask me for a product, for example "show me your teas". '

@@ -22,6 +22,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
+from core.commerce.catalog_health import without_ambiguous_skus
 from core.commerce.oacp_artifacts import DurableOacpArtifactCacheRepository, OacpArtifactCacheRepositoryQuery
 from core.commerce.oacp_merchant_config import merchant_config_id
 from core.commerce.ucp.items import newest_per_source
@@ -202,7 +203,10 @@ async def load_catalog_inputs(
     """Shared (buyer-agnostic) cache records and synced products for the merchant scope.
 
     Each product carries ``_evidence_currency`` from its connector evidence row
-    as the currency fallback for variants without one.
+    as the currency fallback for variants without one. Variants whose SKU another
+    variant of the same snapshot shares are left out
+    (``core.commerce.catalog_health.without_ambiguous_skus``): the checkout does not
+    sell them either.
     """
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         records = await _shared_records(session, tenant_id, merchant_id, seller_agent_id)
@@ -220,7 +224,7 @@ async def load_catalog_inputs(
     products: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in newest_per_source(evidence_rows):
-        for product in row.products or []:
+        for product in without_ambiguous_skus(list(row.products or [])):
             if not isinstance(product, Mapping):
                 continue
             ref = str(product.get("product_ref") or "")

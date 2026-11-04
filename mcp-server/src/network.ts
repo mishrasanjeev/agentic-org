@@ -17,7 +17,9 @@
  *
  * A search across the network does not rank shops: it asks up to MAX_SEARCH_SHOPS of them, picked and
  * ordered at random on every search, and also lists the same product (by barcode) sold by several
- * shops with each shop's offer, lowest price first within the group's main currency.
+ * shops with each shop's offer, lowest price first within the group's main currency. The buyer may
+ * leave shops out (`exclude_shops`) or keep to some (`only_shops`); both apply before the shuffle, so
+ * the shops that remain are still picked and ordered at random.
  */
 
 import { randomUUID } from "node:crypto";
@@ -357,6 +359,9 @@ const REPLACE = { readOnlyHint: false, destructiveHint: true, idempotentHint: tr
 const HANDOFF = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
 const shopSchema = z.string().regex(SLUG, "a shop slug from list_shops").describe("The shop's network slug, from list_shops or a search result");
+// At most this many slugs in exclude_shops or only_shops.
+const MAX_SHOP_FILTER = 50;
+const shopListSchema = z.array(z.string().regex(SLUG, "a shop slug from list_shops")).max(MAX_SHOP_FILTER);
 const idSchema = z
   .string()
   .min(1)
@@ -398,28 +403,48 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
         "Every product names its `shop`, which the checkout tools need. Shops come back in a random order on " +
         "every search and are not ranked, so do not favour one for being first; `same_products` lists one " +
         "product (by barcode) sold by several shops, with each shop's offer. Across shops each shop sends " +
-        "3 products unless request.pagination.limit asks for more (up to 10).",
+        "3 products unless request.pagination.limit asks for more (up to 10). The buyer chooses the shop: " +
+        "pass the shops they do not want in `exclude_shops` (or the only ones they want in `only_shops`), " +
+        "and never open a checkout at a shop the buyer excluded.",
       inputSchema: {
         request: objectSchema.describe('UCP catalog search request, e.g. {"query":"chai","context":{"currency":"INR"}}'),
         shop: shopSchema.optional(),
+        exclude_shops: shopListSchema
+          .optional()
+          .describe("Shop slugs the buyer does not want to buy from; they are left out of the search (up to 50)"),
+        only_shops: shopListSchema
+          .optional()
+          .describe("Search only these shop slugs, still in random order (up to 50)"),
       },
       annotations: READ,
     },
-    async ({ request, shop }) => {
+    async ({ request, shop, exclude_shops, only_shops }) => {
       let shops: NetworkShop[];
       try {
         shops = await net.shops();
       } catch {
         return errorResult({ status: 503, code: "unavailable", content: "The network directory is unavailable; retry later." });
       }
+      const excluded = new Set(exclude_shops ?? []);
+      const only = only_shops && only_shops.length ? new Set(only_shops) : null;
       if (shop) {
+        if (excluded.has(shop)) {
+          return errorResult({
+            status: 400,
+            code: "shop_excluded",
+            content: `"${shop}" is in exclude_shops: the buyer does not want this shop. Ask the buyer before searching it.`,
+          });
+        }
         const one = shops.find((s) => s.slug === shop);
         if (!one) return unknownShop(shop);
         const result = await publicCatalogCall(net, one, "/catalog/search", CATALOG_SEARCH, request, SEARCH_TIMEOUT_MS * 6);
         return result.ok ? okResult(withShop(one.slug, result.body)) : errorResult(result.error);
       }
-      // A fresh random order (and, past MAX_SEARCH_SHOPS, a fresh random pick) on every search.
-      const targets = shuffled(shops).slice(0, MAX_SEARCH_SHOPS);
+      const known = new Set(shops.map((s) => s.slug));
+      const unknown = [...new Set([...excluded, ...(only ?? [])])].filter((slug) => !known.has(slug)).sort();
+      // The buyer's choice first, then a fresh random order (and, past MAX_SEARCH_SHOPS, a fresh random pick).
+      const allowed = shops.filter((s) => !excluded.has(s.slug) && (!only || only.has(s.slug)));
+      const targets = shuffled(allowed).slice(0, MAX_SEARCH_SHOPS);
       const fanOut = fanOutRequest(request);
       const answers = await inBatches(targets, FAN_OUT_CONCURRENCY, async (s) => ({
         shop: s,
@@ -439,6 +464,9 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
         shops_searched: targets.length,
         shops_in_network: shops.length,
         ...(targets.length > 1 ? { shops_in_random_order: true } : {}),
+        ...(excluded.size ? { shops_excluded: [...excluded].sort() } : {}),
+        ...(only ? { only_shops: [...only].sort() } : {}),
+        ...(unknown.length ? { unknown_shops: unknown } : {}),
       });
     },
   );
