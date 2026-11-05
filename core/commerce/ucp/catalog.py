@@ -370,7 +370,7 @@ def _match_score(product: Mapping[str, Any], tokens: Sequence[str], phrase: str)
     title = (_plain(product.get("title")) or "").lower()
     named = " ".join(
         [_plain(product.get("vendor")) or "", _plain(product.get("product_type")) or ""]
-        + [_plain(tag) or "" for tag in product.get("tags") or () if isinstance(tag, str)]
+        + _product_tags(product)
     ).lower()
     title_words, named_words = _words(title), _words(named)
     score = 0

@@ -8,6 +8,11 @@
 - Validate representative email contacts with linear string checks instead
   of an ambiguous regular expression. Preserve phone formats and the existing
   254-character contact limit; enrolment consent and authorization are unchanged.
+- Install the reviewed production requirements together with project and test
+  dependencies in one strict resolver run, so image builds cannot silently
+  select a different direct dependency release than the reviewed pins.
+- Rank products using the same filtered public tags served to shoppers;
+  refused legacy tags cannot boost a product while public tags still can.
 - Explicitly disable SDK tracing under existing deployment residency
   enforcement, including cached tracing flags, global context and an already
   installed redaction hook. Keep residency and tracing defaults unchanged.

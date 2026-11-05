@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
     && rm -rf /var/lib/apt/lists/*
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.txt ./
 COPY core/ core/
 COPY api/ api/
 COPY auth/ auth/
@@ -22,7 +22,7 @@ COPY schemas/ schemas/
 # pyproject.toml force-includes the provider conformance suite into the wheel.
 COPY testing/ testing/
 COPY migrations/ migrations/
-RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt ".[v4]"
 
 # Browser RPA executes with Playwright's version-matched Chromium. Download it
 # in the builder and copy the immutable browser bundle into the runtime image.

@@ -648,6 +648,19 @@ def test_store_links_with_a_user_name_and_unusable_numbers_are_left_out() -> Non
 # --- the Telegram shopper -------------------------------------------------------------------------
 
 
+def test_private_tags_do_not_change_public_ranking() -> None:
+    alpha = _upload_product()
+    alpha.update(id="alpha", title="Alpha", description="An organic product", tags=[])
+    zeta = deepcopy(alpha)
+    zeta.update(id="zeta", title="Zeta", tags=["api_key_organic"])
+    original = deepcopy(zeta)
+    arguments = {"query": "organic", "categories": None, "price_min": None, "price_max": None}
+    assert [item["title"] for item in search_catalog([zeta, alpha], **arguments)] == ["Alpha", "Zeta"]
+    assert zeta == original
+    zeta["tags"] = ["organic"]
+    assert [item["title"] for item in search_catalog([zeta, alpha], **arguments)] == ["Zeta", "Alpha"]
+
+
 def test_telegram_shows_the_shop_details_once_per_shop() -> None:
     shop = shop_details_from_entries([LICENCE, CERTIFIED])
     served = ucp_product(_upload_product(), shop)
