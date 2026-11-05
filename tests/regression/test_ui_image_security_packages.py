@@ -42,3 +42,14 @@ def test_api_runtime_rejects_cached_vulnerable_packages(package: str, minimum: s
     assert "apt-get upgrade -y" in install
     check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'{minimum}\''
     assert check in install, f"API runtime: missing security floor for {package}"
+
+
+@pytest.mark.parametrize("package", ["apt", "libapt-pkg7.0"])
+def test_mcp_runtime_requires_fixed_apt_packages(package: str) -> None:
+    root = Path(__file__).resolve().parents[2]
+    runtime = (root / "mcp-server/Dockerfile.hosted").read_text(encoding="utf-8").rsplit("FROM ", 1)[1]
+    assert "apt-get -o Acquire::Retries=0 update" in runtime
+    assert "--only-upgrade apt libapt-pkg7.0" in runtime
+    check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'3.0.4\''
+    assert check in runtime
+    assert runtime.index(check) < runtime.index("USER node")

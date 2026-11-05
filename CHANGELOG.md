@@ -2,6 +2,12 @@
 
 ## Unreleased - Release integration fixes
 
+- Require patched APT 3.0.4 packages in the hosted MCP runtime and disable
+  download retries while bootstrapping that update. Keep the container scan
+  severity policy and the runtime's unprivileged user unchanged.
+- Validate representative email contacts with linear string checks instead
+  of an ambiguous regular expression. Preserve phone formats and the existing
+  254-character contact limit; enrolment consent and authorization are unchanged.
 - Explicitly disable SDK tracing under existing deployment residency
   enforcement, including cached tracing flags, global context and an already
   installed redaction hook. Keep residency and tracing defaults unchanged.
