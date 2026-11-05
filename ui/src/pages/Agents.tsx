@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
@@ -13,6 +14,7 @@ const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comm
 const STATUSES = ["all", "active", "shadow", "paused", "staging", "deprecated"];
 
 export default function Agents() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   // Bug sheet 2026-09-14 rows 17-19/52: every agent-creator role may create
@@ -108,15 +110,15 @@ export default function Agents() {
     if (!importFile) return;
     // Validate file before upload
     if (!importFile.name.toLowerCase().endsWith(".csv")) {
-      setImportResult({ error: "Only CSV files are supported. Please select a .csv file." });
+      setImportResult({ error: t("agentsList.onlyCsv") });
       return;
     }
     if (importFile.size > 5 * 1024 * 1024) {
-      setImportResult({ error: "File too large. Maximum size is 5 MB." });
+      setImportResult({ error: t("agentsList.fileTooLarge") });
       return;
     }
     if (importFile.size === 0) {
-      setImportResult({ error: "File is empty. Please select a valid CSV file." });
+      setImportResult({ error: t("agentsList.fileEmpty") });
       return;
     }
     setImporting(true);
@@ -126,13 +128,13 @@ export default function Agents() {
       const { data } = await agentsApi.importCsv(importFile, params);
       // TC-009: Treat zero imports with zero skips as an error
       if (data && data.imported === 0 && data.skipped === 0 && !data.error) {
-        setImportResult({ error: "CSV file contains no valid agent rows. Please check the file format and ensure it has data rows with required columns: name, agent_type, domain." });
+        setImportResult({ error: t("agentsList.noValidRows") });
       } else {
         setImportResult(data);
       }
       fetchAgents();
     } catch (err: any) {
-      setImportResult({ error: err.response?.data?.detail || "Import failed" });
+      setImportResult({ error: err.response?.data?.detail || t("agentsList.importFailed") });
     } finally {
       setImporting(false);
     }
@@ -147,17 +149,17 @@ export default function Agents() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Agent Fleet</h2>
+        <h2 className="text-2xl font-bold">{t("agentsList.title")}</h2>
         <div className="flex gap-2">
           {/* POST /agents/import-csv stays admin-only server-side. */}
           {isAdmin && (
-            <Button variant="outline" onClick={() => setShowImport(!showImport)}>Import CSV</Button>
+            <Button variant="outline" onClick={() => setShowImport(!showImport)}>{t("agentsList.importCsv")}</Button>
           )}
           {isAdmin && (
-            <Button variant="outline" onClick={() => navigate("/dashboard/agents/from-sop")}>Create from SOP</Button>
+            <Button variant="outline" onClick={() => navigate("/dashboard/agents/from-sop")}>{t("agentsList.createFromSop")}</Button>
           )}
           {canCreateAgent && (
-            <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
+            <Button onClick={() => navigate("/dashboard/agents/new")}>{t("agents.create")}</Button>
           )}
         </div>
       </div>
@@ -168,15 +170,15 @@ export default function Agents() {
           <CardContent className="pt-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Import Agents from CSV</p>
-                <p className="text-xs text-muted-foreground">Upload a CSV with your org hierarchy. Agents are created in shadow mode. Parent links set via "reporting_to_name" column.</p>
+                <p className="text-sm font-medium">{t("agentsList.importTitle")}</p>
+                <p className="text-xs text-muted-foreground">{t("agentsList.importHelp")}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={downloadTemplate}>Download Template</Button>
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>{t("agentsList.downloadTemplate")}</Button>
             </div>
             <div className="flex gap-2 items-center">
               <input type="file" accept=".csv" onChange={(e) => { setImportFile(e.target.files?.[0] || null); setImportResult(null); }} className="text-sm" />
               <Button size="sm" onClick={handleCsvImport} disabled={!importFile || importing}>
-                {importing ? "Importing..." : "Upload & Import"}
+                {importing ? t("agentsList.importing") : t("agentsList.uploadImport")}
               </Button>
             </div>
             {importResult && (
@@ -185,10 +187,10 @@ export default function Agents() {
                   <p>{importResult.error}</p>
                 ) : (
                   <>
-                    <p><strong>{importResult.imported}</strong> agents imported | <strong>{importResult.parent_links_set}</strong> parent links set | <strong>{importResult.skipped}</strong> skipped</p>
+                    <p><strong>{importResult.imported}</strong> {t("agentsList.resultImported")} | <strong>{importResult.parent_links_set}</strong> {t("agentsList.resultParentLinks")} | <strong>{importResult.skipped}</strong> {t("agentsList.resultSkipped")}</p>
                     {importResult.skip_details?.length > 0 && (
-                      <details className="mt-1"><summary className="cursor-pointer text-xs">Skipped rows</summary>
-                        <ul className="text-xs mt-1">{importResult.skip_details.map((s: any, i: number) => <li key={i}>{s.reason}: {s.row?.name || "unknown"}</li>)}</ul>
+                      <details className="mt-1"><summary className="cursor-pointer text-xs">{t("agentsList.skippedRows")}</summary>
+                        <ul className="text-xs mt-1">{importResult.skip_details.map((s: any, i: number) => <li key={i}>{s.reason}: {s.row?.name || t("agentsList.unknownRow")}</li>)}</ul>
                       </details>
                     )}
                   </>
@@ -202,7 +204,7 @@ export default function Agents() {
       <div className="grid grid-cols-4 gap-4">
         {Object.entries(stats).map(([label, value]) => (
           <Card key={label}>
-            <CardHeader><CardTitle className="text-sm text-muted-foreground capitalize">{label}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm text-muted-foreground capitalize">{t(`agentsList.stats.${label}`)}</CardTitle></CardHeader>
             <CardContent><p className="text-3xl font-bold tabular-nums">{value}</p></CardContent>
           </Card>
         ))}
@@ -211,23 +213,23 @@ export default function Agents() {
       <div className="flex gap-4 items-center">
         <input
           type="text"
-          placeholder="Search agents..."
+          placeholder={t("agentsList.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="border rounded px-3 py-2 text-sm w-64"
         />
         <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
-          {DOMAINS.map((d) => <option key={d} value={d}>{d === "all" ? "All Domains" : d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+          {DOMAINS.map((d) => <option key={d} value={d}>{d === "all" ? t("agentsList.allDomains") : t(`agentsList.domains.${d}`, { defaultValue: d.charAt(0).toUpperCase() + d.slice(1) })}</option>)}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
-          {STATUSES.map((s) => <option key={s} value={s}>{s === "all" ? "All Statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{s === "all" ? t("agentsList.allStatuses") : t(`agentsList.statuses.${s}`, { defaultValue: s.charAt(0).toUpperCase() + s.slice(1) })}</option>)}
         </select>
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground">Loading agents...</p>
+        <p className="text-muted-foreground">{t("agentsList.loading")}</p>
       ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground">No agents found.</p>
+        <p className="text-muted-foreground">{t("agents.noAgents")}</p>
       ) : (
         <div className="grid grid-cols-3 gap-4">
           {filtered.map((agent) => (

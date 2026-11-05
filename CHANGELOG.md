@@ -13,6 +13,15 @@
   `docs/runbooks/whatsapp-report-delivery.md`.
 - The BI access runbook adds Power BI (Desktop and the gateway) and Looker Studio over the same `insights_bi` views.
 
+## Unreleased - Hindi for the approvals, agents, workflows and report scheduler pages
+
+- The pages Insights actions open now follow the app's language: the approval queue (its cards and
+  sub-navigation), the agents list, the workflows list and the Report Scheduler. English is unchanged. Values the
+  API sends or compares (status, priority, domain, report type, channel) are unchanged; shown server values map to
+  labels and fall back to the raw value.
+- New locale namespaces `approvals`, `agentsList` and `workflowsList`; `reportSchedules` is extended. A browser
+  test renders each page in Hindi and checks key and placeholder parity for these namespaces.
+
 ## Unreleased - Insights opt-in cross-tenant benchmarks
 
 - An administrator can opt the organisation in to benchmarks (the card on the Executive, Finance and Operations
