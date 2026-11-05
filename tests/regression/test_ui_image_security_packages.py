@@ -27,6 +27,8 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
 @pytest.mark.parametrize(
     ("package", "minimum"),
     [
+        ("apt", "3.0.4"),
+        ("libapt-pkg7.0", "3.0.4"),
         ("libpcre2-8-0", "10.46-1~deb13u3"),
         ("libssl3t64", "3.5.7-1~deb13u3"),
         ("openssl", "3.5.7-1~deb13u3"),
@@ -40,6 +42,8 @@ def test_api_runtime_rejects_cached_vulnerable_packages(package: str, minimum: s
     runtime = (root / "Dockerfile").read_text(encoding="utf-8").rsplit("FROM ", 1)[1]
     install = runtime.split("RUN apt-get update", 1)[1].split("\nRUN ", 1)[0]
     assert "apt-get upgrade -y" in install
+    assert "apt-get update -o Acquire::Retries=0" in runtime
+    assert "apt-get upgrade -y -o Acquire::Retries=0" in install
     check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'{minimum}\''
     assert check in install, f"API runtime: missing security floor for {package}"
 
@@ -53,3 +57,13 @@ def test_mcp_runtime_requires_fixed_apt_packages(package: str) -> None:
     check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'3.0.4\''
     assert check in runtime
     assert runtime.index(check) < runtime.index("USER node")
+
+
+@pytest.mark.parametrize("filename", ["Dockerfile", "Dockerfile.tools"])
+def test_debian_builders_bootstrap_without_vulnerable_apt_retries(filename: str) -> None:
+    root = Path(__file__).resolve().parents[2]
+    builder = (root / filename).read_text(encoding="utf-8").split("\nFROM ", 2)[1]
+    install = builder.split("RUN apt-get update", 1)[1].split("\nCOPY ", 1)[0]
+    update, packages = install.split("apt-get install", 1)
+    assert "Acquire::Retries=0" in update
+    assert "Acquire::Retries=0" in packages

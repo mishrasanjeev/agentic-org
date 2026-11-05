@@ -2,8 +2,8 @@
 
 ## Unreleased - Release integration fixes
 
-- Require patched APT 3.0.4 packages in the hosted MCP runtime and disable
-  download retries while bootstrapping that update. Keep the container scan
+- Require patched APT 3.0.4 packages in the hosted MCP and API runtimes and disable
+  download retries while bootstrapping Debian builds. Keep the container scan
   severity policy and the runtime's unprivileged user unchanged.
 - Validate representative email contacts with linear string checks instead
   of an ambiguous regular expression. Preserve phone formats and the existing

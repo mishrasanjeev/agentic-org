@@ -6,8 +6,8 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 WORKDIR /app
 # Build deps for patched Pillow and other C extensions; git for the
 # commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
+RUN apt-get update -o Acquire::Retries=0 && apt-get install -y --no-install-recommends \
+    -o Acquire::Retries=0 gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml README.md requirements.txt ./
 COPY core/ core/
@@ -36,7 +36,8 @@ RUN python -m playwright install chromium
 RUN python -m spacy download en_core_web_sm
 
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retries=0 \
+    && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd \
     tesseract-ocr-hin tesseract-ocr-ben tesseract-ocr-guj tesseract-ocr-kan \
@@ -44,6 +45,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tesseract-ocr-tel tesseract-ocr-urd poppler-utils \
     libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
     fonts-dejavu-core \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" ge '10.46-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
