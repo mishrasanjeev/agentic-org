@@ -709,6 +709,19 @@ metadata as `insights.*` and `insights.filters`); the inline metric and explorer
 | `GET /api/v1/insights/alerts?state=open\|acked` | The caller's alerts; `POST /api/v1/insights/alerts/{id}/ack` acknowledges one |
 | `GET`, `POST /api/v1/insights/bi-access`; `DELETE /api/v1/insights/bi-access/{role_name}` | Per-tenant read-only BI database logins over the `insights_*` views (administrators) |
 
+### Benchmarks
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/benchmarks` | The organisation's figures for the last 30 complete days against the 25th, 50th and 75th percentiles of the opted-in cohorts it belongs to (`all`, `plan:<plan>`), each with its position; or, while it has not opted in, why there are none (administrators, the CFO and the COO) |
+| `PUT /api/v1/insights/benchmarks/opt-in` | `{"opt_in": true\|false}`; an active human administrator; audited (`insights.benchmarks.opt_in`, `insights.benchmarks.opt_out`) |
+
+Benchmarks are run success rate, cost per run (USD), approvals per 100 runs and average run time, over production
+runs that were measured (never demo data). A tenant counts from 100 runs in the window; a cohort is published from
+20 tenants. Both floors are enforced by the database function `public.insights_benchmark_cohorts` (migration
+v6z117), which returns percentiles only; the published table holds no tenant id. Figures are recomputed nightly at
+04:10 UTC.
+
 ### Budgets
 
 | Method and path | Purpose |

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased - Insights opt-in cross-tenant benchmarks
+
+- An administrator can opt the organisation in to benchmarks (the card on the Executive, Finance and Operations
+  views). An opted-in organisation sees its run success rate, cost per run, approvals per 100 runs and average run
+  time for the last 30 complete days against the 25th, 50th and 75th percentiles of all opted-in organisations and
+  of its plan, with where it sits. One that has not opted in sees why the card is empty.
+- Privacy floors are enforced in the database: `public.insights_benchmark_cohorts` (SECURITY DEFINER, owned by the
+  Insights platform role) counts only opted-in, live organisations' measured production rollups, only those with
+  at least 100 runs in the window, and returns only cohorts of at least 20, whatever the caller passes. It returns
+  percentiles, never an organisation's figure or id, and `insights_benchmarks` stores no tenant id.
+- A nightly task (04:10 UTC) publishes the cohorts; the Platform view shows how many organisations opted in.
+- Migration v6z117 adds `insights_benchmark_optins` (forced row-level security), `insights_benchmarks`, the two
+  functions and the platform role's grants; `scripts/create_app_role.sql` allow-lists both functions.
+
 ## Unreleased - Insights views as PowerPoint and tables as Parquet
 
 - **PowerPoint**: each landing view has a **PowerPoint** file next to its PDF (a background export kept on the

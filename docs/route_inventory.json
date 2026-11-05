@@ -8442,6 +8442,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.benchmarks.read",
+    "auth_required": true,
+    "function": "read_benchmarks",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/benchmarks api/v1/insights_benchmarks.py:read_benchmarks",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_benchmarks.py",
+    "path": "/api/v1/insights/benchmarks",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.benchmarks.read",
+    "source_line": 42,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.benchmarks.opt_in",
+    "auth_required": true,
+    "function": "set_opt_in",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "PUT /api/v1/insights/benchmarks/opt-in api/v1/insights_benchmarks.py:set_opt_in",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/insights_benchmarks.py",
+    "path": "/api/v1/insights/benchmarks/opt-in",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights_admin.benchmarks.write",
+    "source_line": 63,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.bi_access.read",
     "auth_required": true,
     "function": "list_bi_access",
@@ -11876,7 +11912,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "platform.insights.read",
-    "source_line": 154,
+    "source_line": 156,
     "tenant_required": true
   },
   {
@@ -11894,7 +11930,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 131,
+    "source_line": 133,
     "tenant_required": true
   },
   {
@@ -11930,7 +11966,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 105,
+    "source_line": 107,
     "tenant_required": true
   },
   {
