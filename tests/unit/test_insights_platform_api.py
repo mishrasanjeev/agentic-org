@@ -61,6 +61,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self._value
 
+    def scalar_one(self):
+        return self._value
+
     def mappings(self):
         return self
 
@@ -105,6 +108,8 @@ class PlatformSession:
                 {"exports_queued": 1, "exports_running": 0, "exports_ready": 6, "exports_failed": 2,
                  "exports_expired": 0, "oldest_open_minutes": 12, "tenants_late": 1, "max_lag_hours": Decimal("3.5")},
             ])
+        if "insights_benchmark_participation" in sql:
+            return _Result(23)
         if "insights_platform_tenants" in sql:
             return _Result(rows=[
                 {"tenant_id": LISTED_TENANT, "tenant_name": "Synthetic Traders", "plan": "enterprise", "runs": 14,
@@ -411,6 +416,8 @@ def test_summary_shape_totals_and_audit(app) -> None:
         "cost_usd": 1.75,
     }
     assert body["reconciled_gate_nights"] == 14
+    # Benchmarks: the opted-in count only (a database function; never which tenants).
+    assert body["benchmarks"] == {"opted_in": 23, "min_tenants": 20}
     assert body["operations"] == {
         "exports": {"queued": 1, "running": 0, "ready": 6, "failed": 2, "expired": 0},
         "export_failure_rate": 0.25,
@@ -600,6 +607,7 @@ def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> N
                            params={"dataset": "daily", "format": "csv", "from": "2026-10-30", "to": "2026-10-31"})
         tenants = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "json"})
         workbook = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "xlsx"})
+        table = client.get("/api/v1/platform/insights/export", params={"dataset": "daily", "format": "parquet"})
         refused = client.get("/api/v1/platform/insights/export", params={"dataset": "runs", "format": "csv"})
         audits = client.sessions["user"].added
     assert daily.status_code == 200 and "platform-daily" in daily.headers["content-disposition"]
@@ -608,6 +616,8 @@ def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> N
     body = json.loads(tenants.content)
     assert [r["tenant_name"] for r in body["rows"]][0] == "Synthetic Traders"
     assert workbook.content[:2] == b"PK"
+    assert table.status_code == 200 and table.content[:4] == b"PAR1"
+    assert table.headers["content-type"].startswith("application/vnd.apache.parquet")
     assert refused.status_code == 422
-    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 3
+    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 4
     assert audits[0].details["row_count"] == 2 and audits[0].details["dataset"] == "daily"

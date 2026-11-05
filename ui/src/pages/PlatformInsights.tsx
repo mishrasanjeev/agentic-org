@@ -236,7 +236,7 @@ function Body({
           })
         }
       />
-      <OperationsPanel operations={summary.operations} />
+      <OperationsPanel operations={summary.operations} benchmarks={summary.benchmarks} />
       <TenantTable data={tenants} />
       <PostureChecklist posture={posture} />
     </>
@@ -395,7 +395,13 @@ function GateBullet({ nights, gate, status }: { nights: number; gate: number; st
 
 // ---------------------------------------------------------------- operations
 
-function OperationsPanel({ operations }: { operations: PlatformOperations }) {
+function OperationsPanel({
+  operations,
+  benchmarks,
+}: {
+  operations: PlatformOperations;
+  benchmarks: { opted_in: number; min_tenants: number };
+}) {
   const { t } = useTranslation();
   const ex = operations.exports;
   const late = operations.tenants_late > 0;
@@ -436,6 +442,11 @@ function OperationsPanel({ operations }: { operations: PlatformOperations }) {
             hours: operations.max_lag_hours ?? 0,
           })
         : t("platformInsights.operations.rollupOnTime"),
+    },
+    {
+      key: "benchmarks",
+      label: t("platformInsights.operations.benchmarks"),
+      value: t("platformInsights.operations.benchmarksDetail", { optedIn: benchmarks.opted_in, min: benchmarks.min_tenants }),
     },
   ];
 

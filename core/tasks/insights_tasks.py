@@ -339,3 +339,14 @@ async def _expire_exports() -> dict[str, Any]:
 def expire_exports() -> dict[str, Any]:
     """Daily: delete Insights export files past their seven days and report lost builds as failed."""
     return run_async(_expire_exports())
+
+
+@app.task(name="core.tasks.insights_tasks.compute_benchmarks")
+def compute_benchmarks() -> dict[str, Any]:
+    """Daily at 04:10 UTC: publish the opted-in cohort figures for the last 30 complete days."""
+    off = _off()
+    if off is not None:
+        return off
+    from core.insights import benchmarks
+
+    return run_async(benchmarks.compute(_now()))

@@ -241,6 +241,41 @@ Other tools take the same values, or the connection string the page shows once
 (`postgresql://<login>:<password>@<host>:5432/<db>?sslmode=verify-ca&channel_binding=require`;
 add `&sslrootcert=<path to the CA file>` where the tool reads it from the URL).
 
+## 6. Connecting Power BI and Looker Studio
+
+Both read the same `insights_bi` views with the same login, over the PostgreSQL connector. Nothing else is
+installed on the platform side.
+
+### Power BI
+
+Power BI Desktop: Get data, PostgreSQL database.
+
+1. Server: `<host>:5432` from the page's "How a BI tool connects" panel. Database: the database name there.
+2. Data connectivity mode: Import for scheduled refreshes; DirectQuery sends every visual's query to the replica
+   and is limited by the 30-second statement timeout.
+3. Credentials: Database, with the login and the password shown once when it was created.
+4. Encryption: keep "Encrypt connections" on. Power BI checks the server certificate against the machine's
+   trusted roots, so install the replica's server CA certificate (section 2) in the Windows "Trusted Root
+   Certification Authorities" store of every machine that connects, including the on-premises data gateway.
+5. In the navigator, pick the views under `insights_bi`.
+
+For refreshes in the Power BI service, the dataset connects through an on-premises data gateway. The address to
+authorise on the replica (section 3) is the gateway machine's public address, not the person's laptop.
+
+### Looker Studio
+
+Looker Studio: Create, Data source, PostgreSQL.
+
+1. Host name or IP, port 5432, database, username and password: as above.
+2. Enable SSL: on. Enable client authentication: off (the login is a password login). Upload the replica's server
+   CA certificate as the server certificate.
+3. Pick a view under `insights_bi`, or use a custom query against one.
+
+Looker Studio connects from Google-owned addresses that its PostgreSQL connector documentation lists, shared by
+every Looker Studio user. Authorising them on the replica opens the network path to anyone on Looker Studio, so
+the login, its password and TLS are what protect the tenant's rows: give each tenant its own login, revoke it when
+a person leaves, and prefer Metabase or Power BI through a gateway where a fixed address is possible.
+
 ## Revoking a login
 
 A tenant administrator revokes a login on the page (Revoke, then confirm) or

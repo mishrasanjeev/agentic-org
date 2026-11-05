@@ -17,6 +17,7 @@ import ChartCard from "@/components/insights/ChartCard";
 import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
+import BenchmarkCard, { BENCHMARK_ROLES, BENCHMARK_VIEWS } from "@/components/insights/BenchmarkCard";
 import NeedsYouList from "@/components/insights/NeedsYouList";
 import SavedViews from "@/components/insights/SavedViews";
 import SearchPalette from "@/components/insights/SearchPalette";
@@ -265,6 +266,16 @@ export default function InsightsDashboard() {
               {t("insights.valueLink")}
             </Link>
           ) : null}
+          {/* Spend limits: administrators and the CFO set them, auditors read them. */}
+          {role === "admin" || role === "cfo" || role === "auditor" ? (
+            <Link
+              to="/dashboard/insights/budgets"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-budgets-link"
+            >
+              {t("insightsBudgets.link")}
+            </Link>
+          ) : null}
           {/* Per-tenant BI database access, for administrators while it is on and configured. */}
           {role === "admin" && statusState.status.bi_access ? (
             <Link
@@ -380,6 +391,7 @@ export default function InsightsDashboard() {
           className="flex flex-col gap-4"
         >
           <ViewBody state={viewState} filters={filters} currency={currency} onRetry={retry} />
+          {BENCHMARK_VIEWS.has(activeView) && BENCHMARK_ROLES.has(role) ? <BenchmarkCard /> : null}
         </div>
         {explorers.length > 0 ? <ExploreLinks explorers={explorers} /> : null}
       </>

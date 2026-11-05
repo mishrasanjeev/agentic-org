@@ -30,6 +30,7 @@ const APPROVALS = "/dashboard/insights/explore/approvals";
 const AGENTS = "/dashboard/insights/explore/agents";
 const COST = "/dashboard/insights/explore/cost";
 const VALUE_PAGE = "/dashboard/insights/value";
+const BUDGETS_PAGE = "/dashboard/insights/budgets";
 const WORKFLOWS = "/dashboard/insights/explore/workflows";
 const CONNECTORS = "/dashboard/insights/explore/connectors";
 const ORDERS_PAGE = "/dashboard/orders";
@@ -86,7 +87,7 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
   "cost.by_agent": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
   "cost.by_model": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
   "cost.forecast": { chart: "forecast", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
-  "cost.budgets": { chart: "bullet", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
+  "cost.budgets": { chart: "bullet", action: { to: BUDGETS_PAGE, labelKey: "insights.actions.manageBudgets" } },
   "tokens.by_unit": {
     chart: "stacked",
     action: { to: `${RUNS}?sort=tokens_total&order=desc`, labelKey: "insights.actions.exploreRuns" },

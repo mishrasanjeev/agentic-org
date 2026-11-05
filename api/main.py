@@ -80,7 +80,9 @@ from api.v1 import (
     idp_statements,
     insights,
     insights_alerts,
+    insights_benchmarks,
     insights_bi,
+    insights_budgets,
     insights_entities,
     insights_explore,
     insights_exports,
@@ -408,6 +410,8 @@ app.include_router(insights_exports.router, prefix="/api/v1")
 app.include_router(insights_bi.router, prefix="/api/v1")
 app.include_router(insights_explore.router, prefix="/api/v1")
 app.include_router(insights_saved_views.router, prefix="/api/v1")
+app.include_router(insights_budgets.router, prefix="/api/v1")
+app.include_router(insights_benchmarks.router, prefix="/api/v1")
 app.include_router(insights_entities.router, prefix="/api/v1")
 app.include_router(insights_platform.router, prefix="/api/v1")
 app.include_router(insights_value.router, prefix="/api/v1")

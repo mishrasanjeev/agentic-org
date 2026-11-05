@@ -757,7 +757,7 @@ class TestMigration:
         assert spec.loader is not None
         spec.loader.exec_module(module)
         assert module.revision == "v6z121_desk_agent_identity"
-        assert module.down_revision == "v6z115_insights_counters"
+        assert module.down_revision == "v6z117_insights_benchmarks"
         statements = []
         monkeypatch.setattr(module.op, "execute", lambda sql: statements.append(" ".join(str(sql).split())))
         module.upgrade()

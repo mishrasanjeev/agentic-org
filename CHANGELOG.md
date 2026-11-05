@@ -145,6 +145,81 @@
   (version 2026-10-25).
 - New runbook `docs/runbooks/network-registrations.md`: the owner's steps for each program, the sources read on
   2026-11-04, and how to record each program's status.
+## Unreleased - WhatsApp report delivery through an approved template, and BI tool guides
+
+- Scheduled reports sent on WhatsApp go as the approved template named by `AGENTICORG_WHATSAPP_REPORT_TEMPLATE`
+  (the file as its document header, the report's name as its body variable), which WhatsApp delivers outside the
+  24-hour window. Without a template the file goes as a plain document, as before.
+- Every WhatsApp response is now checked: a refusal fails the channel with WhatsApp's code and title (131047
+  outside the window says to set a template) instead of being reported as sent. ZIP packs are skipped with the
+  reason (WhatsApp does not accept them). Logs keep only a number's last four digits. The Graph API version is
+  a setting (`AGENTICORG_WHATSAPP_GRAPH_API_VERSION`, default `v23.0`; it was v18.0, hard-coded).
+- Activation needs the organisation's WhatsApp Business account, token and an approved template:
+  `docs/runbooks/whatsapp-report-delivery.md`.
+- The BI access runbook adds Power BI (Desktop and the gateway) and Looker Studio over the same `insights_bi` views.
+
+## Unreleased - Hindi for the approvals, agents, workflows and report scheduler pages
+
+- The pages Insights actions open now follow the app's language: the approval queue (its cards and
+  sub-navigation), the agents list, the workflows list and the Report Scheduler. English is unchanged. Values the
+  API sends or compares (status, priority, domain, report type, channel) are unchanged; shown server values map to
+  labels and fall back to the raw value.
+- New locale namespaces `approvals`, `agentsList` and `workflowsList`; `reportSchedules` is extended. A browser
+  test renders each page in Hindi and checks key and placeholder parity for these namespaces.
+
+## Unreleased - Insights opt-in cross-tenant benchmarks
+
+- An administrator can opt the organisation in to benchmarks (the card on the Executive, Finance and Operations
+  views). An opted-in organisation sees its run success rate, cost per run, approvals per 100 runs and average run
+  time for the last 30 complete days against the 25th, 50th and 75th percentiles of all opted-in organisations and
+  of its plan, with where it sits. One that has not opted in sees why the card is empty.
+- Privacy floors are enforced in the database: `public.insights_benchmark_cohorts` (SECURITY DEFINER, owned by the
+  Insights platform role) counts only opted-in, live organisations' measured production rollups, only those with
+  at least 100 runs in the window, and returns only cohorts of at least 20, whatever the caller passes. It returns
+  percentiles, never an organisation's figure or id, and `insights_benchmarks` stores no tenant id.
+- A nightly task (04:10 UTC) publishes the cohorts; the Platform view shows how many organisations opted in.
+- Migration v6z117 adds `insights_benchmark_optins` (forced row-level security), `insights_benchmarks`, the two
+  functions and the platform role's grants; `scripts/create_app_role.sql` allow-lists both functions.
+
+## Unreleased - Insights views as PowerPoint and tables as Parquet
+
+- **PowerPoint**: each landing view has a **PowerPoint** file next to its PDF (a background export kept on the
+  Downloads page for seven days): a title slide with the period, filters and data quality, the tiles as a table,
+  and for each chart a native PowerPoint chart with its text summary and its data as a table; the chart's
+  definition and source are in the slide notes. Figures with no data say so and why.
+- **Parquet**: every metric and explorer export (inline and background) also downloads as Parquet with typed
+  columns (whole numbers, numbers, flags and dates keep their types) and the definitions and filters in the file's
+  metadata. New dependency `pyarrow` 26.0.0.
+- Migration v6z116 lets `insights_exports` hold the `view_pptx` kind and the `pptx` and `parquet` formats;
+  downgrade refuses while such exports exist.
+
+## Unreleased - Insights budgets you can set, and the forecast alert
+
+- **Budgets page** (`/dashboard/insights/budgets`, linked from the Insights header and the Finance view's budget
+  tile): administrators and the CFO add, change and delete spend limits for the organisation, a company or a cost
+  centre (daily, weekly or monthly, in USD, with a warn-at percent); auditors read them. Each shows this period's
+  spend from the agent cost ledger, the percent used and its state. API: `/api/v1/insights/budgets`. Every change
+  is a signed audit row with the values before and after.
+- **Forecast alert**: `cost.forecast_over_budget` (owner CFO) opens when the month's spend forecast is above a
+  tenant-wide monthly budget: `watch`, or `act` at 120% of it. The forecast is converted to USD with the
+  organisation's recorded rate; without one, no forecast alert is raised.
+- **Budget email**: the budget evaluator no longer posts `slack` or `webhook` alerts to the platform-wide
+  `SLACK_BUDGET_WEBHOOK_URL` and `BUDGET_ALERT_WEBHOOK_URL` (one URL for every tenant) and logs them as
+  unsupported; the email escapes the budget's name. No production budget used those channels.
+
+## Unreleased - Insights actions work for every role their page serves
+
+- Every Insights action other than reading answered 403 ("Missing scope: agenticorg:admin") to all roles but the
+  administrator: a CFO could not acknowledge an alert, save a view or start a background export (the finance pack,
+  a view PDF), and an auditor could not sign a period evidence pack. The Insights route family's write side was
+  the administrator's scope, and the other roles hold only `insights:read`.
+- Every Insights role except the auditor now also holds `insights:write`, and the family's writes take it
+  (acknowledging an alert). POSTs that change no organisation state (a background export, the caller's own saved
+  views and last visit, an auditor's evidence-pack signature) move to the `insights_personal` family, which needs
+  only `insights:read`, so auditors stay read-only. BI database logins and the money-saved baselines, rates and
+  settings move to the `insights_admin` family, whose writes stay the administrator's at the route as well as in
+  the handler. Each handler still decides who may act.
+- Sessions pick up the new scope when their token is next issued (at most 60 minutes).
 
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 

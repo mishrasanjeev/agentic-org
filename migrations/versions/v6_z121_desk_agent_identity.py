@@ -2,7 +2,7 @@
 """Merchant onboarding desk: agent identity on agent actions, and agent-ready enrolments.
 
 Revision ID: v6z121_desk_agent_identity
-Revises: v6z115_insights_counters
+Revises: v6z117_insights_benchmarks
 Create Date: 2026-11-04
 
 Contact attempts gain the acting agent's identity identifier, attestation hash and trust tier.
@@ -17,7 +17,7 @@ is nullable or defaulted, so rows written with agent identity off are unchanged.
 from alembic import op
 
 revision = "v6z121_desk_agent_identity"
-down_revision = "v6z115_insights_counters"
+down_revision = "v6z117_insights_benchmarks"
 branch_labels = None
 depends_on = None
 

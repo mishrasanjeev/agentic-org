@@ -51,7 +51,7 @@ from core.ownership import Caller, caller_from_request
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
-ExportFormat = Literal["csv", "xlsx", "json"]
+ExportFormat = Literal["csv", "xlsx", "json", "parquet"]
 _RESERVED = frozenset({"from", "to", "compare", "company_id", "format", "include_pii"})
 
 

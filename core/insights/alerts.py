@@ -12,8 +12,9 @@ week-on-week rules) in that tenant's session, then:
 
 A resolved alert that recurs opens a new one. ``act`` alerts email the owner
 role's active users once (``notified_at``); nothing is sent for demo-seeded
-data. Owners: run health and approvals the administrator; budgets, spend and
-pricing the CFO; connectors and workflows the COO; an agent's alerts the head
+data. Owners: run health and approvals the administrator; budgets (and a
+tenant-wide monthly budget the month's forecast is above), spend and pricing
+the CFO; connectors and workflows the COO; an agent's alerts the head
 of its domain (finance CFO, hr CHRO, marketing CMO, ops COO), else the
 administrator. A caller sees the alerts its role owns; administrators see all.
 """
@@ -37,6 +38,8 @@ WINDOW_DAYS = 7
 IDLE_DAYS = 30
 MAX_ENTITY_ALERTS = 50
 COST_PER_RUN_JUMP = 0.25
+# A forecast this far over a tenant-wide monthly budget is ``act``; any amount over it is ``watch``.
+FORECAST_ACT_RATIO = 1.2
 DOMAIN_OWNERS: dict[str, str] = {
     "finance": "cfo",
     "hr": "chro",
@@ -49,6 +52,7 @@ RULES: tuple[str, ...] = (
     "approvals.pending",
     "approvals.expired",
     "cost.budget",
+    "cost.forecast_over_budget",
     "cost.per_run_jump",
     "cost.pricing_coverage",
     "connectors.unhealthy",
@@ -149,11 +153,68 @@ async def _approvals(ctx: MetricContext) -> list[Candidate]:
     return out
 
 
+def forecast_in_usd(forecast: dict[str, Any]) -> float | None:
+    """The month's forecast point in USD (budgets are USD), or ``None`` when it has none or cannot be converted."""
+    value = forecast.get("value")
+    if value is None or forecast.get("data_quality") == "no_data":
+        return None
+    currency = str(forecast.get("currency") or "USD").upper()
+    if currency == "USD":
+        return float(value)
+    rate = (forecast.get("conversion") or {}).get("rate_to_inr")
+    if currency == "INR" and rate:
+        try:
+            per_usd = float(rate)
+        except (TypeError, ValueError):
+            return None
+        return float(value) / per_usd if per_usd > 0 else None
+    return None
+
+
+async def _forecast_over_budget(ctx: MetricContext, budgets: list[dict[str, Any]]) -> list[Candidate]:
+    """Tenant-wide monthly budgets the month's spend forecast is above (the forecast is tenant-wide only)."""
+    from core.insights import registry
+
+    monthly = [b for b in budgets if b["period"] == "monthly" and b.get("tenant_wide")]
+    if not monthly or ctx.company_id is not None:
+        return []
+    forecast = await registry.METRICS["cost.forecast"].resolver(ctx)
+    point = forecast_in_usd(forecast)
+    if point is None:
+        return []
+    out: list[Candidate] = []
+    for budget in monthly:
+        threshold = float(budget["threshold"] or 0)
+        if threshold <= 0 or point <= threshold:
+            continue
+        ratio = point / threshold
+        out.append(
+            Candidate(
+                "cost.forecast_over_budget",
+                "act" if ratio >= FORECAST_ACT_RATIO else "watch",
+                "cfo",
+                f"This month's spend is forecast to reach ${point:,.2f} against the "
+                f"${threshold:,.2f} monthly budget {budget['name']}",
+                entity_ref=str(budget["id"]),
+                metric_key="cost.forecast",
+                link="/dashboard/insights/budgets",
+                detail={
+                    "forecast_usd": round(point, 2),
+                    "threshold_usd": round(threshold, 2),
+                    "forecast_pct": round(ratio * 100, 1),
+                    "data_quality": "estimated",
+                },
+            )
+        )
+    return out
+
+
 async def _cost(ctx: MetricContext) -> list[Candidate]:
     from core.insights import metrics_cost, registry
 
     out: list[Candidate] = []
-    for budget in await metrics_cost.budget_rows(ctx):
+    budgets = await metrics_cost.budget_rows(ctx)
+    for budget in budgets:
         if budget["state"] not in ("warn", "breached"):
             continue
         severity = "act" if budget["state"] == "breached" else "watch"
@@ -170,6 +231,7 @@ async def _cost(ctx: MetricContext) -> list[Candidate]:
                 detail={"used_pct": budget["used_pct"], "period": budget["period"]},
             )
         )
+    out.extend(await _forecast_over_budget(ctx, budgets))
     per_run = await registry.METRICS["cost.per_run"].resolver(ctx)
     value, previous = per_run.get("value"), per_run.get("compare_value")
     if value is not None and previous and float(previous) > 0:

@@ -189,7 +189,7 @@ describe("PlatformInsights", () => {
     const formats = within(chart)
       .getAllByRole("menuitem")
       .map((item) => item.getAttribute("data-format"));
-    expect(formats).toEqual(["csv", "xlsx", "json", "svg", "png"]);
+    expect(formats).toEqual(["csv", "xlsx", "json", "parquet", "svg", "png"]);
     fireEvent.keyDown(within(chart).getByRole("menu"), { key: "Escape" });
     fireEvent.click(within(chart).getByRole("button", { name: /view data/i }));
     expect(within(chart).getByTestId("insights-data-table")).toBeInTheDocument();

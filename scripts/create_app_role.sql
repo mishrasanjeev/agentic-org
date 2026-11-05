@@ -198,6 +198,9 @@ REVOKE ALL ON alembic_migration_progress FROM agenticorg_app;
 --   public.insights_platform_daily(date, date)
 --   public.insights_platform_tenants(date, date)
 --   public.insights_platform_operations(date, date)   (v6z114: export jobs and rollup lag)
+--   public.insights_benchmark_cohorts(date, date, integer, integer)
+--   public.insights_benchmark_participation()          (v6z117: opted-in cohort percentiles and
+--                                                    the opted-in count; core/insights/benchmarks.py)
 --                                                    v6z107, the platform operator's
 --                                                    cross-tenant aggregates
 --                                                    (core/insights/platform.py); granted
@@ -230,6 +233,8 @@ BEGIN
                               'public.insights_platform_daily(date, date)',
                               'public.insights_platform_tenants(date, date)',
                               'public.insights_platform_operations(date, date)',
+                              'public.insights_benchmark_cohorts(date, date, integer, integer)',
+                              'public.insights_benchmark_participation()',
                               'public.insights_bi_create_login(uuid, text, text, uuid, integer)',
                               'public.insights_bi_revoke_login(uuid, text)'] LOOP
         CONTINUE WHEN to_regprocedure(fn) IS NULL;
@@ -319,6 +324,8 @@ BEGIN
                             'public.insights_platform_daily(date, date)',
                             'public.insights_platform_tenants(date, date)',
                             'public.insights_platform_operations(date, date)',
+                            'public.insights_benchmark_cohorts(date, date, integer, integer)',
+                            'public.insights_benchmark_participation()',
                             'public.insights_bi_create_login(uuid, text, text, uuid, integer)',
                             'public.insights_bi_revoke_login(uuid, text)']) AS f WHERE to_regprocedure(f) IS NOT NULL)
       AND has_function_privilege('agenticorg_app', p.oid, 'EXECUTE');

@@ -72,7 +72,7 @@ async def list_alerts(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights.alerts.ack",
     rate_limit="reporting-admin",
     idempotency="idempotent-first-write-wins",
     audit_event="insights.alert.ack",

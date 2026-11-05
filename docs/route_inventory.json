@@ -8509,8 +8509,44 @@
     "path": "/api/v1/insights/alerts/{alert_id}/ack",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights.alerts.ack",
     "source_line": 80,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.benchmarks.read",
+    "auth_required": true,
+    "function": "read_benchmarks",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/benchmarks api/v1/insights_benchmarks.py:read_benchmarks",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_benchmarks.py",
+    "path": "/api/v1/insights/benchmarks",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.benchmarks.read",
+    "source_line": 42,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.benchmarks.opt_in",
+    "auth_required": true,
+    "function": "set_opt_in",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "PUT /api/v1/insights/benchmarks/opt-in api/v1/insights_benchmarks.py:set_opt_in",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/insights_benchmarks.py",
+    "path": "/api/v1/insights/benchmarks/opt-in",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights_admin.benchmarks.write",
+    "source_line": 63,
     "tenant_required": true
   },
   {
@@ -8545,7 +8581,7 @@
     "path": "/api/v1/insights/bi-access",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 91,
     "tenant_required": true
   },
@@ -8563,8 +8599,80 @@
     "path": "/api/v1/insights/bi-access/{role_name}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 134,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budgets.read",
+    "auth_required": true,
+    "function": "list_budgets",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/budgets api/v1/insights_budgets.py:list_budgets",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.budgets.read",
+    "source_line": 79,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.created",
+    "auth_required": true,
+    "function": "create_budget",
+    "idempotency": "conflict-on-duplicate-name",
+    "key": "POST /api/v1/insights/budgets api/v1/insights_budgets.py:create_budget",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 109,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.deleted",
+    "auth_required": true,
+    "function": "delete_budget",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/insights/budgets/{budget_id} api/v1/insights_budgets.py:delete_budget",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets/{budget_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 159,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.updated",
+    "auth_required": true,
+    "function": "update_budget",
+    "idempotency": "idempotent-partial-update",
+    "key": "PATCH /api/v1/insights/budgets/{budget_id} api/v1/insights_budgets.py:update_budget",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets/{budget_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 132,
     "tenant_required": true
   },
   {
@@ -8617,7 +8725,7 @@
     "path": "/api/v1/insights/changes/seen",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.changes.seen",
     "source_line": 166,
     "tenant_required": true
   },
@@ -8725,7 +8833,7 @@
     "path": "/api/v1/insights/exports",
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
-    "scope": "insights.read",
+    "scope": "insights_personal.exports.create",
     "source_line": 108,
     "tenant_required": true
   },
@@ -8779,7 +8887,7 @@
     "path": "/api/v1/insights/exports/{export_id}/sign",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights_personal.evidence_pack.sign",
     "source_line": 306,
     "tenant_required": true
   },
@@ -8887,7 +8995,7 @@
     "path": "/api/v1/insights/saved-views",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 77,
     "tenant_required": true
   },
@@ -8905,7 +9013,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 124,
     "tenant_required": true
   },
@@ -8923,7 +9031,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 100,
     "tenant_required": true
   },
@@ -8995,7 +9103,7 @@
     "path": "/api/v1/insights/value/baselines",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 209,
     "tenant_required": true
   },
@@ -9013,7 +9121,7 @@
     "path": "/api/v1/insights/value/baselines/{baseline_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 258,
     "tenant_required": true
   },
@@ -9031,7 +9139,7 @@
     "path": "/api/v1/insights/value/confirm",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 395,
     "tenant_required": true
   },
@@ -9049,7 +9157,7 @@
     "path": "/api/v1/insights/value/rates",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 308,
     "tenant_required": true
   },
@@ -9067,7 +9175,7 @@
     "path": "/api/v1/insights/value/rates/{rate_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 350,
     "tenant_required": true
   },
@@ -9085,7 +9193,7 @@
     "path": "/api/v1/insights/value/settings",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 450,
     "tenant_required": true
   },
@@ -12020,7 +12128,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "platform.insights.read",
-    "source_line": 154,
+    "source_line": 156,
     "tenant_required": true
   },
   {
@@ -12038,7 +12146,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 131,
+    "source_line": 133,
     "tenant_required": true
   },
   {
@@ -12074,7 +12182,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 105,
+    "source_line": 107,
     "tenant_required": true
   },
   {

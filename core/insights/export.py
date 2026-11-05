@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""Insights exports: one metric's data as CSV, XLSX or JSON, with its filters and definition.
+"""Insights exports: one metric's data as CSV, XLSX, JSON or Parquet, with its filters and definition.
 
 The exported rows are the metric's ``series`` points (``t``, ``group``,
 ``value``) or, for a metric without a series, its ``rows``. At most
@@ -10,6 +10,13 @@ spreadsheet would read as a formula (it starts with ``=``, ``+``, ``-``,
 XLSX file has three sheets: ``Data``, ``Filters`` and ``Definitions``. Each
 export writes one signed ``audit_log`` row (``insights.export``) with the
 metric key, format, filters and row count, never the figures.
+
+A Parquet file keeps each column's type: a column whose values are all whole
+numbers is ``int64``, all numbers ``float64``, all booleans ``bool``, all
+``YYYY-MM-DD`` dates ``date32``; anything else (and an object or list, as
+JSON) is text. Its key-value metadata carries the definitions (``insights.*``)
+and the filters (``insights.filters``, JSON). Parquet is read by tools, not
+evaluated as a spreadsheet, so its cells are not formula-guarded.
 """
 
 from __future__ import annotations
@@ -17,14 +24,17 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
+from datetime import date
 from typing import Any
 
 MAX_EXPORT_ROWS = 50_000
-FORMATS: tuple[str, ...] = ("csv", "xlsx", "json")
+FORMATS: tuple[str, ...] = ("csv", "xlsx", "json", "parquet")
 MEDIA_TYPES: dict[str, str] = {
     "csv": "text/csv; charset=utf-8",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "json": "application/json",
+    "parquet": "application/vnd.apache.parquet",
 }
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
 EXPORT_TOO_LARGE_HINT = (
@@ -154,6 +164,58 @@ def to_json(rows: list[dict[str, Any]], filters: dict[str, Any], response: dict[
     return json.dumps(body, default=str, indent=2).encode("utf-8")
 
 
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def parquet_type(values: list[Any]) -> str:
+    """The Parquet type of a column: ``int64``, ``float64``, ``bool``, ``date32`` or ``string``."""
+    present = [v for v in values if v is not None]
+    if not present:
+        return "string"
+    if all(isinstance(v, bool) for v in present):
+        return "bool"
+    if all(isinstance(v, int) and not isinstance(v, bool) for v in present):
+        return "int64"
+    if all(isinstance(v, int | float) and not isinstance(v, bool) for v in present):
+        return "float64"
+    if all(isinstance(v, str) and _DATE.match(v) for v in present):
+        try:
+            for v in present:
+                date.fromisoformat(v)
+        except ValueError:
+            return "string"
+        return "date32"
+    return "string"
+
+
+def to_parquet(rows: list[dict[str, Any]], filters: dict[str, Any], response: dict[str, Any]) -> bytes:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    header = columns(rows)
+    arrays = []
+    for name in header:
+        values = [row.get(name) for row in rows]
+        kind = parquet_type(values)
+        if kind == "date32":
+            arrays.append(pa.array([date.fromisoformat(v) if v is not None else None for v in values], pa.date32()))
+        elif kind == "float64":
+            arrays.append(pa.array([float(v) if v is not None else None for v in values], pa.float64()))
+        elif kind == "string":
+            arrays.append(pa.array([None if v is None else str(_cell(v)) for v in values], pa.string()))
+        elif kind == "bool":
+            arrays.append(pa.array(values, pa.bool_()))
+        else:
+            arrays.append(pa.array(values, pa.int64()))
+    metadata = {f"insights.{field}": "" if value is None else str(value) for field, value in definition_rows(response)}
+    metadata["insights.filters"] = json.dumps(filters, sort_keys=True, default=str)
+    table = pa.Table.from_arrays(arrays, names=header) if header else pa.table({})
+    table = table.replace_schema_metadata({k.encode(): v.encode() for k, v in metadata.items()})
+    buffer = io.BytesIO()
+    pq.write_table(table, buffer, compression="zstd")
+    return buffer.getvalue()
+
+
 def render(fmt: str, rows: list[dict[str, Any]], filters: dict[str, Any], response: dict[str, Any]) -> bytes:
     if fmt == "csv":
         return to_csv(rows)
@@ -161,6 +223,8 @@ def render(fmt: str, rows: list[dict[str, Any]], filters: dict[str, Any], respon
         return to_xlsx(rows, filters, response)
     if fmt == "json":
         return to_json(rows, filters, response)
+    if fmt == "parquet":
+        return to_parquet(rows, filters, response)
     raise ValueError(f"format is one of {', '.join(FORMATS)}")
 
 

@@ -83,7 +83,7 @@ async def list_bi_access(admin: Admin) -> JSONResponse:
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.bi.write",
+    scope="insights_admin.bi.write",
     rate_limit="reporting-admin",
     idempotency="not-idempotent-create",
     audit_event="insights.bi_access.create",
@@ -126,7 +126,7 @@ async def create_bi_access(admin: Admin) -> JSONResponse:
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.bi.write",
+    scope="insights_admin.bi.write",
     rate_limit="reporting-admin",
     idempotency="idempotent-delete",
     audit_event="insights.bi_access.revoke",

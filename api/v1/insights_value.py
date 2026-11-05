@@ -201,7 +201,7 @@ async def _require_tenant(admin: ActiveHumanAdmin, tenant_id: str) -> uuid.UUID:
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="conflict-on-duplicate",
     audit_event="insights.value.change",
@@ -250,7 +250,7 @@ async def add_baseline(body: BaselineIn, admin: Admin, tenant_id: str = Depends(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="idempotent-update",
     audit_event="insights.value.change",
@@ -300,7 +300,7 @@ async def edit_baseline(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="conflict-on-duplicate",
     audit_event="insights.value.change",
@@ -342,7 +342,7 @@ async def add_rate(body: RateIn, admin: Admin, tenant_id: str = Depends(get_curr
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="idempotent-update",
     audit_event="insights.value.change",
@@ -387,7 +387,7 @@ async def edit_rate(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="idempotent-first-write-wins",
     audit_event="insights.value.change",
@@ -442,7 +442,7 @@ async def confirm(body: ConfirmIn, admin: Admin, tenant_id: str = Depends(get_cu
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.value.write",
+    scope="insights_admin.value.write",
     rate_limit="reporting-admin",
     idempotency="idempotent-update",
     audit_event="insights.value.change",

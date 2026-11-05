@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router";
 
 const LINKS = [
-  { to: "/dashboard/approvals", label: "Agent approvals", match: (path: string) => path === "/dashboard/approvals" },
+  { to: "/dashboard/approvals", labelKey: "approvals.subnavAgentApprovals", match: (path: string) => path === "/dashboard/approvals" },
   {
     to: "/dashboard/approvals/cases",
-    label: "Governed cases",
+    labelKey: "approvals.subnavGovernedCases",
     match: (path: string) => path.startsWith("/dashboard/approvals/cases"),
   },
 ];
 
 /** Switches between the agent approval queue and the governed case screens. */
 export default function ApprovalsSubnav() {
+  const { t } = useTranslation();
   const { pathname } = useLocation();
   return (
-    <nav aria-label="Approvals" className="flex flex-wrap gap-2 border-b pb-2">
+    <nav aria-label={t("approvals.subnavLabel")} className="flex flex-wrap gap-2 border-b pb-2">
       {LINKS.map((link) => {
         const current = link.match(pathname.replace(/\/$/, ""));
         return (
@@ -26,7 +28,7 @@ export default function ApprovalsSubnav() {
               current ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent"
             }`}
           >
-            {link.label}
+            {t(link.labelKey)}
           </Link>
         );
       })}
