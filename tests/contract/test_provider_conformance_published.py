@@ -66,7 +66,7 @@ def test_the_suite_uses_only_relative_imports_within_itself() -> None:
 
 def test_the_image_build_copies_every_forced_include() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
-    builder = dockerfile[: dockerfile.index('pip install --no-cache-dir ".[v4]"')]
+    builder = dockerfile[: dockerfile.index('pip install --no-cache-dir -r requirements.txt ".[v4]"')]
     for source in _wheel_config()["force-include"]:
         top = source.split("/")[0]
         assert f"COPY {top}/ {top}/" in builder, f"Dockerfile builder stage does not copy {top}/"
