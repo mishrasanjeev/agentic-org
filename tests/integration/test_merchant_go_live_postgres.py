@@ -115,7 +115,15 @@ async def _create(tenant: str, name: str = "Tea Corner") -> dict[str, Any]:
 
 
 async def _complete_setup(tenant: str, merchant_id: str) -> dict[str, Any]:
-    await setup_api.upload_catalog(merchant_id, setup_api.CatalogUploadRequest(format="csv", content=CSV), tenant)
+    uploaded = await setup_api.upload_catalog(
+        merchant_id, setup_api.CatalogUploadRequest(format="csv", content=CSV), tenant
+    )
+    # Warnings never refuse the upload.
+    assert [(w["column"], w["rows"]) for w in uploaded["warnings"]] == [
+        ("image_url", [2]),
+        ("description", [2]),
+        ("barcode", [1, 2]),
+    ]
     await setup_api.put_policies(
         merchant_id,
         setup_api.PoliciesRequest(
@@ -124,6 +132,7 @@ async def _complete_setup(tenant: str, merchant_id: str) -> dict[str, Any]:
             shipping_fee="49.50",
             shipping_currency="inr",
             shipping_countries=["in", "IN"],
+            delivery_postal_prefixes=["5600", "560 1", "5600"],
         ),
         tenant,
     )
@@ -185,11 +194,24 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
     ready = await _complete_setup(tenant, merchant_id)
     assert ready["ready_to_turn_on"] is True and ready["missing"] == []
     assert ready["policies"]["shipping_rate"] == {"fee": "49.50", "currency": "INR", "countries": ["IN"]}
+    assert ready["policies"]["delivery_postal_prefixes"] == ["5600", "5601"]
+    # The catalog check reads the stored upload: every variant is offered, two things are worth fixing.
+    health = ready["catalog"].pop("health")
+    assert (health["status"], health["product_count"], health["offered_variant_count"]) == ("warnings", 2, 2)
+    assert health["problems"] == []
+    warned = {item["code"]: (item["count"], item["examples"]) for item in health["warnings"]}
+    assert warned == {
+        "no_image": (1, ["Masala chai"]),
+        "no_description": (1, ["Masala chai"]),
+        "no_barcode": (2, ["Nilgiri green tea", "Masala chai"]),
+    }
     assert ready["catalog"] | {"last_synced_at": None} == {
         "status": "ready",
         "source": "catalog_upload",
         "shop_domain": None,
         "product_count": 2,
+        "read_limit": None,
+        "at_read_limit": False,
         "last_synced_at": None,
         "currency": "INR",
         "last_error": None,
@@ -217,6 +239,7 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
     assert packet.public_brand_profile["return_policy_summary"] == "Unused tea can be returned within 7 days."
     assert packet.public_brand_profile["fulfillment_policy_summary"].endswith("No store pickup.")
     config = await _config(tenant, merchant_id)
+    assert config.provider_policy["ucp"]["fulfillment"]["postal_code_prefixes"] == ["5600", "5601"]
     assert config.provider_policy["arbiter"] == {
         "max_order_amount_minor_units": 500_000,
         "max_daily_amount_minor_units": 2_000_050,

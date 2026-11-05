@@ -9,16 +9,39 @@
  */
 import api from "@/lib/api";
 
-export type InsightsViewKey = "executive" | "finance";
+export type InsightsViewKey =
+  | "executive"
+  | "finance"
+  | "operations"
+  | "hr"
+  | "marketing"
+  | "commerce"
+  | "compliance"
+  | "engineering"
+  | "back_office"
+  | "domain"
+  | "partner";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
-export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens";
+export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";
 export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
-export type ExportFormat = "csv" | "xlsx" | "json";
+export type ExportFormat = "csv" | "xlsx" | "json" | "parquet" | "pdf";
 
-export const VIEW_KEYS: readonly InsightsViewKey[] = ["executive", "finance"];
-export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
+export const VIEW_KEYS: readonly InsightsViewKey[] = [
+  "executive",
+  "finance",
+  "operations",
+  "hr",
+  "marketing",
+  "commerce",
+  "compliance",
+  "engineering",
+  "back_office",
+  "domain",
+  "partner",
+];
+export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json", "parquet"];
 
 export interface ReportingSettings {
   timezone: string;
@@ -33,6 +56,8 @@ export interface InsightsStatus {
   /** Per-tenant BI database access is on and configured, and the caller is a human administrator. */
   bi_access?: boolean;
   settings?: ReportingSettings | null;
+  /** Yesterday's daily figures are not rolled up yet (after 03:00 tenant time). */
+  late_data?: boolean;
 }
 
 export interface MetricPeriod {
@@ -84,6 +109,8 @@ export interface MetricResponse {
   hint?: string | null;
   /** The value is only a floor (a latency percentile over 10 minutes): show it as "> 10m". */
   lower_bound?: boolean | null;
+  /** Money saved: whether the assumptions are confirmed, and how much of the estimate rests on confirmed baselines. */
+  confirmation?: { confirmed: boolean; confidence: string; unpriced_task_types: number; link?: string } | null;
 }
 
 export interface NeedsYouItem {
@@ -97,6 +124,9 @@ export interface NeedsYouItem {
   /** Metric state, or a budget state (ok / warn / breached). */
   state?: MetricState | "warn" | "breached" | string | null;
   detail?: string | null;
+  /** An Insights alert (kind "alert") can be acknowledged by its id. */
+  id?: string | null;
+  rule_key?: string | null;
 }
 
 export interface InsightsViewResponse {
@@ -151,6 +181,7 @@ function normaliseStatus(data: unknown): InsightsStatus {
     views,
     platform_operator: raw.platform_operator === true,
     bi_access: raw.bi_access === true,
+    late_data: raw.late_data === true,
     settings,
   };
 }
@@ -186,9 +217,9 @@ export const insightsApi = {
     return data as MetricResponse;
   },
   /** Fetch an export as a Blob through the authenticated client (cookies and the 413 hint included). */
-  async exportBlob(key: string, format: ExportFormat, filters: InsightsFilters): Promise<Blob> {
+  async exportBlob(key: string, format: ExportFormat, filters: InsightsFilters, includePii = false): Promise<Blob> {
     const { data } = await api.get(exportPath(key), {
-      params: { format, ...filterParams(filters) },
+      params: { format, ...filterParams(filters), ...(includePii ? { include_pii: "true" } : {}) },
       responseType: "blob",
     });
     return data as Blob;

@@ -45,6 +45,7 @@ from connectors.framework.verification_provider import (
     OwnershipGraph,
     Pending,
     PersonSubject,
+    PresentedIdentity,
     ProviderError,
     ScreeningResult,
     ScreenOptions,
@@ -100,6 +101,10 @@ class ToolDecision:
     sub_reason: str = ""
     #: The grant the decision was taken under, when the authorizer resolved one.
     grant_id: str = ""
+    #: The acting agent's identity (identifier, attestation hash, trust tier) when agent identity is on.
+    agent_identity: Mapping[str, str] | None = None
+    #: What the agent presents to a provider that accepts a presented identity, when agent identity is on.
+    presented_identity: PresentedIdentity | None = None
 
 
 class ToolAuthorizer(Protocol):
@@ -161,8 +166,16 @@ class ToolCallRecord:
     started_at: str
     #: The grant the authorizer resolved for this call (``grnt_...``), or "" when it had none.
     grant_id: str = ""
+    #: The acting agent's identity, when agent identity is on; left out of the record otherwise.
+    agent_identity: Mapping[str, str] | None = None
+    #: Whether this call presented the agent's identity to the provider (agent identity on only).
+    identity_presented: bool = False
 
     def to_dict(self) -> dict[str, Any]:
+        extra: dict[str, Any] = {}
+        if self.agent_identity:
+            extra["agent_identity"] = dict(self.agent_identity)
+            extra["identity_presented"] = self.identity_presented
         return {
             "sequence": self.sequence,
             "tool": self.tool,
@@ -175,6 +188,7 @@ class ToolCallRecord:
             "record_ids": list(self.record_ids),
             "started_at": self.started_at,
             "grant_id": self.grant_id,
+            **extra,
         }
 
 
@@ -317,6 +331,9 @@ class ProviderToolGateway:
     retrieved_evidence: set[tuple[str, str, str]] = field(default_factory=set)
     #: The passage behind every ``excerpt_ref`` any response cited, keyed by that reference.
     excerpts: dict[str, CapturedExcerpt] = field(default_factory=dict)
+    #: The decision the current call was authorized under (its identity and presentation).
+    _decision: ToolDecision | None = field(default=None, init=False, repr=False)
+    _presented: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         unknown = sorted(set(self.tool_set) - set(READ_TOOLS))
@@ -330,8 +347,17 @@ class ProviderToolGateway:
         return self.provider.name
 
     def _record(
-        self, tool: str, outcome: str, reason: str, request: Any, response: Any, started: datetime, grant_id: str = ""
+        self,
+        tool: str,
+        outcome: str,
+        reason: str,
+        request: Any,
+        response: Any,
+        started: datetime,
+        grant_id: str = "",
+        decision: ToolDecision | None = None,
     ) -> None:
+        identity = decision.agent_identity if isinstance(decision, ToolDecision) else None
         self.records.append(
             ToolCallRecord(
                 sequence=len(self.records) + 1,
@@ -345,6 +371,8 @@ class ProviderToolGateway:
                 record_ids=() if response is None else cited_record_ids(response),
                 started_at=started.isoformat(),
                 grant_id=grant_id,
+                agent_identity=dict(identity) if identity else None,
+                identity_presented=bool(identity) and self._presented,
             )
         )
 
@@ -374,10 +402,12 @@ class ProviderToolGateway:
                 )
                 decision = ToolDecision(allowed=False, reason=AUTHORIZATION_UNAVAILABLE)
         grant_id = decision.grant_id if isinstance(decision, ToolDecision) else ""
+        self._decision = decision if isinstance(decision, ToolDecision) else None
+        self._presented = False
         if not isinstance(decision, ToolDecision) or not decision.allowed:
             reason = decision.reason if isinstance(decision, ToolDecision) and decision.reason else "grant_denied"
             sub_reason = decision.sub_reason if isinstance(decision, ToolDecision) else ""
-            self._record(tool, "denied", reason, request, None, started, grant_id)
+            self._record(tool, "denied", reason, request, None, started, grant_id, self._decision)
             _provider_calls_total.labels(capability=capability.value, outcome="denied").inc()
             logger.warning(
                 "provider_tool_refused", agent=self.agent, tool=tool, reason=reason, sub_reason=sub_reason
@@ -390,11 +420,11 @@ class ProviderToolGateway:
         except ProviderError as exc:
             _provider_call_seconds.labels(capability=capability.value).observe(time.monotonic() - begun)
             _provider_calls_total.labels(capability=capability.value, outcome="error").inc()
-            self._record(tool, "error", exc.reason, request, None, started, grant_id)
+            self._record(tool, "error", exc.reason, request, None, started, grant_id, decision)
             raise
         if isinstance(result, NotAvailable):
             _provider_calls_total.labels(capability=capability.value, outcome="not_available").inc()
-            self._record(tool, "not_available", result.reason, request, None, started, grant_id)
+            self._record(tool, "not_available", result.reason, request, None, started, grant_id, decision)
             return result
         _provider_call_seconds.labels(capability=capability.value).observe(time.monotonic() - begun)
         self.retrieved_evidence.update(cited_evidence(result))
@@ -402,8 +432,17 @@ class ProviderToolGateway:
             self.excerpts.setdefault(excerpt.excerpt_ref, excerpt)
         outcome = "pending" if isinstance(result, Pending) else "ok"
         _provider_calls_total.labels(capability=capability.value, outcome=outcome).inc()
-        self._record(tool, outcome, "", request, result, started, grant_id)
+        self._record(tool, outcome, "", request, result, started, grant_id, decision)
         return result
+
+    def _with_presented_identity(self, opts: VerifyOptions) -> VerifyOptions:
+        """The options with the agent's presented identity, only for a provider that declares it takes one."""
+        decision = self._decision
+        presented = decision.presented_identity if decision is not None else None
+        if presented is None or not getattr(self.provider, "accepts_presented_identity", False):
+            return opts
+        self._presented = True
+        return opts.model_copy(update={"presented_identity": presented})
 
     # --- typed tools ---------------------------------------------------------------------------
 
@@ -414,7 +453,9 @@ class ProviderToolGateway:
         self, ref: BusinessRef, opts: VerifyOptions, *, deadline: Deadline
     ) -> VerificationHandle | NotAvailable:
         return await self.call(
-            "verify_business", (ref, opts), lambda: self.provider.verify_business(ref, opts, deadline=deadline)
+            "verify_business",
+            (ref, opts),
+            lambda: self.provider.verify_business(ref, self._with_presented_identity(opts), deadline=deadline),
         )
 
     async def verification_result(

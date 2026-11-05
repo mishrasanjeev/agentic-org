@@ -1,72 +1,39 @@
 import { expect, test } from "@playwright/test";
 
-const dashboardFixture = {
-  total_clients: 2,
-  active_clients: 1,
-  inactive_clients: 1,
-  metrics_scope: "active_clients_only",
-  avg_health_score: 75,
-  total_pending_filings: 1,
-  total_overdue: 0,
-  revenue_per_month_inr: 4999,
-  clients: [
-    {
-      id: "active-co",
-      name: "Active Retail Pvt Ltd",
-      health_score: 75,
-      pending_filings: 1,
-      overdue_filings: 0,
-      is_active: true,
-      status: "active",
-      subscription_status: "trial",
-      trial_days_remaining: 5,
-      metrics_included: true,
-    },
-    {
-      id: "inactive-co",
-      name: "Dormant LLP",
-      health_score: null,
-      pending_filings: 9,
-      overdue_filings: 3,
-      is_active: false,
-      status: "inactive",
-      subscription_status: "trial",
-      trial_days_remaining: 5,
-      metrics_included: false,
-    },
+// The Partner dashboard is retired: /dashboard/partner opens the Insights
+// partner view, whose tiles carry the client, deadline, filing and billing
+// figures the old page showed.
+const PERIOD = { from: "2099-01-01", to: "2099-01-30", granularity: "day" };
+
+function snapshotMetric(key: string, title: string, value: number, unit = "count") {
+  return {
+    key,
+    title,
+    definition: `${title} for the firm's client companies.`,
+    unit,
+    source: "fixture",
+    data_quality: "measured",
+    computed_at: "2099-01-30T00:00:00Z",
+    period: PERIOD,
+    value,
+    state: "ok",
+    series: [],
+    rows: [],
+  };
+}
+
+const partnerViewFixture = {
+  view: "partner",
+  period: PERIOD,
+  tiles: [
+    // Only the active client counts; the dormant one is left out.
+    snapshotMetric("partner.clients", "Active client companies", 1),
+    snapshotMetric("backoffice.deadlines", "Compliance deadlines", 0),
+    snapshotMetric("partner.filings", "Filings waiting for approval", 1),
+    snapshotMetric("partner.billing", "Invoiced to clients", 4999, "inr"),
   ],
-  upcoming_deadlines: [
-    {
-      id: "deadline-20",
-      company_id: "active-co",
-      deadline_type: "GSTR-3B",
-      filing_period: "Apr 2026",
-      company_name: "Active Retail Pvt Ltd",
-      due_date: "2099-01-20",
-      days_remaining: 20,
-      company_status: "active",
-    },
-    {
-      id: "deadline-3",
-      company_id: "active-co",
-      deadline_type: "TDS 26Q",
-      filing_period: "Q4 FY26",
-      company_name: "Active Retail Pvt Ltd",
-      due_date: "2099-01-03",
-      days_remaining: 3,
-      company_status: "active",
-    },
-    {
-      id: "inactive-deadline",
-      company_id: "inactive-co",
-      deadline_type: "Dormant GST",
-      filing_period: "Apr 2026",
-      company_name: "Dormant LLP",
-      due_date: "2099-01-04",
-      days_remaining: 4,
-      company_status: "inactive",
-    },
-  ],
+  charts: [],
+  needs_you: [],
 };
 
 test.beforeEach(async ({ page }) => {
@@ -85,8 +52,19 @@ test.beforeEach(async ({ page }) => {
       });
       return;
     }
-    if (path.endsWith("/partner-dashboard")) {
-      await route.fulfill({ json: dashboardFixture });
+    if (path.endsWith("/insights/status")) {
+      await route.fulfill({
+        json: {
+          enabled: true,
+          views: ["executive", "finance", "partner"],
+          platform_operator: false,
+          settings: { timezone: "Asia/Kolkata", fiscal_year_start_month: 4, currency: "INR" },
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/insights/views/partner")) {
+      await route.fulfill({ json: partnerViewFixture });
       return;
     }
     if (path.endsWith("/companies")) {
@@ -104,18 +82,22 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("Aishwarya May 6 dashboard fixes render correctly in English and Hindi", async ({ page }) => {
+test("Aishwarya May 6 partner figures render in the Insights partner view in English and Hindi", async ({ page }) => {
   await page.goto("/dashboard/partner");
 
-  await expect(page.getByRole("heading", { name: "Partner Dashboard" })).toBeVisible();
-  await expect(page.getByText("Trial - 5 days left").first()).toBeVisible();
-  await expect(page.getByText("N/A")).toBeVisible();
-  await expect(page.getByText("Active clients with no pending filings").first()).toBeVisible();
-  await expect(page.getByText("20 days left")).toBeVisible();
-  await expect(page.getByText("3 days left")).toBeVisible();
-  await expect(page.getByText("Dormant GST - Apr 2026")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=partner/);
+  await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Partner" })).toHaveAttribute("aria-selected", "true");
+
+  const clients = page.locator('[data-metric-key="partner.clients"]');
+  await expect(clients).toContainText("Active client companies");
+  await expect(clients.getByTestId("tile-value")).toHaveText("1");
+  await expect(page.locator('[data-metric-key="backoffice.deadlines"]')).toContainText("Compliance deadlines");
+  await expect(page.locator('[data-metric-key="partner.filings"]').getByTestId("tile-value")).toHaveText("1");
+  await expect(page.locator('[data-metric-key="partner.billing"]')).toContainText("Invoiced to clients");
+  await expect(page.getByText("Partner Dashboard")).toHaveCount(0);
 
   await page.getByTestId("language-picker").selectOption("hi");
-  await expect(page.getByText("ट्रायल - 5 दिन शेष").first()).toBeVisible();
-  await expect(page.getByText("बिना लंबित फाइलिंग वाले सक्रिय क्लाइंट").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "इनसाइट्स", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "पार्टनर" })).toHaveAttribute("aria-selected", "true");
 });

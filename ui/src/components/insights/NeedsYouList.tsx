@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
+import { useState } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { NeedsYouItem } from "@/lib/insights/api";
 import { formatAge, MISSING, toFiniteNumber } from "@/lib/insights/format";
+import { alertsApi } from "@/lib/insights/value";
 import StateChip from "./StateChip";
 
 /** Age text from whichever form the API sent: seconds, days, or a ready string. */
@@ -26,16 +28,29 @@ function safeInternalPath(link: string | null | undefined): string | null {
 /** The "needs you" list: oldest pending approvals, budgets at warning or breached, long-paused agents. */
 export default function NeedsYouList({ items }: { items: NeedsYouItem[] }) {
   const { t } = useTranslation();
+  // Alerts acknowledged here leave the list at once; the server keeps them until they clear.
+  const [acked, setAcked] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = items.filter((item) => !(item.kind === "alert" && item.id && acked.has(item.id)));
+  const ack = async (id: string) => {
+    setFailed(null);
+    try {
+      await alertsApi.ack(id);
+      setAcked((prev) => new Set(prev).add(id));
+    } catch {
+      setFailed(id);
+    }
+  };
   return (
     <section aria-labelledby="insights-needs-you" className="rounded-lg border bg-background p-4" data-testid="needs-you">
       <h2 id="insights-needs-you" className="text-sm font-semibold">
         {t("insights.needsYou.title")}
       </h2>
-      {items.length === 0 ? (
+      {shown.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">{t("insights.needsYou.empty")}</p>
       ) : (
         <ul className="mt-2 divide-y">
-          {items.map((item, i) => {
+          {shown.map((item, i) => {
             const age = itemAge(item);
             const to = safeInternalPath(item.link);
             return (
@@ -50,6 +65,21 @@ export default function NeedsYouList({ items }: { items: NeedsYouItem[] }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <StateChip state={item.state} />
+                  {item.kind === "alert" && item.id ? (
+                    <button
+                      type="button"
+                      onClick={() => void ack(item.id as string)}
+                      className="insights-target rounded-md border px-2 py-0.5 text-xs font-medium hover:bg-muted"
+                      aria-label={t("insights.needsYou.ackLabel", { title: item.title })}
+                    >
+                      {t("insights.needsYou.ack")}
+                    </button>
+                  ) : null}
+                  {failed && failed === item.id ? (
+                    <span role="alert" className="text-xs text-[hsl(var(--state-act))]">
+                      {t("insights.needsYou.ackFailed")}
+                    </span>
+                  ) : null}
                   {to ? (
                     <Link to={to} className="insights-target text-xs font-medium text-primary underline-offset-4 hover:underline">
                       {t("insights.needsYou.open")}

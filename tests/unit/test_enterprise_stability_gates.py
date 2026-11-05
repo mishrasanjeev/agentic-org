@@ -640,7 +640,8 @@ def test_core_execution_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 94  # +3: POST /workflows/validate, GET /workflows/builder, GET /workflows/{id}/graph
+    # +3: POST /workflows/validate, GET /workflows/builder, GET /workflows/{id}/graph; +1: POST /approvals/viewed
+    assert len(routes) == 95
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -779,8 +780,8 @@ def test_sso_rpa_target_routes_have_metadata() -> None:
     findings = gates.route_metadata_findings(routes)
 
     # 38 since the prompt template check and render routes, the five change-request routes
-    # and the three comparison routes.
-    assert len(routes) == 38
+    # and the three comparison routes; 39 with GET /report-schedules/{id}/runs.
+    assert len(routes) == 39
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)

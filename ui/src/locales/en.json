@@ -60,7 +60,9 @@
     "billing": "Billing",
     "accountSecurity": "Account Security",
     "settings": "Settings",
-    "lineage": "Lineage"
+    "lineage": "Lineage",
+    "marketingOps": "Marketing operations",
+    "monitoring": "Monitoring"
   },
   "roles": {
     "cfo": "CFO",
@@ -618,6 +620,51 @@
     "promote": "Promote",
     "noAgents": "No agents found."
   },
+  "agentsList": {
+    "title": "Agent Fleet",
+    "importCsv": "Import CSV",
+    "createFromSop": "Create from SOP",
+    "importTitle": "Import Agents from CSV",
+    "importHelp": "Upload a CSV with your org hierarchy. Agents are created in shadow mode. Parent links set via \"reporting_to_name\" column.",
+    "downloadTemplate": "Download Template",
+    "importing": "Importing...",
+    "uploadImport": "Upload & Import",
+    "onlyCsv": "Only CSV files are supported. Please select a .csv file.",
+    "fileTooLarge": "File too large. Maximum size is 5 MB.",
+    "fileEmpty": "File is empty. Please select a valid CSV file.",
+    "noValidRows": "CSV file contains no valid agent rows. Please check the file format and ensure it has data rows with required columns: name, agent_type, domain.",
+    "importFailed": "Import failed",
+    "resultImported": "agents imported",
+    "resultParentLinks": "parent links set",
+    "resultSkipped": "skipped",
+    "skippedRows": "Skipped rows",
+    "unknownRow": "unknown",
+    "stats": {
+      "total": "total",
+      "active": "active",
+      "shadow": "shadow",
+      "paused": "paused"
+    },
+    "searchPlaceholder": "Search agents...",
+    "allDomains": "All Domains",
+    "domains": {
+      "finance": "Finance",
+      "hr": "Hr",
+      "marketing": "Marketing",
+      "ops": "Ops",
+      "backoffice": "Backoffice",
+      "comms": "Comms"
+    },
+    "allStatuses": "All Statuses",
+    "statuses": {
+      "active": "Active",
+      "shadow": "Shadow",
+      "paused": "Paused",
+      "staging": "Staging",
+      "deprecated": "Deprecated"
+    },
+    "loading": "Loading agents..."
+  },
   "workflows": {
     "title": "Workflows",
     "create": "Create Workflow",
@@ -627,6 +674,101 @@
     "steps": "Steps",
     "trigger": "Trigger",
     "noWorkflows": "No workflows found."
+  },
+  "workflowsList": {
+    "tabMine": "My Workflows",
+    "tabTemplates": "Templates",
+    "loading": "Loading workflows...",
+    "loadFailed": "Failed to load workflows",
+    "loadFailedWithError": "Failed to load workflows: {{error}}",
+    "retry": "Retry",
+    "empty": "No workflows configured yet.",
+    "active": "Active",
+    "inactive": "Inactive",
+    "triggerLabel": "Trigger:",
+    "createdLabel": "Created:",
+    "triggerTypes": {
+      "manual": "manual",
+      "schedule": "schedule",
+      "api_event": "api_event",
+      "email_received": "email_received",
+      "webhook": "webhook"
+    },
+    "view": "View",
+    "runNow": "Run Now",
+    "runFailed": "Failed to trigger workflow run",
+    "showing": "Showing {{shown}} of {{total}} on page {{page}} of {{pages}}",
+    "previous": "Previous",
+    "next": "Next",
+    "templatesLoading": "Loading templates…",
+    "noTemplates": "No templates available. Check that /api/v1/workflows/templates is reachable.",
+    "domains": {
+      "finance": "Finance",
+      "hr": "Hr",
+      "marketing": "Marketing",
+      "ops": "Ops"
+    },
+    "stepsCount": "{{steps}} steps",
+    "templateTriggers": {
+      "schedule": "schedule",
+      "api_event": "api event",
+      "manual": "manual",
+      "email_received": "email received"
+    },
+    "useTemplate": "Use Template"
+  },
+  "approvals": {
+    "subnavLabel": "Approvals",
+    "subnavAgentApprovals": "Agent approvals",
+    "subnavGovernedCases": "Governed cases",
+    "title": "Approval Queue",
+    "pendingBadge": "{{total}} pending",
+    "tabPending": "Pending",
+    "tabDecided": "Decided",
+    "allPriorities": "All Priorities",
+    "priority": {
+      "critical": "Critical",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    },
+    "priorityBadge": {
+      "critical": "critical",
+      "high": "high",
+      "normal": "normal",
+      "low": "low"
+    },
+    "loading": "Loading approvals...",
+    "loadFailed": "Failed to load approvals",
+    "loadFailedWithError": "Failed to load approvals: {{error}}",
+    "retry": "Retry",
+    "noPending": "No pending approvals.",
+    "noDecided": "No decided items.",
+    "showing": "Showing {{shown}} of {{total}} on page {{page}} of {{pages}}",
+    "previous": "Previous",
+    "next": "Next",
+    "decisionSubmitted": "Decision \"{{decision}}\" submitted successfully.",
+    "decisionWord": {
+      "approve": "approve",
+      "reject": "reject",
+      "defer": "defer"
+    },
+    "submitFailed": "Failed to submit decision",
+    "triggerAndRole": "Trigger: {{trigger}} | Role: {{role}}",
+    "reasoningTrace": "Reasoning Trace",
+    "decisionLabel": "Decision:",
+    "outcome": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "defer": "Defer",
+      "pending": "Pending",
+      "decided": "Decided",
+      "rejected": "Rejected",
+      "expired": "Expired"
+    },
+    "approve": "Approve",
+    "reject": "Reject",
+    "defer": "Defer"
   },
   "sales": {
     "title": "Sales Pipeline",
@@ -787,6 +929,21 @@
       "roleBypass": "Connected as {{role}}, which bypasses row-level security.",
       "healthNone": "No health snapshot in the last {{hours}} hours.",
       "healthDetail": "{{snapshots}} snapshots in the last {{hours}} hours, {{unhealthy}} unhealthy. Latest version {{version}}, commit {{commit}}."
+    },
+    "operations": {
+      "title": "Dashboard operations",
+      "definition": "Background export jobs made in the range, and tenants whose rollup is behind. A job open for over an hour or a late rollup needs a look.",
+      "exports": "Export jobs",
+      "exportsDetail": "{{ready}} ready, {{failed}} failed, {{expired}} expired, {{open}} still open.",
+      "exportFailure": "Export failure rate",
+      "oldestOpen": "Oldest open export",
+      "noneOpen": "None open",
+      "rollupLate": "Rollups older than {{hours}} hours",
+      "rollupOnTime": "Every tenant's rollup is on time.",
+      "minutes": "{{count}} min",
+      "rollupLateDetail": "Tenants late: {{count}}. The furthest behind by {{hours}} hours.",
+      "benchmarks": "Benchmarks",
+      "benchmarksDetail": "{{optedIn}} organisations opted in; cohorts publish from {{min}}."
     }
   },
   "insights": {
@@ -799,7 +956,16 @@
     "tabsLabel": "Insights views",
     "tabs": {
       "executive": "Executive",
-      "finance": "Finance"
+      "finance": "Finance",
+      "operations": "Operations",
+      "hr": "HR",
+      "marketing": "Marketing",
+      "commerce": "Commerce",
+      "compliance": "Compliance",
+      "engineering": "Engineering",
+      "back_office": "Back office",
+      "domain": "My domain",
+      "partner": "Partner"
     },
     "filters": {
       "label": "Filters",
@@ -856,7 +1022,10 @@
       "summaryBullet": "{{title}}: {{count}} budgets, {{breached}} breached and {{warn}} at warning.",
       "summaryForecast": "{{title}}: forecast {{point}}, likely between {{low}} and {{high}}.",
       "summaryForecastNoBand": "{{title}}: forecast {{point}}.",
-      "summaryEmpty": "{{title}}: no data for this period."
+      "summaryEmpty": "{{title}}: no data for this period.",
+      "summaryWaterfall": "{{title}}: gross saved {{gross}}, net saved {{net}} after spend, review time and errors.",
+      "summaryFunnel": "{{title}}: {{firstValue}} {{first}} down to {{lastValue}} {{last}}.",
+      "kept": "{{pct}}% of the stage before"
     },
     "table": {
       "caption": "{{title}} data",
@@ -870,8 +1039,17 @@
       "csv": "CSV",
       "xlsx": "Excel (XLSX)",
       "json": "JSON",
+      "parquet": "Parquet",
       "downloading": "Preparing...",
-      "failed": "The export could not be created. Try again or narrow the date range."
+      "failed": "The export could not be created. Try again or narrow the date range.",
+      "includePii": "Include raw personal data (recorded in the audit log)",
+      "background": "Prepare it in the background",
+      "queued": "It is being prepared; you will get an email when it is ready.",
+      "openDownloads": "Open Downloads",
+      "svg": "Chart (SVG)",
+      "png": "Chart (PNG)",
+      "noPicture": "This chart has no picture to save; export its data instead.",
+      "pdf": "Chart (PDF)"
     },
     "empty": {
       "title": "No data yet",
@@ -881,12 +1059,33 @@
       "title": "Needs you",
       "empty": "Nothing needs you right now.",
       "age": "waiting {{age}}",
-      "open": "Open"
+      "open": "Open",
+      "ack": "Acknowledge",
+      "ackLabel": "Acknowledge: {{title}}",
+      "ackFailed": "Could not acknowledge"
     },
     "actions": {
       "openAgents": "Open agents",
       "openApprovals": "Open approvals",
-      "openCosts": "Open cost details"
+      "openCosts": "Open cost details",
+      "exploreAgents": "Explore agents",
+      "exploreRuns": "Explore runs",
+      "exploreFailedRuns": "See failed runs",
+      "exploreApprovedRuns": "See runs that needed approval",
+      "exploreSlowRuns": "See slowest runs",
+      "explorePending": "See pending approvals",
+      "exploreApprovals": "Explore approvals",
+      "exploreCost": "Explain the spend",
+      "openValue": "Review assumptions",
+      "exploreWorkflows": "Explore workflows",
+      "exploreStalled": "See stalled runs",
+      "exploreConnectors": "See unhealthy connectors",
+      "openOrders": "Open orders",
+      "exploreAudit": "Explore the audit log",
+      "exploreQuality": "Explore quality",
+      "openCompanies": "Open companies",
+      "openTransactions": "Open transactions",
+      "manageBudgets": "Set budgets"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -899,6 +1098,94 @@
     "error": {
       "load": "Could not load Insights.",
       "retry": "Try again"
+    },
+    "exploreOnly": {
+      "title": "Your landing view is on its way",
+      "body": "Until then, open the tables for your domain below: agents, runs, approvals, cost and learned rules."
+    },
+    "explore": {
+      "heading": "Explore the data"
+    },
+    "valueLink": "Money saved",
+    "waterfall": {
+      "gross_saved": "Gross saved",
+      "spend": "AI spend",
+      "review_cost": "Review time",
+      "error_cost": "Errors",
+      "net_saved": "Net saved"
+    },
+    "funnel": {
+      "carts": "Carts",
+      "checkouts": "Checkouts started",
+      "checkouts_completed": "Checkouts completed",
+      "orders": "Orders",
+      "orders_paid": "Orders paid"
+    },
+    "freshness": {
+      "lateData": "Yesterday's figures are not in yet, so the totals may be low. They are added by 02:00 your time.",
+      "autoRefresh": "Updates every minute"
+    },
+    "files": {
+      "pdf": "PDF of this view",
+      "pptx": "PowerPoint",
+      "financePack": "Finance pack",
+      "evidencePack": "Evidence pack",
+      "asking": "Asking…",
+      "queued": "It is being prepared; you will get an email when it is ready.",
+      "schedule": "Schedule weekly",
+      "partnerPack": "Partner client pack"
+    },
+    "breadcrumbs": "Where you are in Insights",
+    "search": {
+      "open": "Search",
+      "title": "Search Insights",
+      "placeholder": "Find an agent, workflow, connector, company, person or run id",
+      "hint": "Type at least two characters.",
+      "none": "Nothing you can open matches.",
+      "error": "Search failed. Try again.",
+      "kinds": {
+        "agent": "Agent",
+        "workflow": "Workflow",
+        "connector": "Connector",
+        "company": "Company",
+        "user": "Person",
+        "cost_centre": "Cost centre",
+        "run": "Run"
+      }
+    },
+    "saved": {
+      "label": "Saved views",
+      "choose": "Open a saved view",
+      "none": "No saved views yet",
+      "sharedTag": "shared",
+      "saveCurrent": "Save this view",
+      "namePlaceholder": "Name this view",
+      "share": "Share with everyone who can open it",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Saved.",
+      "failed": "The saved view could not be changed.",
+      "manage": "My saved views",
+      "delete": "Delete",
+      "deleteNamed": "Delete the saved view {{name}}"
+    },
+    "changes": {
+      "title": "Since you last looked ({{since}})",
+      "firstVisit": "In the last 7 days",
+      "items": {
+        "agents_created_one": "{{count}} agent added",
+        "agents_created_other": "{{count}} agents added",
+        "agent_status_changes_one": "{{count}} agent status change",
+        "agent_status_changes_other": "{{count}} agent status changes",
+        "approvals_decided_one": "{{count}} approval decided",
+        "approvals_decided_other": "{{count}} approvals decided",
+        "runs_failed_one": "{{count}} failed run",
+        "runs_failed_other": "{{count}} failed runs",
+        "alerts_fired_one": "{{count}} new alert",
+        "alerts_fired_other": "{{count}} new alerts",
+        "config_changes_one": "{{count}} configuration change",
+        "config_changes_other": "{{count}} configuration changes"
+      }
     }
   },
   "insightsBi": {
@@ -968,6 +1255,121 @@
       "body": "Only an organisation administrator signed in as a person can manage BI database logins."
     }
   },
+  "insightsBenchmarks": {
+    "title": "Benchmarks",
+    "window": "Last 30 complete days, {{from}} to {{to}}. Organisations taking part: {{count}}.",
+    "loading": "Loading benchmarks…",
+    "loadFailed": "Benchmarks could not be loaded.",
+    "changeFailed": "The choice could not be saved.",
+    "optIn": "Take part in benchmarks",
+    "optOut": "Stop taking part",
+    "notOptedIn": "Benchmarks compare organisations that choose to take part. Once an administrator opts in, this organisation's figures count towards cohorts of at least {{min}} organisations and you see where you stand. No other organisation sees your figures.",
+    "noCohort": "No cohort large enough yet",
+    "band": "{{cohort}} ({{count}}): 25th {{p25}}, median {{p50}}, 75th {{p75}}",
+    "footnote": "Production runs that were measured, never demo data. A cohort is shown only with at least {{min}} organisations, each with at least {{runs}} runs in the window; only percentiles are shared.",
+    "columns": {
+      "metric": "Benchmark",
+      "yours": "Yours",
+      "cohort": "Cohorts"
+    },
+    "cohorts": {
+      "all": "All taking part",
+      "plan": "Plan {{plan}}"
+    },
+    "positions": {
+      "below_p25": "below the 25th percentile",
+      "p25_p50": "between the 25th percentile and the median",
+      "p50_p75": "between the median and the 75th percentile",
+      "above_p75": "above the 75th percentile"
+    },
+    "metrics": {
+      "success_rate": "Run success rate",
+      "cost_per_run_usd": "Cost per run",
+      "approvals_per_100_runs": "Approvals per 100 runs",
+      "avg_run_ms": "Average run time"
+    }
+  },
+  "insightsBudgets": {
+    "link": "Budgets",
+    "title": "Budgets",
+    "subtitle": "Spend limits for the organisation, a company or a cost centre, against the cost ledger.",
+    "back": "Back to Finance",
+    "loading": "Loading budgets…",
+    "loadFailed": "Budgets could not be loaded.",
+    "add": "Add a budget",
+    "edit": "Edit",
+    "editLabel": "Edit budget {{name}}",
+    "delete": "Delete",
+    "deleteLabel": "Delete budget {{name}}",
+    "deleting": "Deleting…",
+    "confirmTitle": "Delete this budget?",
+    "confirmBody": "Delete {{name}}? Its alerts stop. The audit log keeps what it was.",
+    "confirmDelete": "Delete budget",
+    "cancel": "Cancel",
+    "save": "Save budget",
+    "saving": "Saving…",
+    "created": "Budget {{name}} added.",
+    "updated": "Budget {{name}} saved.",
+    "deleted": "Budget {{name}} deleted.",
+    "footnote": "Spend is the agent cost ledger in USD for the current day, week (from Monday) or month, in UTC. Alerts are emailed to your organisation's alert address or first administrator, and appear under Needs you. A monthly budget for the whole organisation is also compared with the month's spend forecast.",
+    "forbidden": {
+      "title": "Budgets are for administrators, the CFO and auditors",
+      "body": "Ask an administrator if you need to see or set spend limits."
+    },
+    "disabled": {
+      "title": "Insights is off for this organisation",
+      "body": "An administrator can turn Insights on in Settings."
+    },
+    "empty": {
+      "title": "No budget is set",
+      "editHint": "Add a budget to track spend against a limit and be alerted before it is reached.",
+      "readHint": "An administrator or the CFO can add one."
+    },
+    "columns": {
+      "name": "Budget",
+      "period": "Period",
+      "spend": "Spend so far",
+      "limit": "Limit",
+      "used": "Used",
+      "state": "State",
+      "actions": "Actions"
+    },
+    "periods": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "states": {
+      "ok": "Within limit",
+      "warn": "At {{percent}}% or more",
+      "breached": "Over the limit"
+    },
+    "scope": {
+      "organisation": "Whole organisation",
+      "part": "One company or cost centre",
+      "forecast": "checked against the forecast"
+    },
+    "form": {
+      "newTitle": "New budget",
+      "editTitle": "Edit budget",
+      "name": "Name",
+      "period": "Period",
+      "limit": "Limit (USD)",
+      "warnAt": "Warn at (% of the limit)",
+      "forCompany": "Only the company selected in the header",
+      "channels": "Alerts are emailed and shown in Insights. Slack and webhooks are not offered for budgets."
+    },
+    "errors": {
+      "name": "Give the budget a name of up to 100 characters.",
+      "threshold": "Enter a limit from 0.01 to {{max}}.",
+      "warnAt": "Warn at is a whole number from 1 to 100.",
+      "duplicate": "A budget with this name exists.",
+      "person": "Budgets are changed by a person signed in, not an API key.",
+      "forbidden": "Only an administrator or the CFO can change budgets.",
+      "notFound": "That budget no longer exists.",
+      "saveFailed": "The budget could not be saved."
+    }
+  },
   "reportSchedules": {
     "title": "Report Schedules",
     "create": "Create Schedule",
@@ -978,7 +1380,121 @@
     "next": "Next Run",
     "active": "Active",
     "paused": "Paused",
-    "noSchedules": "No schedules yet. Create one to get started."
+    "noSchedules": "No schedules yet. Create one to get started.",
+    "subtitle": "Configure automated report generation and delivery",
+    "newSchedule": "+ New Schedule",
+    "dismiss": "Dismiss",
+    "editSchedule": "Edit Schedule",
+    "updateSchedule": "Update Schedule",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "reportTypes": {
+      "cfo_daily": "CFO Daily Briefing",
+      "cmo_weekly": "CMO Weekly Report",
+      "pnl_report": "P&L Monthly",
+      "aging_report": "AR/AP Aging",
+      "campaign_report": "Campaign Performance",
+      "insights_view": "Insights view (PDF)",
+      "insights_finance_pack": "Insights finance pack",
+      "insights_evidence_pack": "Insights evidence pack"
+    },
+    "periods": {
+      "last_7_days": "Last 7 days",
+      "last_30_days": "Last 30 days",
+      "last_week": "Last week (Monday to Sunday)",
+      "last_month": "Last month",
+      "month_to_date": "Month to date"
+    },
+    "frequencies": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "days": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "formats": {
+      "pdf": "PDF",
+      "excel": "Excel",
+      "both": "Both"
+    },
+    "insightsView": "Insights view",
+    "periodCovered": "Period covered",
+    "insightsDeliveryNote": "Email recipients get a link to Downloads (they sign in to open it); Slack and WhatsApp get the file. A view with no data for the period is not sent.",
+    "executionTime": "Execution Time (UTC)",
+    "dayOfWeek": "Day of Week",
+    "dayOfMonth": "Day of Month",
+    "advancedToggle": "Advanced — write CRON expression directly",
+    "cronPlaceholder": "0 9 * * 1-5   (every weekday at 09:00 UTC)",
+    "cronAriaLabel": "Custom cron expression",
+    "cronHelp": "5 fields: minute (0-59), hour (0-23), day-of-month (1-31), month (1-12), day-of-week (0-7).",
+    "cronInvalid": "Advanced cron must be a 5-field expression (min hour dom mon dow)",
+    "outputFormat": "Output Format",
+    "scheduleActive": "Schedule active",
+    "channelLabels": {
+      "email": "Email"
+    },
+    "channelNames": {
+      "email": "email",
+      "slack": "slack",
+      "whatsapp": "whatsapp"
+    },
+    "slackPlaceholder": "Channel ID (e.g. C01ABC23DEF) or #channel-name",
+    "recipientRequired": "{{channel}} recipient is required",
+    "invalidEmail": "Invalid email address (expected name@domain.tld)",
+    "invalidSlack": "Invalid Slack channel — use C01ABC23DEF or #channel-name",
+    "invalidWhatsapp": "Invalid WhatsApp number — use E.164 (e.g. +919876543210)",
+    "channelRequired": "At least one delivery channel is required",
+    "loading": "Loading schedules...",
+    "loadFailed": "Failed to load schedules",
+    "empty": "No report schedules yet. Click \"New Schedule\" to get started.",
+    "columns": {
+      "report": "Report",
+      "schedule": "Schedule",
+      "lastRun": "Last Run",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "noDelivery": "No delivery",
+    "toggleActive": "Toggle active",
+    "runNow": "Run now",
+    "run": "Run",
+    "runHistory": "Run history",
+    "history": "History",
+    "edit": "Edit",
+    "delete": "Delete",
+    "del": "Del",
+    "confirmDelete": "Delete this schedule?",
+    "saveFailed": "Save failed",
+    "deleteFailedStatus": "Delete failed (HTTP {{status}})",
+    "deleteFailed": "Delete failed",
+    "updateFailedStatus": "Update failed (HTTP {{status}})",
+    "updateFailed": "Update failed",
+    "runTriggered": "Report triggered. Task ID: {{taskId}}",
+    "runFailed": "Run failed",
+    "historyLoadFailed": "Could not load the run history",
+    "loadingRuns": "Loading runs...",
+    "noRuns": "No runs yet.",
+    "runColumns": {
+      "started": "Started",
+      "trigger": "Trigger",
+      "outcome": "Outcome",
+      "why": "Why"
+    },
+    "triggerScheduled": "Schedule",
+    "runStatuses": {
+      "delivered": "delivered",
+      "generated": "generated",
+      "failed": "failed",
+      "blocked": "blocked"
+    },
+    "fileOnDownloads": "File on Downloads"
   },
   "settings": {
     "title": "Settings",
@@ -991,5 +1507,333 @@
     "save": "Save Settings",
     "saving": "Saving...",
     "saved": "Settings saved successfully."
+  },
+  "insightsExplore": {
+    "title": "Explore",
+    "subtitle": "The rows behind every number: filter, sort, open a row, export.",
+    "back": "Back to Insights",
+    "loading": "Loading the table…",
+    "tabsLabel": "Tables",
+    "snapshot": "A snapshot of now; the date range does not apply.",
+    "none": {
+      "title": "No tables for your role",
+      "body": "Ask an administrator for a role with Insights access."
+    },
+    "forbidden": {
+      "title": "This table is not available to your role",
+      "body": "Pick another table above."
+    },
+    "invalid": "That filter or sort is not available",
+    "empty": "No rows match",
+    "results": "Rows {{first}}–{{last}} of {{total}}",
+    "actions": "Actions",
+    "yes": "Yes",
+    "no": "No",
+    "pagination": "Pages",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "explorers": {
+      "agents": "Agents",
+      "runs": "Runs",
+      "workflows": "Workflows",
+      "approvals": "Approvals",
+      "cost": "Cost and drivers",
+      "quality": "Quality and learning",
+      "connectors": "Connectors",
+      "audit": "Security and audit",
+      "value": "Value and savings"
+    },
+    "filters": {
+      "label": "Filters",
+      "any": "Any",
+      "atLeast": "{{title}} at least",
+      "clear": "Clear filters ({{count}})",
+      "applied": "Applied filters",
+      "remove": "Remove the {{label}} filter"
+    },
+    "revoke": {
+      "button": "Revoke",
+      "label": "Revoke learned rule {{index}}",
+      "confirm": "Yes, revoke",
+      "cancel": "Cancel",
+      "changed": "The agent's rules changed since this page loaded. Reload and try again.",
+      "forbidden": "Only the agent's owner or an administrator can revoke its rules.",
+      "failed": "The rule could not be revoked."
+    },
+    "emptyHint": "Widen the date range or clear filters.",
+    "noRows": "No rows"
+  },
+  "insightsRun": {
+    "title": "Run evidence",
+    "subtitle": "One run and the records around it. Output text and prompts are never shown here.",
+    "back": "Back to runs",
+    "loading": "Loading the run…",
+    "agent": "Agent run",
+    "missing": {
+      "title": "Run not found",
+      "body": "It may belong to another domain or company, or the link is incomplete. Open it again from the Runs table."
+    },
+    "gateway": "Model calls",
+    "spans": "Trace (waterfall)",
+    "approvals": "Approvals",
+    "audit": "Audit rows",
+    "noGateway": "No model gateway records for this run.",
+    "noSpans": "No trace spans for this run.",
+    "noApprovals": "No approval was raised for this run.",
+    "noAudit": "No audit rows for this run.",
+    "tokensSplit": "Input {{input}} · output {{output}} · cached {{cached}}",
+    "fields": {
+      "status": "Status",
+      "started": "Started",
+      "duration": "Duration",
+      "entrypoint": "Entry point",
+      "task": "Task",
+      "model": "Model",
+      "tokens": "Tokens",
+      "cost": "Cost (USD)",
+      "confidence": "Confidence",
+      "approval": "Approval",
+      "error": "Error",
+      "environment": "Environment",
+      "when": "When",
+      "provider": "Provider",
+      "outcome": "Outcome",
+      "fallback": "Fallback from",
+      "latency": "Latency",
+      "input": "Input tokens",
+      "output": "Output tokens",
+      "span": "Span",
+      "kind": "Kind",
+      "decision": "Decision",
+      "decidedBy": "Decided by",
+      "decided": "Decided",
+      "event": "Event",
+      "action": "Action",
+      "signed": "Signed",
+      "delegatedFrom": "For (delegation)",
+      "votes": "Votes",
+      "verified": "Signature verifies",
+      "chainSeq": "Chain position"
+    },
+    "waterfall": {
+      "summary": "{{count}} spans over {{total}}; {{errors}} with errors; the longest is {{longest}} ({{longestMs}}).",
+      "viewData": "View data",
+      "hideData": "Show waterfall",
+      "offset": "Starts at",
+      "detail": "Detail",
+      "error": "error",
+      "row": "{{name}}, {{status}}, starts at {{offset}}, takes {{duration}}"
+    },
+    "failure": {
+      "title": "Why this run failed",
+      "atSpan": "The first error is in {{name}}, {{offset}} into the run.",
+      "atRun": "The run ended as {{status}}; no trace span recorded the error."
+    },
+    "bundle": {
+      "download": "Download evidence (JSON)",
+      "busy": "Preparing…",
+      "checksum": "Saved. SHA-256: {{sha256}}",
+      "saved": "Saved.",
+      "failed": "The evidence file could not be prepared."
+    },
+    "debug": {
+      "title": "Step through this run",
+      "open": "Open the debugger",
+      "close": "Close the debugger"
+    }
+  },
+  "insightsValue": {
+    "title": "Money saved",
+    "subtitle": "An estimate from completed tasks, the minutes each replaces and hourly rates your organisation confirms.",
+    "loading": "Loading money saved…",
+    "forbidden": {
+      "title": "Money saved is for administrators and the CFO",
+      "body": "Ask an administrator for access."
+    },
+    "summaryTitle": "This period",
+    "estimated": "Estimated",
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "net": "Net saved",
+    "hours": "Hours saved",
+    "roi": "ROI",
+    "roiBelowFloor": "Shown once spend reaches {{floor}}",
+    "waterfallTitle": "Gross to net",
+    "unconfirmedTitle": "Confirm the assumptions to see savings",
+    "unconfirmedBody": "{{baselines}} baselines and {{rates}} hourly rates used this period are not confirmed yet. Review them below; nothing is shown until they are.",
+    "askAdmin": "A tenant administrator confirms them.",
+    "confirmAll": "Confirm all used ({{count}})",
+    "confirmedAll": "Assumptions confirmed.",
+    "confirmedOne": "Confirmed.",
+    "counts": "{{completed}} completed and {{failed}} failed tasks with a baseline; {{reviews}} approvals decided.",
+    "unpriced": "Agent types with no baseline, not valued: {{types}}.",
+    "baselines": "Baselines: minutes of work one task replaces",
+    "baselinesHint": "Seeded defaults are starting points. Edit any figure to your own; your figure counts as confirmed by you. Every change is audited.",
+    "rates": "Hourly rates by role",
+    "ratesHint": "Loaded hourly cost of the person who would do the task by hand. Seeded rates cite their public source.",
+    "agentType": "Agent type",
+    "task": "Task",
+    "anyTask": "Any task",
+    "minutes": "Minutes per task",
+    "minutesFor": "Minutes per task for {{type}}",
+    "role": "Done by",
+    "roleFor": "Role for {{type}}",
+    "status": "Source",
+    "hourly": "Hourly cost",
+    "hourlyFor": "Hourly cost for {{role}}",
+    "citation": "Source of the default",
+    "source": {
+      "seeded": "Default",
+      "tenant": "Yours"
+    },
+    "confirmed": "confirmed",
+    "notConfirmed": "not confirmed",
+    "confirm": "Confirm",
+    "confirmLabel": "Confirm {{name}}",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveFailed": "Could not save.",
+    "adminOnly": "Only an administrator signed in as a person can change the assumptions.",
+    "usedInPeriod": "used",
+    "addFor": "Add a baseline for",
+    "add": "Add",
+    "added": "Baseline added.",
+    "roiFloor": "Show ROI from a period spend of ({{currency}})",
+    "roiFloorDefault": "Use the default"
+  },
+  "insightsDownloads": {
+    "title": "Downloads",
+    "subtitle": "Insights files prepared for you. Each is kept for seven days; every download is recorded.",
+    "link": "Downloads",
+    "back": "Back to Insights",
+    "loading": "Loading your files…",
+    "pending": "Some files are still being prepared; this list updates by itself.",
+    "empty": {
+      "title": "No files yet",
+      "body": "When an export is too large to download at once, prepare it in the background and it appears here."
+    },
+    "noStorage": "Background files are not set up for this deployment. Exports up to 50,000 rows still download at once.",
+    "cols": {
+      "file": "File",
+      "status": "Status",
+      "rows": "Rows",
+      "size": "Size",
+      "made": "Asked for",
+      "expires": "Kept until",
+      "action": "Action"
+    },
+    "status": {
+      "queued": "Waiting",
+      "running": "Preparing",
+      "ready": "Ready",
+      "failed": "Failed",
+      "expired": "Expired"
+    },
+    "kinds": {
+      "metric": "Metric",
+      "explorer": "Table",
+      "run_bundle": "Run evidence",
+      "view_pdf": "View PDF",
+      "view_pptx": "View PowerPoint",
+      "finance_pack": "Finance pack",
+      "evidence_pack": "Evidence pack",
+      "partner_pack": "Partner client pack"
+    },
+    "rawPii": "raw personal data",
+    "download": "Download",
+    "downloading": "Downloading…",
+    "downloadLabel": "Download {{name}}",
+    "saved": "Saved.",
+    "failed": "The file could not be downloaded.",
+    "verification": {
+      "verified": "Verification: signatures and audit chain verified",
+      "signatures_verified": "Verification: every signature verified (the audit chain is not sealed for this period)",
+      "broken": "Verification: a break was found; see verification.json"
+    },
+    "sign": "Sign this pack",
+    "statementLabel": "Your sign-off statement",
+    "defaultStatement": "I have reviewed the evidence pack for {{from}} to {{to}} and its verification report.",
+    "confirmSign": "Sign",
+    "cancel": "Cancel",
+    "signed": "Signed.",
+    "signFailed": "The pack could not be signed.",
+    "signedBy": "Signed by {{name}} on {{when}}:"
+  },
+  "insightsEntity": {
+    "kinds": {
+      "agent": "Agent",
+      "workflow": "Workflow",
+      "connector": "Connector",
+      "company": "Company",
+      "user": "Person",
+      "cost_centre": "Cost centre"
+    },
+    "missing": "Not found",
+    "missingHint": "It does not exist, or it is outside the data you can see.",
+    "forbidden": "Not available to your role",
+    "forbiddenHint": "Ask an administrator if you need this page.",
+    "error": "This page could not be loaded.",
+    "yes": "Yes",
+    "no": "No",
+    "cards": "From {{from}} to {{to}}",
+    "noCards": "Nothing was recorded for this in the period.",
+    "agents": "Agents",
+    "linksTitle": "Open in",
+    "timeline": "Timeline",
+    "noTimeline": "No recorded activity yet.",
+    "facts": {
+      "title": "Facts",
+      "status": "Status",
+      "agent_type": "Type",
+      "domain": "Domain",
+      "version": "Version",
+      "created_at": "Created",
+      "spend_usd": "Spend in the period (USD)",
+      "trigger": "Trigger",
+      "active": "Active",
+      "mean_duration_s": "Mean run time (seconds)",
+      "category": "Category",
+      "auth_type": "Sign-in method",
+      "health_check_at": "Last health check",
+      "agents": "Agents using it",
+      "industry": "Industry",
+      "state_code": "State code",
+      "health_score": "Health score",
+      "overdue_deadlines": "Overdue deadlines",
+      "role": "Role",
+      "mfa_enabled": "Two-step sign-in",
+      "last_login_at": "Last sign-in",
+      "code": "Code",
+      "budget_limit": "Budget",
+      "budget_used_pct": "Budget used (%)",
+      "fiscal_year": "Fiscal year"
+    },
+    "links": {
+      "runs": "Runs",
+      "approvals": "Approvals",
+      "quality": "Quality",
+      "manage": "Manage",
+      "workflows": "Workflow runs",
+      "connectors": "Connector status",
+      "audit": "Audit log",
+      "cost": "Cost"
+    },
+    "columns": {
+      "at": "When",
+      "event": "Event",
+      "action": "Action",
+      "outcome": "Outcome",
+      "actor": "By"
+    }
+  },
+  "marketingOps": {
+    "title": "Marketing operations",
+    "tabs": "Marketing pages",
+    "operations": "Operations",
+    "abm": "ABM accounts"
   }
 }

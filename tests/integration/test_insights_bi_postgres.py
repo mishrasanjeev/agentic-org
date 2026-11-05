@@ -46,8 +46,10 @@ from typing import Any
 
 import asyncpg
 import pytest
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -59,6 +61,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "migrations" / "versions" / "v6_z108_insights_bi.py"
 PREVIOUS = "v6z107_insights_platform"
 HEAD = "v6z108_insights_bi"
+# The repository's head: the database is there before and after these tests.
+LATEST = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_current_head()
 BI_ROLES = ("agenticorg_bi", "agenticorg_bi_lookup", "agenticorg_bi_admin", "agenticorg_bi_reader")
 SOURCES = ("run_facts", "insights_daily", "spend_usage_rollups", "agents", "hitl_queue")
 VIEWS = ("run_facts", "daily", "spend_daily", "agents", "approvals")
@@ -182,7 +186,7 @@ def installed() -> Iterator[dict[str, Any]]:
         if not conn.execute(text("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")).scalar():
             pytest.skip("setting up the installer role needs a superuser connection")
         db = conn.execute(text("SELECT current_database()")).scalar_one()
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == HEAD
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == LATEST
     # Fixed prefix plus UUID hex; never "bi_" (the BI login name space).
     installer = "t_biinst_" + uuid.uuid4().hex[:12]
     _apply(_sync_url(), "downgrade", PREVIOUS)
@@ -214,11 +218,11 @@ def installed() -> Iterator[dict[str, Any]]:
         try:
             _restore(admin, db, installer)
         finally:
-            # Back to the ordinary superuser-installed head for the other tests.
+            # Back to the repository's head, installed by the superuser, for the other tests.
             with admin.connect() as conn:
                 version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-            if version != HEAD or not _exists_any(admin):
-                _apply(_sync_url(), "upgrade", HEAD)
+            if version != LATEST or not _exists_any(admin):
+                _apply(_sync_url(), "upgrade", LATEST)
             admin.dispose()
 
 

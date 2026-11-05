@@ -79,8 +79,16 @@ from api.v1 import (
     idp_review,
     idp_statements,
     insights,
+    insights_alerts,
+    insights_benchmarks,
     insights_bi,
+    insights_budgets,
+    insights_entities,
+    insights_explore,
+    insights_exports,
     insights_platform,
+    insights_saved_views,
+    insights_value,
     integrations_status,
     invoices,
     knowledge,
@@ -134,6 +142,7 @@ from api.v1 import auth_mfa as v1_auth_mfa
 from api.v1 import demo as v1_demo
 from api.v1 import network as v1_network
 from api.v1 import org as v1_org
+from api.v1 import shop_site as v1_shop_site
 from api.v1 import (
     status as status_mod,
 )
@@ -351,6 +360,9 @@ app.include_router(commerce_acp.router)
 # UCP business surfaces live at the merchant serving host's root (/.well-known/ucp, /ucp/...).
 app.include_router(ucp_discovery.well_known_router)
 app.include_router(ucp_discovery.ucp_router)
+# A listed network shop's storefront and product feed on its own host: the merchant-host middleware
+# sends /, /products/*, /sitemap.xml, /robots.txt, /llms.txt and /feeds/* there (api/v1/shop_site.py).
+app.include_router(v1_shop_site.router)
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])
@@ -393,8 +405,16 @@ app.include_router(personalisation.router, prefix="/api/v1")
 app.include_router(onboarding_desk.router, prefix="/api/v1")
 app.include_router(spend.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
+app.include_router(insights_alerts.router, prefix="/api/v1")
+app.include_router(insights_exports.router, prefix="/api/v1")
 app.include_router(insights_bi.router, prefix="/api/v1")
+app.include_router(insights_explore.router, prefix="/api/v1")
+app.include_router(insights_saved_views.router, prefix="/api/v1")
+app.include_router(insights_budgets.router, prefix="/api/v1")
+app.include_router(insights_benchmarks.router, prefix="/api/v1")
+app.include_router(insights_entities.router, prefix="/api/v1")
 app.include_router(insights_platform.router, prefix="/api/v1")
+app.include_router(insights_value.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

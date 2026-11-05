@@ -988,7 +988,7 @@ CTA_LABELS = {
 }
 
 CTA_PATHS = {
-    "none": "/dashboard/cmo",
+    "none": "/dashboard/marketing-ops",
     "review_pending_approval": "/dashboard/approvals",
     "resolve_overdue_approvals": "/dashboard/approvals",
     "review_escalated_approval": "/dashboard/approvals",

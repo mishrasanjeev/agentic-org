@@ -832,6 +832,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Service Status](https://agenticorg.ai/status): The status page reports the current availability information exposed by AgenticOrg and provides a support path when an organization needs incident-specific help.
 - [Privacy Policy](https://agenticorg.ai/privacy): The privacy policy explains how AgenticOrg handles personal information and how people can submit questions or requests about that handling.
 - [Terms of Service](https://agenticorg.ai/terms): The terms of service describe the rules and responsibilities that apply when a customer or user accesses AgenticOrg services.
+- [Shopping Network Terms](https://agenticorg.ai/network-terms): The shopping network terms explain the roles of buyers, shops and AgenticOrg when buyers shop network shops from AI apps and Telegram.
 - [Refund and Cancellation Policy](https://agenticorg.ai/refund): The refund and cancellation policy describes how subscription cancellation and eligible billing requests are handled.
 - [AgenticOrg Documentation](https://agenticorg.ai/docs): The public user manual includes task-based setup and operating guides, source-verified product boundaries, troubleshooting and five end-to-end BFSI reference workflows.
 - [Start here](https://agenticorg.ai/docs/start-here): Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.
@@ -1076,14 +1077,14 @@ bypass permissions.
 | Configure voice | [Voice Agents](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
 | Configure browser automation | [RPA Scripts](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
 | Investigate run evidence | [Audit Log](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
-| Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
+| Inspect run timelines | [Insights runs](https://app.agenticorg.ai/dashboard/insights/explore/runs) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
 | Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
-| Review recorded agent cost in USD (no sidebar entry) | [Cost Dashboard](https://app.agenticorg.ai/dashboard/costs) | [Billing and support](/docs/billing-and-support) |
+| Review recorded agent cost | [Insights Finance view](https://app.agenticorg.ai/dashboard/insights?view=finance) | [Billing and support](/docs/billing-and-support) |
 
 #### When you get stuck
 
@@ -2378,7 +2379,7 @@ Audience: Operators and auditors. Reviewed: 2026-10-11.
 
 #### What evidence you should inspect
 
-Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observability**, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Insights** run pages, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
 
 ![Illustrative audit workspace](/screenshots/audit.webp)
 
@@ -2398,7 +2399,7 @@ Do not infer that an absent event means no action occurred. Confirm the view's s
 
 #### Understand screen limits
 
-Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
+The **Audit Log** and, for administrators and auditors, the Insights **Security and audit** explorer read audit history (the Observatory screen is retired; its address opens one of these). Neither is an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
 
 In a tenant that keeps spend rate cards, commitments, invoices, reconciliations or spend jobs, the Audit Log hides those audit rows from every reader who is not a human administrator or auditor, including domain roles and machine credentials, even after spend intelligence is turned off. This is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, on by default; `false` shows them to every reader as before. Where the deployment turns on the tamper-evident audit chain (`AGENTICORG_AUDIT_CHAIN_ENABLED`, off by default), audit rows are linked into a hash chain, and a reader with audit access can read the chain status and verify the links through `GET /api/v1/audit/chain` and `GET /api/v1/audit/chain/verify`.
 
@@ -2473,19 +2474,19 @@ Audience: Administrators and operators. Reviewed: 2026-10-11.
 
 #### Inspect run timelines and workload
 
-The administrator-only **Observability** screen (`/dashboard/observability`) has Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. Traces and Workload are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), a third **Checks** tab lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), a run recorded while it was on offers **Step through** to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+Run timelines live in **Insights**: the **Runs** explorer (`/dashboard/insights/explore/runs`) lists recorded runs, and each run's page shows its span waterfall, the first failure and its records. The administrator-only **Monitoring** screen (`/dashboard/monitoring`, which replaces the Observability screen; the old address redirects there) has Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), Monitoring has a **Checks** tab that lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), an administrator can open the debugger on a run's Insights page (for a run recorded while it was on) to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
 
 ```flow
-Open Observability | Sign in as an authorized administrator and select the intended company.
+Open Insights | Sign in as an authorized administrator and select the intended company.
 Check recording state | Read the tracing/timeline status before interpreting an empty run list.
-Find a run | Filter recent runs by agent, then open one run to inspect parent/child spans and events.
-Compare workload | Review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
+Find a run | Filter the Runs explorer by agent or status, then open one run to inspect parent/child spans and events.
+Compare workload | On Monitoring, review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
 Follow the correlation | Use run/correlation identifiers to inspect audit details and the downstream system separately.
 ```
 
 #### Traces and timelines
 
-The list requests up to 50 recent stored runs and can filter by agent ID. A run detail displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
+The Runs explorer pages through the period's runs and filters by agent, status and other columns. A run's page displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
 
 Before a platform owner changes `AGENTICORG_TRACING_ENABLED` or `AGENTICORG_TRACING_TIMELINE_ENABLED`, agree on an approved OTLP endpoint and protocol, sampling, data classification, storage and retention. Both controls default to off; strict production-like environments require a valid exporter endpoint when tracing is enabled. Confirm the effective retention setting with the platform owner before relying on historical timelines. Never send sensitive payloads to an unapproved telemetry collector.
 
@@ -2793,7 +2794,7 @@ published on or after 21 October 2026. See [Licensing and commercial use](/docs/
 agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). Free personal
 use of the software does not mean free hosting or providers.
 
-Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
+Administrators and CFOs read recorded agent cost on the Insights **Finance** view (`/dashboard/insights?view=finance`) and its cost explorer. It is the platform's own record, not a provider invoice.
 
 The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.
 
@@ -3196,7 +3197,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 
 #### What is not in phase 1
 
-- **No spend screen.** Phase 1 is API-only. The app's existing cost views, such as the Cost Dashboard at `/dashboard/costs` (administrators and CFOs; it has no sidebar entry), read the existing cost ledgers, not these usage records.
+- **No spend screen.** Phase 1 is API-only. The Insights Finance view and its cost explorer read spend metering rollups when metering is on for the tenant, otherwise the cost ledgers (the old Cost Dashboard address now opens the Finance view).
 - **No spend dashboards, budgets, alerts, forecasts, statements or month close.** These belong to later phases; freezing closed months and statements belong to phase 2. Spend intelligence does not block or throttle a call because of its spend.
 - **Some usage is not metered:** the embedding backfill command and seed data, the voice runtime's own speech-to-text and text-to-speech outside the speech store, and the tool gateway's own completion path.
 - **No batch flag on records.** Reconciliation re-prices every group as non-batch usage.
@@ -3780,7 +3781,7 @@ Figure: The buyer pays on your page. When the checkout is ready, AgenticOrg chec
 
 **Can I stop selling this way?** Yes. Choose **Pause** on the Sell everywhere page and your shop leaves the network at once. Your shop name and web address stay yours.
 
-**Am I in Google Gemini, Microsoft Copilot or Perplexity?** Not yet. AgenticOrg is registering with each of them for every shop on the network; the Sell everywhere page shows each one as it comes.
+**Am I in Google Gemini, Microsoft Copilot or Perplexity?** The Sell everywhere page shows where each one stands for your shop: not registered yet, submitted, live, or not eligible yet with the reason. Your web address already serves your shop's pages and a product feed, which each program reads once AgenticOrg is registered with it; see [Your shop pages and product feed](/docs/oacp-sell-everywhere#your-shop-pages-and-product-feed).
 
 #### Go deeper
 
@@ -4503,7 +4504,7 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 | ChatGPT, Claude and other AI apps | They add AgenticOrg's server, `https://mcp.agenticorg.ai/mcp`, once as a custom MCP server. They can then list the network's shops, search them, open or update a checkout and get the payment link | Nothing |
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot. The page shows your exact link | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
-| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
+| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | AgenticOrg registers the whole network with each program, which then reads your shop's own pages and product feed at your web address. The page shows where each one stands for your shop | Keep a price, stock and an image on each product |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
 #### Watch it end to end
@@ -4550,6 +4551,15 @@ access token blank to keep the one you saved: Shopify shows a token only once. A
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
+While your shop is on the network, AgenticOrg reads your Shopify catalog again by itself: usually within ten
+minutes of a **Product update** webhook, and about once an hour without one (a little later when many shops are
+due at once, or an hour after a read that failed). **Read catalog again** on the page reads it at once. Each read
+replaces the one before: a product you removed from your store is no longer offered.
+
+One read takes at most 1,000 products (20 pages of 50). If your store has more, only the first 1,000 that
+Shopify returns are offered to buyers. The page says so after a read that stopped at the limit, and shows a
+note while your catalog is at the limit.
+
 **Product details from Shopify.** Along with titles, prices and stock, AgenticOrg reads each product's tags,
 its barcode, its page on your online store and the product metafields you show on your storefront. In
 Shopify, a metafield is shown on the storefront when its definition (**Settings**, **Custom data**,
@@ -4593,12 +4603,68 @@ extra details. If a row has a problem, nothing is stored and the
 page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
 a store system. Upload again whenever your products change.
 
+A file can also be stored with warnings: products with no `image_url`, no `description` or no `barcode`.
+They are still offered to buyers, and the page lists the first rows of each so you can fill them in later.
+
+### Catalog check
+
+Under **Your catalog** the page checks the catalog AgenticOrg last read (your Shopify store or your file)
+and lists what to fix, with the number of products or variants, a few examples and how to fix each in
+Shopify or in your file. Only you see this check. The network never ranks or hides shops by it, and
+search order stays random.
+
+These variants are **not offered to buyers** until you fix them:
+
+| Problem | Why |
+| --- | --- |
+| No usable price | A variant with no price, a price that is not a number, or no currency is never listed and never checks out. |
+| Stock below zero | Shown as out of stock, so it cannot be ordered. Correct the count in Shopify. |
+
+These are offered, but buyers or their AI assistants get less to go on:
+
+| Warning | What it means |
+| --- | --- |
+| SKU used by more than one variant | The variants are still offered under their own item ids, but the SKU names no one item: a buyer's AI app that asks for that SKU is told it was not found, and a price or stock you set per SKU does not apply to them. Give every variant its own SKU. |
+| No SKU | Orders are harder to match to your own records. |
+| Stock not tracked | Shopify does not track the quantity, so buyers cannot be told whether it is in stock. Tick **Track quantity** under Inventory in Shopify. |
+| Out of stock | Listed as out of stock until you restock it. |
+| No image, no description | Buyers' AI assistants show no photo, or have only the title. |
+| No barcode (GTIN) | The product cannot be matched to the same product at other shops. |
+| Very short title | Harder to find by search. A title such as brand, product and size works best. |
+
+Select **Read catalog again** after a fix in Shopify; upload the file again after a fix in your file.
+
 ### Shipping fee
 
 A shop that uploads its catalog sets one shipping fee per order in the policies step, with its currency and
 the countries it ships to (two-letter codes such as `IN`; leave them empty to ship everywhere). Enter 0 to
 ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
 Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
+
+A Shopify shipping zone that covers only some states or provinces of a country is followed too: a buyer's
+address must name a state in that zone, by code or name (`KA` or `Karnataka`; accents do not matter). When
+the zone covers only some states and the address has none, the buyer's AI app is asked for the state before
+any shipping option is offered. A zone that covers the whole country serves every address there.
+
+### Delivery area
+
+A local shop can deliver only to some postal codes. In the policies step, enter the start of the postal
+codes you deliver to under **Delivers only to postal codes starting with**, separated by commas. For
+example, `5600, 5601` covers Indian PIN codes 560001 to 560199. Up to 50 prefixes, each up to 10 letters or
+digits; spaces and hyphens are ignored. Leave it empty to deliver wherever your shipping rates reach.
+
+UK postcodes: a prefix of letters and a district number, such as `SW1` or `E1`, covers that district only.
+`SW1` covers SW1A and SW1P postcodes but not SW10 to SW19, and `E1` does not cover E10. A prefix of letters
+only, such as `SW`, covers the whole postcode area.
+
+With a delivery area set, the checkout checks the buyer's postal code before it offers shipping, for
+Shopify rates and your own fee alike:
+
+- **Outside the area.** No shipping option is offered and no payment link is issued. The buyer's AI app
+  is told, for example "This shop delivers only to postal codes starting with 5600 or 5601; 570001 is
+  outside it."
+- **No postal code in the address.** The buyer's AI app is asked for it first.
+- **Store pickup** is not affected.
 
 ### Store pickup
 
@@ -4676,10 +4742,123 @@ The page lists each surface and where it stands:
 | Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
 | Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
-| Coming: registration in progress | AgenticOrg is still registering with that program. |
+| Coming: AgenticOrg has not registered yet | Your shop qualifies; AgenticOrg has not registered the network with that program yet. |
+| Submitted, waiting for approval | AgenticOrg has applied to that program for the network (or for your shop) and is waiting for its answer. |
+| Not eligible yet | Your shop does not qualify yet. The row says why: Sell everywhere is off, your web address is not live yet, Grantex has not verified your catalog yet, or no product has a price, a stock figure and an image. |
 | Off | Sell everywhere is paused or not turned on. For Payments: you have not chosen where buyers pay. |
 
+The ChatGPT, Claude and other AI apps row also shows where the AgenticOrg app stands in the ChatGPT app
+directory. While it is not listed there, buyers add the server address themselves.
+
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
+
+#### Your shop pages and product feed
+
+Once your shop is on the network and your web address is live, the address also serves a small shop
+site built from your catalog, for search engines, shopping programs and AI agents:
+
+| Address | What it shows |
+| --- | --- |
+| `https://<your address>/` | Your shop name, your products with price and stock, your shipping and returns text, and how to buy |
+| `https://<your address>/products/...` | One page per product: price, stock, images, description, your product details, shipping and returns, and the product's structured data (barcode and shipping included when you gave them) |
+| `https://<your address>/feeds/google.xml` | Your product feed, in the format Google Merchant Center and Microsoft Merchant Center read |
+| `https://<your address>/sitemap.xml`, `/robots.txt`, `/llms.txt` | The list of your pages for crawlers and AI agents |
+
+Everything comes from your catalog as buyer agents see it: the newest read of each source (Shopify or
+your upload), only while Grantex verifies your catalog, prices and stock. While it does not, the pages
+answer "try again in a few minutes", so the programs keep what they already have.
+
+The feed lists each product option with its price and stock. A product is left out of the feed when
+it has no price, a price of zero, no stock figure or no image. Add the barcode (GTIN) where your products
+have one; without it the feed says the product has no standard identifier. Your flat shipping fee goes in
+the feed for the countries you named; Shopify shipping rates are set in the merchant center instead. A
+used or refurbished item needs a product detail named `condition` with the value `used` or
+`refurbished`; otherwise items are listed as new.
+
+The product pages have no basket of their own. They link to your own store's product page when your
+catalog gives one, to the AgenticOrg shopping bot on Telegram and to the MCP server address.
+
+### How a search across shops is ordered
+
+AgenticOrg does not rank shops, and no shop can pay to be listed first. When a buyer's AI app or the
+Telegram bot searches the whole network, it asks a fresh random selection of shops in a fresh random
+order every time, so no shop is always first. Within your shop, your products come best match first: a
+search word that is a whole word of the product title counts most, then a whole word of your brand,
+category or tags, then part of a word, then the description and product details. When several shops
+sell the same product (the same barcode with a valid check digit), the answer also lists it together,
+with each shop's price and stock for that item, lowest price first (in the currency most of those shops
+use). Adding the barcode to your products lets a buyer's AI app see that you sell the same item as
+another shop and compare the offers.
+
+The buyer chooses the shop. A buyer can leave shops out of a search, or keep to a few: AI apps pass the
+shops to leave out, and on Telegram the buyer sends `/avoid <shop>`. The other shops are still asked in a
+fresh random order, and the buyer is never sent to a checkout at a shop they left out.
+
+### When a price or stock changes
+
+A buyer's AI app may build a cart now and ask for the payment link later. Before any payment link is
+issued, AgenticOrg checks the cart against your catalog as it is at that moment:
+
+- **A new price.** The checkout is re-priced at your current price, with the same delivery choice, and no
+  link is issued yet. The buyer's AI app is told the new total and asks again once the buyer agrees.
+- **Fewer in stock than the cart holds, or a product you no longer sell.** No link is issued. The buyer's AI
+  app is told what is short and changes the quantity or the item.
+- **Stock held by another buyer's payment.** With your Plural page, a payment link holds its items for the
+  30 minutes it is valid. Orders paid through AgenticOrg since your catalog was last read count as sold. When
+  the stock left after those is less than the cart needs, no link is issued. The buyer's AI app is told how
+  many can be bought now and, when another buyer's pending payment holds the rest, when it frees up if that
+  payment does not go through. A canceled checkout holds nothing. Two buyers asking for the last unit at the
+  same moment are checked one after the other, so only one gets a link.
+- **Loyalty.** When the checkout is re-priced and AgenticOrg can read the buyer's membership from your Shopify
+  store, the points forecast is worked out again from the new total. If the store cannot be read at that
+  moment, the forecast already shown is kept.
+
+While an earlier payment link of the checkout can still be paid on your Plural page, the cart stays as that link
+was issued, so a payment on it still becomes your order.
+
+**Stock when the payment arrives.** The money is already taken when Plural reports a payment, so the order is
+always created. AgenticOrg first checks your catalog again, less the orders paid through AgenticOrg since your
+catalog was last read. If your stock no longer covers every item (for example, you sold the last one in your
+own store meanwhile), the order is marked **Stock was short when the
+payment arrived** on the Orders page, with the short items, and every administrator gets an email. Ship what
+you can and refund the rest, or refund the order (see Refunds below).
+
+So the price the buyer pays is your current price, as AgenticOrg last read your catalog: when you upload a
+file, when you select **Read catalog again**, and on the automatic reads above. On your Shopify checkout, Shopify also
+checks the price and stock itself.
+
+### A payment with no order
+
+On your Plural page, a buyer pays for the exact checkout the link was issued for. If a payment reaches your
+Plural account and AgenticOrg cannot match it to that checkout (a different amount, a checkout that was
+canceled or changed after the link was issued, another Plural order, or a second payment for a checkout the
+buyer already paid through another of its links), no order is created for it and nothing more ships. Every administrator of your workspace gets one email that names the Plural order, the reason and
+the buyer's contact as given. The money is in your own Plural account: refund it from AgenticOrg, on the
+Orders page under **Payments with no order**, or in your Plural dashboard, or contact the buyer.
+
+The email is kept until it is sent. If your mail server cannot take it, AgenticOrg tries again after one
+minute, then after longer waits, for up to eight attempts. The new-order email works the same way. A payment
+is emailed about once, however often Plural reports it.
+
+### Refunds
+
+- **Orders paid on your Plural page.** On the Orders page, choose **Refund** on the order, enter the amount
+  (the whole order or part of it) and confirm. AgenticOrg refunds through your own Plural account, with the
+  Plural credentials you saved. You can refund at most the order total less the refunds already made; a
+  refund Plural has not confirmed yet counts as made. The order then shows the refund as refunded or
+  pending. Only workspace administrators can refund. Each refund is decided by the commerce arbiter and
+  recorded in your ledger. Choosing **Confirm refund** twice sends one refund, not two.
+- **A refund Plural has not confirmed.** If Plural does not answer clearly (a timeout, a server error, a
+  pending status), the refund shows as pending and counts as refunded, so it is never sent twice. Every 5
+  minutes AgenticOrg asks Plural again and records the refund as refunded or failed. You can also choose
+  **Check refund again** once a refund is 5 minutes old. Only a refund Plural refused is marked failed; you
+  can then refund again. If Plural still does not say, the refund stays pending: check it in your Plural
+  dashboard.
+- **Payments with no order.** Choose **Refund** on the payment under **Payments with no order** and confirm.
+  The whole amount the buyer paid is refunded once. A payment whose order was created while stock was short
+  is refunded through that order. A refund Plural refused can be tried again.
+- **Orders paid in your Shopify checkout.** AgenticOrg never sees these orders. Refund them in your Shopify
+  admin.
 
 #### Pause or resume
 
@@ -4689,7 +4868,7 @@ Choose **Pause** on the page. New network checkouts are refused at once, and you
 
 - **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat; when it is ready, the buyer gets a link to your own Shopify checkout or Plural payment page and pays you there. See [Getting paid](/docs/oacp-getting-paid).
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
-- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else.
+- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else. Your web address also shows your shop's pages and product feed, built from the catalog, policies and shop details you publish to buyers.
 
 Agents never pay on a buyer's behalf here. The AI apps and the Telegram bot have no tool that pays, and a
 network Complete that carries a payment instrument, decision or mandate is refused.
@@ -4768,9 +4947,11 @@ Open **Orders** (`/dashboard/orders`) to see every order buyers paid for through
 
 The delivery column shows how the buyer chose to receive the order: shipping with the delivery option they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line, with the recipient's name and phone when the buyer gave them. The shipping fee is shown once for the whole order, even when it ships to more than one place. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
 
-AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural. A payment that is only authorised, not captured, stays pending.
+AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created; the payment is listed under **Payments with no order** on the Orders page, and you can refund it there or in Plural. A payment that is only authorised, not captured, stays pending.
 
-Orders paid in your Shopify checkout appear in your Shopify admin, not on the Orders page.
+To refund an order paid through a Plural link, choose **Refund** on the order, enter the amount and confirm. The refund goes through your own Plural account. See [Refunds](/docs/oacp-sell-everywhere#refunds).
+
+Orders paid in your Shopify checkout appear in your Shopify admin, not on the Orders page. Refund them in your Shopify admin.
 
 #### If something goes wrong
 
@@ -5201,6 +5382,7 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_NETWORK_SERVICE_TOKEN` | Empty | The credential the hosted MCP server presents to the network checkout gateway (at least 32 characters, from the secret manager). Empty, the gateway refuses every call. |
 | `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The platform profile network checkouts are opened for. |
 | `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts when turning Sell everywhere on. |
+| `AGENTICORG_NETWORK_REGISTRATIONS` | Empty | Where the network stands with the ChatGPT app directory, Google, Microsoft and Perplexity, as JSON (`not_started`, `submitted` or `live`, optionally per shop). Empty, every program shows as not registered yet. |
 | `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the webhook of the public AgenticOrg shopping bot on Telegram. Off, it answers 404. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The bot's username, for each shop's `t.me/<bot>?start=<shop>` link. Empty, no Telegram link is shown. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN`, `AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret, from the secret manager. |
@@ -5247,6 +5429,7 @@ These switches belong to the path where AgenticOrg charges through a payment pro
 | --- | --- | --- |
 | MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
 | MCP server `MCP_NETWORK_DIRECTORY_URL` and `AGENTICORG_NETWORK_SERVICE_TOKEN` | Unset | Network mode: one hosted server serves every listed shop, with list, search, checkout and payment-link tools and no tool that pays. |
+| MCP server `MCP_OPENAI_APPS_CHALLENGE` | Unset | The ChatGPT app directory's domain-verification token, served at `/.well-known/openai-apps-challenge`. Unset, that path answers 404. |
 | Merchant `provider_policy.payments` | None | Where buyers pay: `shopify_cart` or `plural_hosted`, set in the Payments step of Sell Everywhere. None means no payment link. |
 | Merchant `provider_policy.arbiter` | None | Your order limits: per order, per day, items per order and currency, set in the Order limits step. |
 | Merchant `provider_policy.ucp.fulfillment.flat_rates` | None | Your flat shipping fee, for a shop without Shopify, set in the policies step. |

@@ -23,13 +23,15 @@ from core.rbac import has_admin_scope
 
 # Presets understood by both the API layer and the scheduler worker.
 # Real cron strings (5 fields) are also accepted — see _is_valid_cron().
-_CRON_PRESETS: frozenset[str] = frozenset({
-    "every_5_minutes",
-    "hourly",
-    "daily",
-    "weekly",
-    "monthly",
-})
+_CRON_PRESETS: frozenset[str] = frozenset(
+    {
+        "every_5_minutes",
+        "hourly",
+        "daily",
+        "weekly",
+        "monthly",
+    }
+)
 
 # Pragmatic email shape check. SendGrid does authoritative validation at
 # delivery time; this just rejects obviously malformed input at the API
@@ -48,24 +50,17 @@ _WHATSAPP_PHONE_RE = re.compile(r"^\+?[1-9]\d{7,14}$")
 def _is_valid_cron(expr: str) -> bool:
     """Accept either a preset keyword or a real 5-field cron expression.
 
-    Delegates to croniter when available (authoritative). When croniter is
-    absent (it is an optional dep for the task layer too, see
-    core/tasks/report_tasks.py), falls back to a per-field range check so
-    we still reject obviously-invalid values like ``99 99 99 99 99``.
+    The expression must parse in the scheduler's evaluator (``core.reports.cron``)
+    and pass the per-field range check, so ``99 99 99 99 99`` is refused.
     """
     if expr in _CRON_PRESETS:
         return True
-    try:
-        from croniter import croniter  # type: ignore[import-untyped]
+    from core.reports.cron import CronError, parse
 
-        try:
-            croniter(expr, datetime.now(UTC))
-            return True
-        except (ValueError, KeyError):
-            return False
-    except ImportError:
-        pass
-    # croniter not installed — do a field-by-field range check.
+    try:
+        parse(expr)
+    except CronError:
+        return False
     return _fallback_cron_check(expr)
 
 
@@ -111,12 +106,38 @@ def _cron_field_ok(token: str, lo: int, hi: int) -> bool:
             return False
     return True
 
+
 router = APIRouter()
 
 _REPORT_TYPES_BY_ROLE: dict[str, set[str]] = {
-    "cfo": {"cfo_daily", "aging_report", "pnl_report"},
-    "cmo": {"cmo_weekly", "campaign_report"},
+    # Insights views and packs (core/insights/scheduled.py) are further limited to what the role may read.
+    "cfo": {"cfo_daily", "aging_report", "pnl_report", "insights_view", "insights_finance_pack"},
+    "cmo": {"cmo_weekly", "campaign_report", "insights_view"},
+    "chro": {"insights_view"},
+    "coo": {"insights_view"},
 }
+
+
+def _insights_settings(report_type: str, params: dict[str, Any], claims: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """The params and file format an Insights report schedule keeps; 403 for a view or pack the caller may not read."""
+    from core.insights import scheduled
+
+    try:
+        kept = scheduled.validate_params(
+            report_type, params, str(claims.get("role") or ""), is_admin=_is_admin_claims(claims)
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except scheduled.ScheduleParamsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return kept, scheduled.FORMATS[report_type]
+
+
+def _claims_user_id(claims: dict[str, Any]) -> _uuid.UUID | None:
+    try:
+        return _uuid.UUID(str(claims.get("agenticorg:user_id") or ""))
+    except ValueError:
+        return None
 
 
 def _is_admin_claims(claims: dict[str, Any]) -> bool:
@@ -146,6 +167,7 @@ def _assert_report_type_allowed(report_type: str, claims: dict[str, Any]) -> Non
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class DeliveryChannel(BaseModel):
     type: str = Field(..., description="Channel type: email | slack | whatsapp")
     target: str = Field(..., description="Email address, Slack channel ID, or phone number")
@@ -154,9 +176,7 @@ class DeliveryChannel(BaseModel):
     @classmethod
     def _validate_type(cls, v: str) -> str:
         if v not in {"email", "slack", "whatsapp"}:
-            raise ValueError(
-                "type must be one of: email, slack, whatsapp"
-            )
+            raise ValueError("type must be one of: email, slack, whatsapp")
         return v
 
     @model_validator(mode="after")
@@ -170,26 +190,16 @@ class DeliveryChannel(BaseModel):
         """
         target = (self.target or "").strip()
         if not target:
-            raise ValueError(
-                f"target is required for {self.type} delivery channel"
-            )
+            raise ValueError(f"target is required for {self.type} delivery channel")
         if self.type == "email":
             if not _EMAIL_RE.match(target):
-                raise ValueError(
-                    "invalid email address (expected name@domain.tld)"
-                )
+                raise ValueError("invalid email address (expected name@domain.tld)")
         elif self.type == "slack":
             if not _SLACK_CHANNEL_RE.match(target):
-                raise ValueError(
-                    "invalid Slack channel: use the channel ID "
-                    "(e.g. C01ABC23DEF) or #channel-name"
-                )
+                raise ValueError("invalid Slack channel: use the channel ID (e.g. C01ABC23DEF) or #channel-name")
         elif self.type == "whatsapp":
             if not _WHATSAPP_PHONE_RE.match(target):
-                raise ValueError(
-                    "invalid WhatsApp number: use E.164 format "
-                    "(e.g. +919876543210)"
-                )
+                raise ValueError("invalid WhatsApp number: use E.164 format (e.g. +919876543210)")
         # Store the trimmed value so downstream code never sees padding.
         object.__setattr__(self, "target", target)
         return self
@@ -235,9 +245,7 @@ class ReportScheduleCreate(BaseModel):
     @model_validator(mode="after")
     def _require_at_least_one_channel(self) -> ReportScheduleCreate:
         if not self.delivery_channels:
-            raise ValueError(
-                "at least one delivery channel is required"
-            )
+            raise ValueError("at least one delivery channel is required")
         return self
 
 
@@ -274,10 +282,7 @@ class ReportScheduleUpdate(BaseModel):
     @model_validator(mode="after")
     def _delivery_channels_not_empty_when_set(self) -> ReportScheduleUpdate:
         if self.delivery_channels is not None and not self.delivery_channels:
-            raise ValueError(
-                "delivery_channels cannot be an empty list; "
-                "omit the field to keep existing channels"
-            )
+            raise ValueError("delivery_channels cannot be an empty list; omit the field to keep existing channels")
         return self
 
 
@@ -300,6 +305,7 @@ class ReportScheduleResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _compute_next_run(cron: str) -> datetime:
     """Estimate next run for display purposes.
 
@@ -317,12 +323,12 @@ def _compute_next_run(cron: str) -> datetime:
     }
     if cron in interval_map:
         return now + interval_map[cron]
-    # Real cron string — defer to croniter for an accurate estimate.
-    try:
-        from croniter import croniter  # type: ignore[import-untyped]
+    # A real cron string: its next minute in UTC (the scheduler uses the tenant's time zone).
+    from core.reports.cron import CronError, next_after
 
-        return croniter(cron, now).get_next(datetime)
-    except (ImportError, ValueError, KeyError):
+    try:
+        return next_after(cron, now)
+    except CronError:
         return now + timedelta(days=1)
 
 
@@ -404,6 +410,7 @@ def _parse_schedule_id(schedule_id: str) -> _uuid.UUID:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/report-schedules",
@@ -549,16 +556,17 @@ async def create_report_schedule(
     """
     try:
         _assert_report_type_allowed(body.report_type, current_user)
+        params, fmt = dict(body.params), body.format
+        if body.report_type.startswith("insights_"):
+            params, fmt = _insights_settings(body.report_type, body.params, current_user)
         tid = _uuid.UUID(tenant_id)
         schedule_id = _uuid.uuid4()
         channels_data = [ch.model_dump() for ch in body.delivery_channels]
-        primary_channel = (
-            body.delivery_channels[0].type if body.delivery_channels else "email"
-        )
+        primary_channel = body.delivery_channels[0].type if body.delivery_channels else "email"
 
         config: dict[str, Any] = {
             "company_id": body.company_id,
-            "params": body.params,
+            "params": params,
         }
 
         # Codex 2026-04-22 isolation fix: dual-write company_id to both
@@ -579,15 +587,14 @@ async def create_report_schedule(
             cron_expression=body.cron_expression,
             recipients=channels_data,
             delivery_channel=primary_channel,
-            format=body.format,
+            format=fmt,
             enabled=body.is_active,
             last_run_at=None,
-            next_run_at=_compute_next_run(body.cron_expression)
-            if body.is_active
-            else None,
+            next_run_at=_compute_next_run(body.cron_expression) if body.is_active else None,
             config=config,
             tenant_id=tid,
             company_id=company_uuid,
+            created_by=_claims_user_id(current_user),
         )
 
         async with get_tenant_session(tid) as session:
@@ -679,8 +686,7 @@ async def update_report_schedule(
 
         if "delivery_channels" in updates and updates["delivery_channels"] is not None:
             channels_data = [
-                ch.model_dump() if hasattr(ch, "model_dump") else ch
-                for ch in updates["delivery_channels"]
+                ch.model_dump() if hasattr(ch, "model_dump") else ch for ch in updates["delivery_channels"]
             ]
             row.recipients = channels_data
             if channels_data:
@@ -699,6 +705,10 @@ async def update_report_schedule(
             config["company_id"] = updates["company_id"]
         if "params" in updates:
             config["params"] = updates["params"]
+        if row.report_type.startswith("insights_") and ("params" in updates or "report_type" in updates):
+            config["params"], row.format = _insights_settings(
+                row.report_type, dict(config.get("params") or {}), current_user
+            )
         row.config = config
 
         # Recompute next_run if cron or active status changed.
@@ -794,6 +804,7 @@ async def run_report_now(
             "delivery_channels": row.recipients or [],
             "format": row.format or "pdf",
             "schedule_id": schedule_id,
+            "trigger": "manual",
         }
 
         task = generate_report.delay(report_config)
@@ -802,4 +813,60 @@ async def run_report_now(
             "message": "Report generation triggered",
             "task_id": task.id,
             "schedule_id": schedule_id,
+        }
+
+
+@router.get(
+    "/report-schedules/{schedule_id}/runs",
+    dependencies=[require_scope("report_schedules.read")],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="report_schedules.read",
+    rate_limit="report-schedule-read",
+    idempotency="read-only",
+    audit_event="report_schedules.runs.read",
+)
+async def list_report_schedule_runs(
+    schedule_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+    current_user: dict = Depends(get_current_user),
+) -> dict[str, Any]:
+    """The schedule's last 20 runs, newest first: when, how it ended and why, and the Insights file it made."""
+    from core.models.report_schedule import ReportScheduleRun
+
+    tid = _uuid.UUID(tenant_id)
+    sid = _parse_schedule_id(schedule_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(ReportSchedule).where(ReportSchedule.id == sid, ReportSchedule.tenant_id == tid)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        _assert_report_type_allowed(row.report_type, current_user)
+        runs = (
+            await session.execute(
+                select(ReportScheduleRun)
+                .where(ReportScheduleRun.tenant_id == tid, ReportScheduleRun.schedule_id == sid)
+                .order_by(ReportScheduleRun.started_at.desc())
+                .limit(20)
+            )
+        ).scalars()
+        return {
+            "runs": [
+                {
+                    "id": str(run.id),
+                    "trigger": run.trigger,
+                    "status": run.status,
+                    "reason": run.reason,
+                    "export_id": str(run.export_id) if run.export_id else None,
+                    "channels": run.channels or [],
+                    "started_at": run.started_at.isoformat() if run.started_at else None,
+                    "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+                }
+                for run in runs
+            ]
         }

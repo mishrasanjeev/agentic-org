@@ -184,20 +184,90 @@ async def deliver_slack(
 # WhatsApp delivery (Cloud API)
 # ══════════════════════════════════════════════════════════════════════
 
+# Document types the WhatsApp Cloud API accepts as a document message.
+WHATSAPP_DOCUMENT_TYPES: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+}
+# WhatsApp refuses a free-form message outside the 24-hour customer service window with this code.
+WHATSAPP_OUTSIDE_WINDOW = 131047
+
+
+def mask_phone(phone: str) -> str:
+    """A phone number for logs and run history: its last four digits only."""
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    return f"***{digits[-4:]}" if digits else "***"
+
+
+def _whatsapp_error(response: Any) -> tuple[int | None, str]:
+    """WhatsApp's error code and title from a Cloud API response (never the token or the payload)."""
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    error = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return None, f"HTTP {getattr(response, 'status_code', '?')}"
+    code = error.get("code")
+    data = error.get("error_data")
+    details = data.get("details") if isinstance(data, dict) else None
+    title = str(error.get("title") or details or error.get("message") or "error")[:160]
+    return (int(code) if isinstance(code, int) else None), title
+
+
+def whatsapp_message(phone_number: str, media_id: str, filename: str, caption: str) -> dict[str, Any]:
+    """The send payload: the approved report template when one is set, else a plain document."""
+    from core.config import settings
+
+    template = (settings.whatsapp_report_template or "").strip()
+    if template:
+        header = {"type": "document", "document": {"id": media_id, "filename": filename}}
+        components: list[dict[str, Any]] = [{"type": "header", "parameters": [header]}]
+        if settings.whatsapp_report_template_body_text:
+            text = (caption or "Scheduled report from AgenticOrg")[:1024]
+            components.append({"type": "body", "parameters": [{"type": "text", "text": text}]})
+        return {
+            "messaging_product": "whatsapp",
+            "to": phone_number,
+            "type": "template",
+            "template": {
+                "name": template,
+                "language": {"code": settings.whatsapp_report_template_language},
+                "components": components,
+            },
+        }
+    return {
+        "messaging_product": "whatsapp",
+        "to": phone_number,
+        "type": "document",
+        "document": {"id": media_id, "caption": caption or "Scheduled report from AgenticOrg", "filename": filename},
+    }
+
+
 async def deliver_whatsapp(
     report_path: str,
     phone_number: str,
     caption: str = "",
 ) -> dict[str, Any]:
-    """Send a report as a WhatsApp media message via the Cloud API.
+    """Send a report over the WhatsApp Cloud API: upload the file, then send it.
 
-    Requires ``WHATSAPP_TOKEN`` and ``WHATSAPP_PHONE_ID`` env vars.
+    Requires ``WHATSAPP_TOKEN`` and ``WHATSAPP_PHONE_ID``. With
+    ``AGENTICORG_WHATSAPP_REPORT_TEMPLATE`` set the file goes as that approved
+    template's document header, which WhatsApp delivers to anyone; without it, as
+    a plain document, which WhatsApp delivers only to someone who wrote in the
+    last 24 hours (otherwise the send fails with error 131047 and the reason says
+    so). A file type WhatsApp does not accept (a ZIP pack) is skipped. Every
+    response is checked; a refusal raises with WhatsApp's code and title only.
+    Logs carry the number's last four digits.
     """
-    log.info(
-        "delivery_whatsapp_start",
-        phone=phone_number,
-        report_path=report_path,
-    )
+    from core.config import settings
+
+    masked = mask_phone(phone_number)
+    log.info("delivery_whatsapp_start", phone=masked)
 
     token = os.getenv("WHATSAPP_TOKEN", "")
     phone_id = os.getenv("WHATSAPP_PHONE_ID", "")
@@ -206,59 +276,69 @@ async def deliver_whatsapp(
         log.warning("delivery_whatsapp_skip", reason="WHATSAPP_TOKEN or WHATSAPP_PHONE_ID not set")
         return {"status": "skipped", "reason": "WhatsApp credentials not configured"}
 
+    file_path = Path(report_path)
+    mime_type = WHATSAPP_DOCUMENT_TYPES.get(file_path.suffix.lower())
+    if mime_type is None:
+        log.warning("delivery_whatsapp_skip", reason="unsupported_file_type", suffix=file_path.suffix.lower()[:8])
+        kind = file_path.suffix or "this"
+        return {
+            "status": "skipped",
+            "channel": "whatsapp",
+            "reason": f"WhatsApp does not accept {kind} files; the file is on the Downloads page",
+        }
+    base = f"https://graph.facebook.com/{settings.whatsapp_graph_api_version}/{phone_id}"
+    mode = "template" if (settings.whatsapp_report_template or "").strip() else "document"
+
     try:
         import httpx
 
-        file_path = Path(report_path)
-        ext = file_path.suffix.lower()
-
-        # Step 1: Upload media
         async with httpx.AsyncClient(timeout=60) as client:
-            mime_map = {
-                ".pdf": "application/pdf",
-                ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            }
-            mime_type = mime_map.get(ext, "application/octet-stream")
-
             upload_resp = await client.post(
-                f"https://graph.facebook.com/v18.0/{phone_id}/media",
+                f"{base}/media",
                 files={"file": (file_path.name, file_path.read_bytes(), mime_type)},
                 data={"messaging_product": "whatsapp", "type": mime_type},
                 headers={"Authorization": f"Bearer {token}"},
             )
-            upload_data = upload_resp.json()
-            media_id = upload_data.get("id")
-            if not media_id:
-                raise RuntimeError(f"WhatsApp media upload failed: {upload_data}")
-
-            # Step 2: Send document message
-            msg_payload: dict[str, Any] = {
-                "messaging_product": "whatsapp",
-                "to": phone_number,
-                "type": "document",
-                "document": {
-                    "id": media_id,
-                    "caption": caption or "Scheduled report from AgenticOrg",
-                    "filename": file_path.name,
-                },
-            }
+            try:
+                upload_data = upload_resp.json()
+            except ValueError:
+                upload_data = {}
+            media_id = upload_data.get("id") if isinstance(upload_data, dict) else None
+            if upload_resp.status_code >= 400 or not media_id:
+                code, title = _whatsapp_error(upload_resp)
+                raise RuntimeError(f"WhatsApp media upload failed: {code or ''} {title}".replace("  ", " ").strip())
 
             send_resp = await client.post(
-                f"https://graph.facebook.com/v18.0/{phone_id}/messages",
-                json=msg_payload,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
+                f"{base}/messages",
+                json=whatsapp_message(phone_number, media_id, file_path.name, caption),
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             )
-            send_resp.json()
+            try:
+                sent = send_resp.json()
+            except ValueError:
+                sent = {}
+            messages = sent.get("messages") if isinstance(sent, dict) else None
+            if send_resp.status_code >= 400 or not messages:
+                code, title = _whatsapp_error(send_resp)
+                if code == WHATSAPP_OUTSIDE_WINDOW:
+                    raise RuntimeError(
+                        "WhatsApp refused a plain message outside the 24-hour window (131047); "
+                        "set AGENTICORG_WHATSAPP_REPORT_TEMPLATE to an approved template"
+                    )
+                raise RuntimeError(f"WhatsApp send failed: {code or ''} {title}".replace("  ", " ").strip())
 
-        log.info("delivery_whatsapp_sent", phone=phone_number, media_id=media_id)
-        return {"status": "sent", "channel": "whatsapp", "target": phone_number, "media_id": media_id}
+        log.info("delivery_whatsapp_sent", phone=masked, mode=mode)
+        return {
+            "status": "sent",
+            "channel": "whatsapp",
+            "target": phone_number,
+            "media_id": media_id,
+            "mode": mode,
+        }
 
     # enterprise-gate: broad-except-ok reason=report-whatsapp-delivery-boundary-reraises-failure
     except Exception as exc:
-        log.error("delivery_whatsapp_failed", phone=phone_number, error=str(exc))
+        log.error("delivery_whatsapp_failed", phone=masked, error=str(exc)[:200])
         raise
 
 
@@ -322,7 +402,10 @@ async def deliver(report_path: str, channels: list[dict[str, Any]]) -> list[dict
 
         # enterprise-gate: broad-except-ok reason=report-delivery-dispatch-records-failed-channel
         except Exception as exc:
-            log.error("delivery_channel_error", channel_type=ch_type, target=target, error=str(exc))
-            results.append({"status": "failed", "channel": ch_type, "target": target, "error": str(exc)})
+            shown = mask_phone(target) if ch_type == "whatsapp" else target
+            log.error("delivery_channel_error", channel_type=ch_type, target=shown, error=str(exc)[:200])
+            results.append(
+                {"status": "failed", "channel": ch_type, "target": target, "error": str(exc), "reason": str(exc)[:200]}
+            )
 
     return results

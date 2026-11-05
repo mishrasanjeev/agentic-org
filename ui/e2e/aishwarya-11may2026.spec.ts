@@ -159,13 +159,13 @@ async function installRoutes(page: Page, agents: MockAgent[]) {
 }
 
 test.describe("Aishwarya 11 May 2026 regressions", () => {
-  test("dashboard and agent fleet load every agent page, not just the first 20", async ({ page, baseURL }) => {
+  test("dashboard lands on Insights and agent fleet loads every agent page, not just the first 20", async ({ page, baseURL }) => {
     const agents = buildAgents(125);
     await installRoutes(page, agents);
 
+    // The home dashboard (and its Total Agents card) is retired: /dashboard lands on Insights.
     await page.goto(`${baseURL}/dashboard`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator("main")).toContainText("Total Agents");
-    await expect(page.locator("main")).toContainText("125");
+    await expect(page).toHaveURL(/\/dashboard\/insights/);
 
     await page.goto(`${baseURL}/dashboard/agents`, { waitUntil: "domcontentloaded" });
     await expect(page.locator("main")).toContainText("Agent Fleet");

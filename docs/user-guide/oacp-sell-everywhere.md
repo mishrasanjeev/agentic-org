@@ -17,7 +17,7 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 | ChatGPT, Claude and other AI apps | They add AgenticOrg's server, `https://mcp.agenticorg.ai/mcp`, once as a custom MCP server. They can then list the network's shops, search them, open or update a checkout and get the payment link | Nothing |
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot. The page shows your exact link | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
-| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
+| Google Gemini and AI Mode, Microsoft Copilot, Perplexity | AgenticOrg registers the whole network with each program, which then reads your shop's own pages and product feed at your web address. The page shows where each one stands for your shop | Keep a price, stock and an image on each product |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
 ## Watch it end to end
@@ -66,6 +66,15 @@ access token blank to keep the one you saved: Shopify shows a token only once. A
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
+While your shop is on the network, AgenticOrg reads your Shopify catalog again by itself: usually within ten
+minutes of a **Product update** webhook, and about once an hour without one (a little later when many shops are
+due at once, or an hour after a read that failed). **Read catalog again** on the page reads it at once. Each read
+replaces the one before: a product you removed from your store is no longer offered.
+
+One read takes at most 1,000 products (20 pages of 50). If your store has more, only the first 1,000 that
+Shopify returns are offered to buyers. The page says so after a read that stopped at the limit, and shows a
+note while your catalog is at the limit.
+
 **Product details from Shopify.** Along with titles, prices and stock, AgenticOrg reads each product's tags,
 its barcode, its page on your online store and the product metafields you show on your storefront. In
 Shopify, a metafield is shown on the storefront when its definition (**Settings**, **Custom data**,
@@ -109,12 +118,68 @@ extra details. If a row has a problem, nothing is stored and the
 page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
 a store system. Upload again whenever your products change.
 
+A file can also be stored with warnings: products with no `image_url`, no `description` or no `barcode`.
+They are still offered to buyers, and the page lists the first rows of each so you can fill them in later.
+
+### Catalog check
+
+Under **Your catalog** the page checks the catalog AgenticOrg last read (your Shopify store or your file)
+and lists what to fix, with the number of products or variants, a few examples and how to fix each in
+Shopify or in your file. Only you see this check. The network never ranks or hides shops by it, and
+search order stays random.
+
+These variants are **not offered to buyers** until you fix them:
+
+| Problem | Why |
+| --- | --- |
+| No usable price | A variant with no price, a price that is not a number, or no currency is never listed and never checks out. |
+| Stock below zero | Shown as out of stock, so it cannot be ordered. Correct the count in Shopify. |
+
+These are offered, but buyers or their AI assistants get less to go on:
+
+| Warning | What it means |
+| --- | --- |
+| SKU used by more than one variant | The variants are still offered under their own item ids, but the SKU names no one item: a buyer's AI app that asks for that SKU is told it was not found, and a price or stock you set per SKU does not apply to them. Give every variant its own SKU. |
+| No SKU | Orders are harder to match to your own records. |
+| Stock not tracked | Shopify does not track the quantity, so buyers cannot be told whether it is in stock. Tick **Track quantity** under Inventory in Shopify. |
+| Out of stock | Listed as out of stock until you restock it. |
+| No image, no description | Buyers' AI assistants show no photo, or have only the title. |
+| No barcode (GTIN) | The product cannot be matched to the same product at other shops. |
+| Very short title | Harder to find by search. A title such as brand, product and size works best. |
+
+Select **Read catalog again** after a fix in Shopify; upload the file again after a fix in your file.
+
 ### Shipping fee
 
 A shop that uploads its catalog sets one shipping fee per order in the policies step, with its currency and
 the countries it ships to (two-letter codes such as `IN`; leave them empty to ship everywhere). Enter 0 to
 ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
 Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
+
+A Shopify shipping zone that covers only some states or provinces of a country is followed too: a buyer's
+address must name a state in that zone, by code or name (`KA` or `Karnataka`; accents do not matter). When
+the zone covers only some states and the address has none, the buyer's AI app is asked for the state before
+any shipping option is offered. A zone that covers the whole country serves every address there.
+
+### Delivery area
+
+A local shop can deliver only to some postal codes. In the policies step, enter the start of the postal
+codes you deliver to under **Delivers only to postal codes starting with**, separated by commas. For
+example, `5600, 5601` covers Indian PIN codes 560001 to 560199. Up to 50 prefixes, each up to 10 letters or
+digits; spaces and hyphens are ignored. Leave it empty to deliver wherever your shipping rates reach.
+
+UK postcodes: a prefix of letters and a district number, such as `SW1` or `E1`, covers that district only.
+`SW1` covers SW1A and SW1P postcodes but not SW10 to SW19, and `E1` does not cover E10. A prefix of letters
+only, such as `SW`, covers the whole postcode area.
+
+With a delivery area set, the checkout checks the buyer's postal code before it offers shipping, for
+Shopify rates and your own fee alike:
+
+- **Outside the area.** No shipping option is offered and no payment link is issued. The buyer's AI app
+  is told, for example "This shop delivers only to postal codes starting with 5600 or 5601; 570001 is
+  outside it."
+- **No postal code in the address.** The buyer's AI app is asked for it first.
+- **Store pickup** is not affected.
 
 ### Store pickup
 
@@ -192,10 +257,123 @@ The page lists each surface and where it stands:
 | Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
 | Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
-| Coming: registration in progress | AgenticOrg is still registering with that program. |
+| Coming: AgenticOrg has not registered yet | Your shop qualifies; AgenticOrg has not registered the network with that program yet. |
+| Submitted, waiting for approval | AgenticOrg has applied to that program for the network (or for your shop) and is waiting for its answer. |
+| Not eligible yet | Your shop does not qualify yet. The row says why: Sell everywhere is off, your web address is not live yet, Grantex has not verified your catalog yet, or no product has a price, a stock figure and an image. |
 | Off | Sell everywhere is paused or not turned on. For Payments: you have not chosen where buyers pay. |
 
+The ChatGPT, Claude and other AI apps row also shows where the AgenticOrg app stands in the ChatGPT app
+directory. While it is not listed there, buyers add the server address themselves.
+
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
+
+## Your shop pages and product feed
+
+Once your shop is on the network and your web address is live, the address also serves a small shop
+site built from your catalog, for search engines, shopping programs and AI agents:
+
+| Address | What it shows |
+| --- | --- |
+| `https://<your address>/` | Your shop name, your products with price and stock, your shipping and returns text, and how to buy |
+| `https://<your address>/products/...` | One page per product: price, stock, images, description, your product details, shipping and returns, and the product's structured data (barcode and shipping included when you gave them) |
+| `https://<your address>/feeds/google.xml` | Your product feed, in the format Google Merchant Center and Microsoft Merchant Center read |
+| `https://<your address>/sitemap.xml`, `/robots.txt`, `/llms.txt` | The list of your pages for crawlers and AI agents |
+
+Everything comes from your catalog as buyer agents see it: the newest read of each source (Shopify or
+your upload), only while Grantex verifies your catalog, prices and stock. While it does not, the pages
+answer "try again in a few minutes", so the programs keep what they already have.
+
+The feed lists each product option with its price and stock. A product is left out of the feed when
+it has no price, a price of zero, no stock figure or no image. Add the barcode (GTIN) where your products
+have one; without it the feed says the product has no standard identifier. Your flat shipping fee goes in
+the feed for the countries you named; Shopify shipping rates are set in the merchant center instead. A
+used or refurbished item needs a product detail named `condition` with the value `used` or
+`refurbished`; otherwise items are listed as new.
+
+The product pages have no basket of their own. They link to your own store's product page when your
+catalog gives one, to the AgenticOrg shopping bot on Telegram and to the MCP server address.
+
+### How a search across shops is ordered
+
+AgenticOrg does not rank shops, and no shop can pay to be listed first. When a buyer's AI app or the
+Telegram bot searches the whole network, it asks a fresh random selection of shops in a fresh random
+order every time, so no shop is always first. Within your shop, your products come best match first: a
+search word that is a whole word of the product title counts most, then a whole word of your brand,
+category or tags, then part of a word, then the description and product details. When several shops
+sell the same product (the same barcode with a valid check digit), the answer also lists it together,
+with each shop's price and stock for that item, lowest price first (in the currency most of those shops
+use). Adding the barcode to your products lets a buyer's AI app see that you sell the same item as
+another shop and compare the offers.
+
+The buyer chooses the shop. A buyer can leave shops out of a search, or keep to a few: AI apps pass the
+shops to leave out, and on Telegram the buyer sends `/avoid <shop>`. The other shops are still asked in a
+fresh random order, and the buyer is never sent to a checkout at a shop they left out.
+
+### When a price or stock changes
+
+A buyer's AI app may build a cart now and ask for the payment link later. Before any payment link is
+issued, AgenticOrg checks the cart against your catalog as it is at that moment:
+
+- **A new price.** The checkout is re-priced at your current price, with the same delivery choice, and no
+  link is issued yet. The buyer's AI app is told the new total and asks again once the buyer agrees.
+- **Fewer in stock than the cart holds, or a product you no longer sell.** No link is issued. The buyer's AI
+  app is told what is short and changes the quantity or the item.
+- **Stock held by another buyer's payment.** With your Plural page, a payment link holds its items for the
+  30 minutes it is valid. Orders paid through AgenticOrg since your catalog was last read count as sold. When
+  the stock left after those is less than the cart needs, no link is issued. The buyer's AI app is told how
+  many can be bought now and, when another buyer's pending payment holds the rest, when it frees up if that
+  payment does not go through. A canceled checkout holds nothing. Two buyers asking for the last unit at the
+  same moment are checked one after the other, so only one gets a link.
+- **Loyalty.** When the checkout is re-priced and AgenticOrg can read the buyer's membership from your Shopify
+  store, the points forecast is worked out again from the new total. If the store cannot be read at that
+  moment, the forecast already shown is kept.
+
+While an earlier payment link of the checkout can still be paid on your Plural page, the cart stays as that link
+was issued, so a payment on it still becomes your order.
+
+**Stock when the payment arrives.** The money is already taken when Plural reports a payment, so the order is
+always created. AgenticOrg first checks your catalog again, less the orders paid through AgenticOrg since your
+catalog was last read. If your stock no longer covers every item (for example, you sold the last one in your
+own store meanwhile), the order is marked **Stock was short when the
+payment arrived** on the Orders page, with the short items, and every administrator gets an email. Ship what
+you can and refund the rest, or refund the order (see Refunds below).
+
+So the price the buyer pays is your current price, as AgenticOrg last read your catalog: when you upload a
+file, when you select **Read catalog again**, and on the automatic reads above. On your Shopify checkout, Shopify also
+checks the price and stock itself.
+
+### A payment with no order
+
+On your Plural page, a buyer pays for the exact checkout the link was issued for. If a payment reaches your
+Plural account and AgenticOrg cannot match it to that checkout (a different amount, a checkout that was
+canceled or changed after the link was issued, another Plural order, or a second payment for a checkout the
+buyer already paid through another of its links), no order is created for it and nothing more ships. Every administrator of your workspace gets one email that names the Plural order, the reason and
+the buyer's contact as given. The money is in your own Plural account: refund it from AgenticOrg, on the
+Orders page under **Payments with no order**, or in your Plural dashboard, or contact the buyer.
+
+The email is kept until it is sent. If your mail server cannot take it, AgenticOrg tries again after one
+minute, then after longer waits, for up to eight attempts. The new-order email works the same way. A payment
+is emailed about once, however often Plural reports it.
+
+### Refunds
+
+- **Orders paid on your Plural page.** On the Orders page, choose **Refund** on the order, enter the amount
+  (the whole order or part of it) and confirm. AgenticOrg refunds through your own Plural account, with the
+  Plural credentials you saved. You can refund at most the order total less the refunds already made; a
+  refund Plural has not confirmed yet counts as made. The order then shows the refund as refunded or
+  pending. Only workspace administrators can refund. Each refund is decided by the commerce arbiter and
+  recorded in your ledger. Choosing **Confirm refund** twice sends one refund, not two.
+- **A refund Plural has not confirmed.** If Plural does not answer clearly (a timeout, a server error, a
+  pending status), the refund shows as pending and counts as refunded, so it is never sent twice. Every 5
+  minutes AgenticOrg asks Plural again and records the refund as refunded or failed. You can also choose
+  **Check refund again** once a refund is 5 minutes old. Only a refund Plural refused is marked failed; you
+  can then refund again. If Plural still does not say, the refund stays pending: check it in your Plural
+  dashboard.
+- **Payments with no order.** Choose **Refund** on the payment under **Payments with no order** and confirm.
+  The whole amount the buyer paid is refunded once. A payment whose order was created while stock was short
+  is refunded through that order. A refund Plural refused can be tried again.
+- **Orders paid in your Shopify checkout.** AgenticOrg never sees these orders. Refund them in your Shopify
+  admin.
 
 ## Pause or resume
 
@@ -205,7 +383,7 @@ Choose **Pause** on the page. New network checkouts are refused at once, and you
 
 - **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat; when it is ready, the buyer gets a link to your own Shopify checkout or Plural payment page and pays you there. See [Getting paid](/docs/oacp-getting-paid).
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
-- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else.
+- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else. Your web address also shows your shop's pages and product feed, built from the catalog, policies and shop details you publish to buyers.
 
 Agents never pay on a buyer's behalf here. The AI apps and the Telegram bot have no tool that pays, and a
 network Complete that carries a payment instrument, decision or mandate is refused.

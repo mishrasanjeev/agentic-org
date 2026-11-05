@@ -7,7 +7,7 @@ import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createHostedHandler } from "../dist/http.js";
-import { NETWORK_TOOLS } from "../dist/network.js";
+import { NETWORK_TOOLS, fanOutRequest, sameProducts, shuffled, validGtin } from "../dist/network.js";
 
 const SERVICE = "synthetic-network-service-token-0123456789";
 const AGENT = "https://platform.example/profiles/network.json";
@@ -48,7 +48,10 @@ function shopServer(name, product, { down = false } = {}) {
       }
       calls.push({ shop: name, method: req.method, path, body, headers: req.headers });
       if (down) return json(res, { code: "unavailable", content: "Down." }, 503);
-      if (path === "/ucp/catalog/search") return json(res, { products: [{ id: product.id, title: product.title }] });
+      if (path === "/ucp/catalog/search") {
+        const variants = product.variants ? { variants: product.variants } : {};
+        return json(res, { products: [{ id: product.id, title: product.title, ...variants }] });
+      }
       if (path === "/ucp/catalog/lookup") return json(res, { products: [{ id: product.id, title: product.title }] });
       return json(res, { code: "not_found", content: "Not found." }, 404);
     }),
@@ -56,8 +59,12 @@ function shopServer(name, product, { down = false } = {}) {
   return { server, setBase: (b) => (base = b) };
 }
 
-const tea = shopServer("tea-corner", { id: "TEA-1", title: "Synthetic Masala Chai" });
-const kettles = shopServer("kettle-works", { id: "KET-1", title: "Synthetic Kettle" });
+// Both shops sell the same synthetic item (one barcode) at different prices.
+const sameItem = (id, amount) => [
+  { id, price: { amount, currency: "INR" }, barcodes: [{ type: "GTIN", value: "8901234567890" }] },
+];
+const tea = shopServer("tea-corner", { id: "TEA-1", title: "Synthetic Masala Chai", variants: sameItem("TEA-1-V", 50000) });
+const kettles = shopServer("kettle-works", { id: "KET-1", title: "Synthetic Kettle", variants: sameItem("KET-1-V", 45000) });
 const broken = shopServer("broken-shop", { id: "X", title: "X" }, { down: true });
 const teaBase = await listen(tea.server);
 tea.setBase(teaBase);
@@ -131,6 +138,61 @@ async function connect() {
 }
 
 try {
+  await check("introduces itself with a title, website, icons and instructions", async () => {
+    const client = await connect();
+    const info = client.getServerVersion();
+    assert.equal(info.name, "agenticorg-network");
+    assert.equal(info.title, "AgenticOrg shopping network");
+    assert.equal(info.websiteUrl, "https://agenticorg.ai");
+    assert.ok(info.icons.length >= 1 && info.icons.every((icon) => icon.src.startsWith("https://")));
+    assert.ok(info.icons.some((icon) => icon.mimeType === "image/png" && icon.sizes.includes("512x512")));
+    const instructions = client.getInstructions();
+    assert.match(instructions, /never take payment/);
+    assert.match(instructions, /https:\/\/agenticorg\.ai\/privacy/);
+    await client.close();
+  });
+
+  await check("every tool declares the no-auth security scheme and explicit hints", async () => {
+    const client = await connect();
+    for (const tool of (await client.listTools()).tools) {
+      assert.deepEqual(tool._meta?.securitySchemes, [{ type: "noauth" }], tool.name);
+      for (const hint of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
+        assert.equal(typeof tool.annotations?.[hint], "boolean", `${tool.name} ${hint}`);
+      }
+    }
+    await client.close();
+  });
+
+  await check("serves the ChatGPT domain-verification token only when one is set", async () => {
+    assert.equal((await fetch(`${base}/.well-known/openai-apps-challenge`)).status, 404);
+    const withToken = createHostedHandler({
+      profileUrl: "",
+      apiKey: "",
+      agentProfile: AGENT,
+      network: { directoryUrl: `${apiBase}/api/v1/network/merchants`, serviceToken: SERVICE },
+      allowAnonymous: true,
+      allowedHosts: new Set(["127.0.0.1"]),
+      perClientPerMinute: 10,
+      globalPerMinute: 10,
+      version: "test",
+      openaiAppsChallenge: "synthetic-challenge-token-123",
+      log: () => {},
+    });
+    const server = http.createServer((req, res) => void withToken(req, res));
+    const url = await listen(server);
+    try {
+      const response = await fetch(`${url}/.well-known/openai-apps-challenge`);
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /^text\/plain/);
+      assert.equal(await response.text(), "synthetic-challenge-token-123");
+      assert.equal((await fetch(`${url}/.well-known/openai-apps-challenge`, { method: "POST" })).status, 404);
+    } finally {
+      server.close();
+    }
+    const config = { profileUrl: "", apiKey: "", agentProfile: AGENT, allowAnonymous: true, allowedHosts: new Set(["x"]), perClientPerMinute: 1, globalPerMinute: 1, version: "t" };
+    assert.throws(() => createHostedHandler({ ...config, openaiAppsChallenge: "<script>" }), /MCP_OPENAI_APPS_CHALLENGE/);
+  });
+
   await check("exposes the network tools and nothing that can pay", async () => {
     const client = await connect();
     const tools = (await client.listTools()).tools;
@@ -165,8 +227,8 @@ try {
     const client = await connect();
     const result = await client.callTool({ name: "list_shops", arguments: {} });
     assert.deepEqual(
-      result.structuredContent.shops.map((s) => s.shop),
-      ["tea-corner", "kettle-works", "broken-shop"],
+      result.structuredContent.shops.map((s) => s.shop).sort(),
+      ["broken-shop", "kettle-works", "tea-corner"],
     );
     await client.close();
   });
@@ -176,8 +238,10 @@ try {
     const before = calls.length;
     const result = await client.callTool({ name: "search_catalog", arguments: { request: { query: "chai" } } });
     assert.notEqual(result.isError, true);
-    const { results, unavailable, shops_searched } = result.structuredContent;
+    const { results, unavailable, shops_searched, shops_in_network, shops_in_random_order } = result.structuredContent;
     assert.equal(shops_searched, 3);
+    assert.equal(shops_in_network, 3);
+    assert.equal(shops_in_random_order, true);
     assert.deepEqual(results.map((r) => r.shop).sort(), ["kettle-works", "tea-corner"]);
     const tea = results.find((r) => r.shop === "tea-corner");
     assert.equal(tea.products[0].shop, "tea-corner");
@@ -186,10 +250,160 @@ try {
     const searches = calls.slice(before).filter((c) => c.path === "/ucp/catalog/search");
     assert.equal(searches.length, 3);
     for (const call of searches) {
+      assert.deepEqual(call.body.pagination, { limit: 3 }, "a small page from each shop");
       assert.equal(call.headers.authorization, undefined);
       assert.equal(call.headers["ucp-agent"], `profile="${AGENT}"`);
     }
     await client.close();
+  });
+
+  await check("the same product at several shops is listed with each offer, lowest price first", async () => {
+    const client = await connect();
+    const result = await client.callTool({ name: "search_catalog", arguments: { request: { query: "chai" } } });
+    const [group] = result.structuredContent.same_products;
+    assert.equal(group.barcode, "8901234567890");
+    assert.deepEqual(
+      group.offers.map((o) => [o.shop, o.variant_id, o.price.amount]),
+      [
+        ["kettle-works", "KET-1-V", 45000],
+        ["tea-corner", "TEA-1-V", 50000],
+      ],
+    );
+    await client.close();
+  });
+
+  await check("shops come back in a fresh random order, and no shop is always first", async () => {
+    const client = await connect();
+    const firsts = new Set();
+    for (let i = 0; i < 24; i += 1) {
+      const result = await client.callTool({ name: "search_catalog", arguments: { request: { query: "chai" } } });
+      firsts.add(result.structuredContent.results[0].shop);
+    }
+    assert.deepEqual([...firsts].sort(), ["kettle-works", "tea-corner"]);
+    await client.close();
+  });
+
+  await check("exclude_shops and only_shops apply before the shuffle and are echoed in the result", async () => {
+    const client = await connect();
+    let before = calls.length;
+    const excluded = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: ["tea-corner", "gone-shop"] },
+    });
+    assert.notEqual(excluded.isError, true);
+    const body = excluded.structuredContent;
+    assert.deepEqual(body.results.map((r) => r.shop), ["kettle-works"]);
+    assert.deepEqual(body.shops_excluded, ["gone-shop", "tea-corner"]);
+    assert.deepEqual(body.unknown_shops, ["gone-shop"]);
+    assert.equal(body.shops_searched, 2);
+    assert.equal(body.shops_in_network, 3);
+    assert.equal(body.same_products, undefined, "the excluded shop's offer is not grouped in either");
+    const asked = calls.slice(before).filter((c) => c.path === "/ucp/catalog/search").map((c) => c.shop).sort();
+    assert.deepEqual(asked, ["broken-shop", "kettle-works"], "an excluded shop is never asked");
+
+    before = calls.length;
+    const only = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.deepEqual(only.structuredContent.only_shops, ["kettle-works", "tea-corner"]);
+    assert.deepEqual(only.structuredContent.unavailable, []);
+    assert.equal(only.structuredContent.shops_searched, 2);
+    assert.equal(calls.slice(before).filter((c) => c.shop === "broken-shop").length, 0);
+
+    // The shops that remain still come back in a fresh random order.
+    const firsts = new Set();
+    for (let i = 0; i < 24; i += 1) {
+      const again = await client.callTool({
+        name: "search_catalog",
+        arguments: { request: { query: "chai" }, exclude_shops: ["broken-shop"] },
+      });
+      firsts.add(again.structuredContent.results[0].shop);
+    }
+    assert.deepEqual([...firsts].sort(), ["kettle-works", "tea-corner"]);
+
+    before = calls.length;
+    const refused = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, exclude_shops: ["tea-corner"] },
+    });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.error.code, "shop_excluded");
+    assert.equal(calls.length, before, "nothing is asked of a shop the buyer excluded");
+
+    const outside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "broken-shop", request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.equal(outside.isError, true);
+    assert.equal(outside.structuredContent.error.code, "shop_not_in_only_shops");
+    assert.match(outside.structuredContent.error.content, /kettle-works, tea-corner/);
+    assert.equal(calls.length, before, "nothing is asked of a shop outside only_shops");
+    const inside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, only_shops: ["tea-corner"] },
+    });
+    assert.equal(inside.structuredContent.shop, "tea-corner");
+
+    const tooMany = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: Array.from({ length: 51 }, (_, i) => `shop-${i}0`) },
+    });
+    assert.equal(tooMany.isError, true, "at most 50 shops in exclude_shops");
+    const badSlug = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["Not A Slug"] },
+    });
+    assert.equal(badSlug.isError, true);
+    await client.close();
+  });
+
+  await check("shuffling is a permutation, and offers group by barcode across shops only", async () => {
+    const items = Array.from({ length: 60 }, (_, i) => i);
+    let seed = 7;
+    const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    const mixed = shuffled(items, random);
+    assert.notDeepEqual(mixed, items);
+    assert.deepEqual([...mixed].sort((a, b) => a - b), items);
+    assert.equal(items[0], 0, "the input is not changed");
+    const v = (id, amount, currency, value = "8901234567890") => ({
+      id,
+      price: { amount, currency },
+      barcodes: [{ type: "GTIN", value }],
+    });
+    const groups = sameProducts([
+      { shop: "a", products: [{ id: "p1", title: "Ghee", variants: [v("a1", 900, "INR"), v("a2", 10, "USD", "4006381333931")] }] },
+      { shop: "b", products: [{ id: "p2", title: "Ghee", variants: [v("b1", 800, "INR"), { id: "b2", barcodes: [{ type: "GTIN", value: "12AB" }] }] }] },
+      { shop: "c", products: [{ id: "p3", title: "Ghee", variants: [{ id: "c1", barcodes: [{ type: "GTIN", value: "8901234567890" }] }] }] },
+    ]);
+    assert.equal(groups.length, 1, "a barcode at one shop only, or not a GTIN, is no group");
+    assert.deepEqual(groups[0].offers.map((o) => o.shop), ["b", "a", "c"], "priced first, lowest first; unpriced last");
+
+    // The main currency decides the comparison, not the currency code; a shop appears once, at its cheapest.
+    const mixed2 = sameProducts([
+      { shop: "aed-shop", products: [{ id: "x", variants: [v("x1", 1, "AED")] }] },
+      { shop: "inr-1", products: [{ id: "y", variants: [v("y1", 900, "INR"), v("y2", 700, "INR")] }] },
+      { shop: "inr-2", products: [{ id: "z", variants: [v("z1", 800, "INR")] }] },
+    ]);
+    assert.deepEqual(mixed2[0].offers.map((o) => [o.shop, o.variant_id]), [["inr-1", "y2"], ["inr-2", "z1"], ["aed-shop", "x1"]]);
+    assert.equal(validGtin("8901234567890"), true);
+    assert.equal(validGtin("8901234567891"), false, "wrong check digit");
+    assert.equal(validGtin("1"), false);
+    assert.equal(validGtin("١٢٣٤٥٦٧٨"), false, "only ASCII digits");
+    const noCheck = sameProducts([
+      { shop: "a", products: [{ id: "p", variants: [v("a1", 1, "INR", "12345678")] }] },
+      { shop: "b", products: [{ id: "q", variants: [v("b1", 1, "INR", "12345678")] }] },
+    ]);
+    assert.deepEqual(noCheck, [], "a barcode with a wrong check digit groups nothing");
+  });
+
+  await check("each shop of a network search gets a small page, never a cursor from another shop", async () => {
+    assert.deepEqual(fanOutRequest({ query: "chai" }), { query: "chai", pagination: { limit: 3 } });
+    assert.deepEqual(fanOutRequest({ query: "chai", pagination: { limit: 50, cursor: "abc" } }), {
+      query: "chai",
+      pagination: { limit: 10 },
+    });
+    assert.deepEqual(fanOutRequest({ pagination: { limit: 0 } }), { pagination: { limit: 1 } });
   });
 
   await check("search and lookup in one shop; an unknown shop is refused before any call", async () => {

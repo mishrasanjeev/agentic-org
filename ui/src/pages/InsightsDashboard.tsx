@@ -18,7 +18,12 @@ import ChartCard from "@/components/insights/ChartCard";
 import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
+import BenchmarkCard, { BENCHMARK_ROLES, BENCHMARK_VIEWS } from "@/components/insights/BenchmarkCard";
 import NeedsYouList from "@/components/insights/NeedsYouList";
+import SavedViews from "@/components/insights/SavedViews";
+import SearchPalette from "@/components/insights/SearchPalette";
+import WhatChanged from "@/components/insights/WhatChanged";
+import ViewFiles from "@/components/insights/ViewFiles";
 import { ChartSkeleton, TileSkeleton } from "@/components/insights/Skeleton";
 import {
   errorStatus,
@@ -31,6 +36,7 @@ import {
   type InsightsViewResponse,
 } from "@/lib/insights/api";
 import { isIsoDate, presetRange, RANGE_PRESETS, todayIn, type RangePreset } from "@/lib/insights/dates";
+import { exploreApi, type ExplorerDescription } from "@/lib/insights/explore";
 import { defaultViewForRole, METRIC_PRESENTATION, ROLE_VIEWS } from "@/lib/insights/metrics";
 
 type StatusState =
@@ -47,6 +53,9 @@ type ViewState =
   | { kind: "forbidden" }
   | { kind: "error"; message: string | null };
 
+/** Landing tiles refresh this often while the page is visible (PRD: every 60 s). */
+export const REFRESH_MS = 60_000;
+
 export default function InsightsDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -55,6 +64,7 @@ export default function InsightsDashboard() {
   const [statusState, setStatusState] = useState<StatusState>({ kind: "loading" });
   const [viewState, setViewState] = useState<ViewState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
+  const [explorers, setExplorers] = useState<ExplorerDescription[]>([]);
   const tabRefs = useRef<Partial<Record<InsightsViewKey, HTMLButtonElement | null>>>({});
 
   // -- status -------------------------------------------------------------
@@ -66,6 +76,17 @@ export default function InsightsDashboard() {
       .then((status) => {
         if (!live) return;
         setStatusState(status.enabled ? { kind: "ready", status } : { kind: "disabled" });
+        if (status.enabled) {
+          // The tables behind the tiles; a role with no landing view yet still opens these.
+          exploreApi
+            .list()
+            .then((list) => {
+              if (live) setExplorers(list);
+            })
+            .catch(() => {
+              if (live) setExplorers([]);
+            });
+        }
       })
       .catch(async (e) => {
         if (!live) return;
@@ -180,6 +201,27 @@ export default function InsightsDashboard() {
     };
   }, [activeView, filters, reloadKey]);
 
+  // -- quiet refresh: new numbers replace the old ones in place, never a skeleton over them --------------
+  useEffect(() => {
+    if (!activeView) return;
+    let live = true;
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      insightsApi
+        .view(activeView, filters)
+        .then((data) => {
+          if (live) setViewState((prev) => (prev.kind === "ready" ? { kind: "ready", data } : prev));
+        })
+        .catch(() => {
+          // The next tick or the Refresh button tries again; the numbers on screen stay.
+        });
+    }, REFRESH_MS);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [activeView, filters]);
+
   const selectView = (view: InsightsViewKey) => updateParams({ view });
 
   const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -206,6 +248,27 @@ export default function InsightsDashboard() {
       </div>
       {statusState.kind === "ready" ? (
         <div className="flex flex-wrap items-center gap-2">
+          <SearchPalette />
+          {/* The assumptions behind money saved: administrators edit and confirm them, the CFO reads them. */}
+          {role === "admin" || role === "cfo" ? (
+            <Link
+              to="/dashboard/insights/value"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-value-link"
+            >
+              {t("insights.valueLink")}
+            </Link>
+          ) : null}
+          {/* Spend limits: administrators and the CFO set them, auditors read them. */}
+          {role === "admin" || role === "cfo" || role === "auditor" ? (
+            <Link
+              to="/dashboard/insights/budgets"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-budgets-link"
+            >
+              {t("insightsBudgets.link")}
+            </Link>
+          ) : null}
           {/* Per-tenant BI database access, for administrators while it is on and configured. */}
           {role === "admin" && statusState.status.bi_access ? (
             <Link
@@ -216,6 +279,13 @@ export default function InsightsDashboard() {
               {t("insightsBi.link")}
             </Link>
           ) : null}
+          <Link
+            to="/dashboard/insights/downloads"
+            className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            data-testid="insights-downloads-link"
+          >
+            {t("insightsDownloads.link")}
+          </Link>
           <button
             type="button"
             onClick={retry}
@@ -243,7 +313,15 @@ export default function InsightsDashboard() {
       />
     );
   } else if (!activeView) {
-    content = <EmptyState title={t("insights.forbidden.title")} hint={t("insights.forbidden.body")} />;
+    content =
+      explorers.length > 0 ? (
+        <>
+          <EmptyState compact title={t("insights.exploreOnly.title")} hint={t("insights.exploreOnly.body")} />
+          <ExploreLinks explorers={explorers} />
+        </>
+      ) : (
+        <EmptyState title={t("insights.forbidden.title")} hint={t("insights.forbidden.body")} />
+      );
   } else {
     content = (
       <>
@@ -280,12 +358,23 @@ export default function InsightsDashboard() {
           </h2>
         )}
 
+        <WhatChanged />
+
+        {status?.late_data ? (
+          <p role="status" className="rounded-md border px-3 py-2 text-sm" data-testid="insights-late-data">
+            {t("insights.freshness.lateData")}
+          </p>
+        ) : null}
+
         <FilterBar
           value={{ preset, from: range.from, to: range.to, compare }}
           onChange={onFilterChange}
           companyScoped={Boolean(companyId)}
           disabled={viewState.kind === "loading"}
         />
+
+        <ViewFiles view={activeView} filters={filters} role={role} />
+        <SavedViews viewKey={activeView} keep={["view"]} />
 
         <div
           id="insights-panel"
@@ -295,7 +384,9 @@ export default function InsightsDashboard() {
           className="flex flex-col gap-4"
         >
           <ViewBody state={viewState} filters={filters} currency={currency} onRetry={retry} />
+          {BENCHMARK_VIEWS.has(activeView) && BENCHMARK_ROLES.has(role) ? <BenchmarkCard /> : null}
         </div>
+        {explorers.length > 0 ? <ExploreLinks explorers={explorers} /> : null}
       </>
     );
   }
@@ -308,6 +399,30 @@ export default function InsightsDashboard() {
       {header}
       {content}
     </div>
+  );
+}
+
+/** The explorers this role may open: the rows behind every tile. */
+function ExploreLinks({ explorers }: { explorers: ExplorerDescription[] }) {
+  const { t } = useTranslation();
+  return (
+    <nav aria-labelledby="insights-explore-heading" className="flex flex-col gap-2" data-testid="insights-explore-links">
+      <h2 id="insights-explore-heading" className="text-sm font-semibold">
+        {t("insights.explore.heading")}
+      </h2>
+      <ul className="flex flex-wrap gap-2">
+        {explorers.map((e) => (
+          <li key={e.key}>
+            <Link
+              to={`/dashboard/insights/explore/${e.key}`}
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              {t(`insightsExplore.explorers.${e.key}`, { defaultValue: e.title })}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -379,6 +494,7 @@ function ViewBody({
                 key={metric.key}
                 metric={metric}
                 currency={currency}
+                filters={filters}
                 action={presentation ? { to: presentation.action.to, label: t(presentation.action.labelKey) } : null}
               />
             );

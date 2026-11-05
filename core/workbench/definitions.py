@@ -181,7 +181,7 @@ CATALOGUE: tuple[Workbench, ...] = (
             Tab(
                 "observability",
                 "Run timelines",
-                "/dashboard/observability",
+                "/dashboard/insights/explore/runs",
                 "observability",
                 roles=("admin",),
                 sensitive=True,
@@ -245,7 +245,7 @@ CATALOGUE: tuple[Workbench, ...] = (
                 roles=("admin",),
                 actions=("configure",),
             ),
-            Tab("costs", "Costs", "/dashboard/costs", "costs", roles=("admin", "cfo"), sensitive=True),
+            Tab("costs", "Costs", "/dashboard/insights/explore/cost", "costs", roles=("admin", "cfo"), sensitive=True),
         ),
         default_roles=("admin", "coo"),
     ),

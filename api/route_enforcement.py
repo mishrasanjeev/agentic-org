@@ -85,6 +85,10 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     # degrades to allow-with-warning so platform discovery keeps working.
     "ucp-discovery": (600, 60),
     "ucp-catalog-read": (120, 60),
+    # A listed network shop's storefront and feed on its own host (api/v1/shop_site.py), per
+    # client IP. Crawlers fetch whole sites, hence the higher figure; not "public-*", so a
+    # limiter outage degrades to allow-with-warning.
+    "shop-site-read": (300, 60),
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),
     "infra-health-probe": (600, 60),
@@ -246,12 +250,25 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # the roles of its own page (admin plus the matching CxO role). There
     # are no writes, so the write scope is the administrator's.
     "kpis": ("kpis:read", ADMIN_SCOPE),
-    # Insights (/insights/*, api/v1/insights.py): read-only. Every role but
-    # admin is given insights:read (administrators pass on agenticorg:admin);
-    # each handler then admits only the roles of the view it serves
-    # (executive: admin; finance: admin, cfo). No writes, so the write scope
-    # is the administrator's.
-    "insights": ("insights:read", ADMIN_SCOPE),
+    # Insights (/insights/*, api/v1/insights*.py). Every role but admin is
+    # given insights:read, and every role but the auditor insights:write
+    # (administrators pass on agenticorg:admin); each handler then admits only
+    # the roles it serves (finance: admin, cfo; acknowledging: the alert's
+    # owner; budgets: admin, cfo). The write side was once the
+    # administrator's, which refused every other role the actions their
+    # handlers allow (regression test_insights_non_admin_writes_20261104).
+    "insights": ("insights:read", "insights:write"),
+    # Insights POSTs that change no organisation state: a background export of
+    # figures the caller may already read, the caller's own saved views and
+    # last visit, and an auditor's signature on an evidence pack they
+    # reviewed. Reading Insights is enough at this layer (auditors stay
+    # read-only); each handler decides who may act.
+    "insights_personal": ("insights:read", "insights:read"),
+    # Insights changes only an administrator makes (BI database logins, the
+    # money-saved baselines, rates and settings): read with insights:read, but
+    # writes stay the administrator's at this layer too, as well as in the
+    # handler (an active human administrator).
+    "insights_admin": ("insights:read", ADMIN_SCOPE),
     # Platform operator surfaces (/platform/insights/*, api/v1/insights_platform.py):
     # administrators only at this layer; the handler then admits only an
     # MFA-enrolled administrator of the platform operator tenant (404 otherwise).
@@ -369,6 +386,11 @@ def _deny(request: Request, status: int, detail: str, **ctx: Any) -> None:
     if _enforcement_mode() == "log":
         logger.warning("route_enforcement_log_only", extra={"path": request.url.path, "detail": detail, **ctx})
         return
+    from core.insights.runtime_counters import count_security_event
+
+    count_security_event(
+        getattr(request.state, "tenant_id", None), "rate_limited" if status == 429 else "scope_denied"
+    )
     raise HTTPException(status_code=status, detail=detail)
 
 

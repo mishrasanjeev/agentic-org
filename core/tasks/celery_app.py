@@ -57,6 +57,7 @@ app = Celery(
         "core.tasks.invoice_tasks",
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
+        "core.tasks.merchant_notification_tasks",
         "core.tasks.onboarding_desk_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.network_tasks",
@@ -94,10 +95,13 @@ app.conf.update(
         "core.tasks.report_tasks.generate_report": {"queue": "reports"},
         "core.tasks.report_tasks.deliver_report": {"queue": "delivery"},
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
+        # Insights background exports build next to the report jobs (core/insights/export_jobs.py).
+        "core.tasks.insights_tasks.build_export": {"queue": "reports"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
         "core.tasks.payment_handoff_tasks.notify_order": {"queue": "delivery"},
+        "core.tasks.merchant_notification_tasks.deliver_merchant_notifications": {"queue": "delivery"},
         "core.tasks.onboarding_desk_tasks.open_case": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
@@ -151,6 +155,21 @@ app.conf.beat_schedule = {
         "task": "core.tasks.payment_handoff_tasks.poll_plural_handoffs",
         "schedule": 60.0,
         "options": {"queue": "delivery", "expires": 60},
+    },
+    "reconcile-plural-refunds": {
+        # Hosted Plural refunds whose outcome is unknown (a timeout, a 5xx, a pending status):
+        # read the order from Plural and record what it says (core/commerce/hosted_refunds.py).
+        # A no-op unless AGENTICORG_UCP_CHECKOUT_ENABLED or AGENTICORG_ACP_CHECKOUT_ENABLED.
+        "task": "core.tasks.payment_handoff_tasks.reconcile_plural_refunds",
+        "schedule": 300.0,
+        "options": {"queue": "maintenance", "expires": 300},
+    },
+    "sweep-merchant-notifications": {
+        # The merchant commerce email outbox (core/commerce/merchant_notifications.py): new-order
+        # and payment-attention emails a lost kick, a crash or a failed SMTP send left unsent.
+        "task": "core.tasks.merchant_notification_tasks.sweep_merchant_notifications",
+        "schedule": 60.0,
+        "options": {"queue": "maintenance", "expires": 60},
     },
     "sweep-ucp-order-webhooks": {
         # UCP order webhook retries and missed kicks, and expired Idempotency-Key
@@ -230,6 +249,20 @@ app.conf.beat_schedule = {
         "schedule": 900.0,
         "options": {"queue": "maintenance", "expires": 900},
     },
+    "insights-expire-exports": {
+        # Deletes Insights export files past their seven days and marks builds that never finished as failed
+        # (core/insights/export_jobs.py). Runs for every tenant so files go on time even with Insights off.
+        "task": "core.tasks.insights_tasks.expire_exports",
+        "schedule": crontab(hour=3, minute=15),
+        "options": {"queue": "maintenance", "expires": 3600},
+    },
+    "insights-evaluate-alerts": {
+        # Opens, refreshes and resolves each tenant's Insights alerts and emails new act alerts once
+        # (core/insights/alerts.py). A no-op unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.evaluate_alerts",
+        "schedule": 900.0,
+        "options": {"queue": "maintenance", "expires": 900},
+    },
     "insights-rollup-closed-days": {
         # Rolls each tenant's local yesterday from 02:00 local when it has no rollup
         # or newer facts, and catches up unrolled days. Hourly at :05. A no-op
@@ -237,6 +270,13 @@ app.conf.beat_schedule = {
         "task": "core.tasks.insights_tasks.rollup_closed_days",
         "schedule": crontab(minute=5),
         "options": {"queue": "maintenance"},
+    },
+    "insights-compute-benchmarks": {
+        # Publishes the opted-in cross-tenant cohort figures (at least 20 tenants each) for the last 30
+        # complete UTC days (core/insights/benchmarks.py). A no-op unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.compute_benchmarks",
+        "schedule": crontab(hour=4, minute=10),
+        "options": {"queue": "maintenance", "expires": 3600},
     },
     "insights-reconcile-yesterday": {
         # Reconciles each tenant's local yesterday against its run facts from 02:30
@@ -295,6 +335,16 @@ app.conf.beat_schedule = {
         "task": "core.tasks.oacp_freshness_tasks.sweep_artifact_freshness",
         "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
+    },
+    "sync-network-shop-catalogs": {
+        # Re-reads listed network shops' Shopify catalogs once they are an hour old (or a Shopify
+        # product webhook marked them), so buyers' agents see current prices and stock; a no-op
+        # while AGENTICORG_NETWORK_ENABLED is off or AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES is 0
+        # (core/tasks/network_tasks.py, core/commerce/catalog_autosync.py).
+        "task": "core.tasks.network_tasks.sync_shop_catalogs",
+        "schedule": 600.0,  # every 10 minutes
+        # A run still queued when the next is due is dropped (a Redis lock also keeps runs apart).
+        "options": {"queue": "maintenance", "expires": 540},
     },
     "advance-custom-domains": {
         # Moves merchant custom domains toward live (mapping and certificate checks,

@@ -548,6 +548,12 @@ class Settings(BaseSettings):
     # Version of the network terms a merchant accepts when it turns the network on.
     # Env: AGENTICORG_NETWORK_TERMS_VERSION.
     network_terms_version: str = "2026-10-25"
+    # Where the network stands with each outside program (core/commerce/network_registrations.py),
+    # set by the operator as programs approve it: a JSON object mapping chatgpt, google, microsoft
+    # and perplexity to not_started, submitted or live, or to {"status": ..., "shops": {slug: status}}
+    # where a program approves shops one by one (a Google Merchant Center sub-account per shop).
+    # Empty or invalid: every program is not_started. Env: AGENTICORG_NETWORK_REGISTRATIONS.
+    network_registrations: str = ""
     # The public network Telegram bot's username (without @), for deep links
     # t.me/<bot>?start=<slug>. Empty: no Telegram link is shown.
     # Env: AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME.
@@ -562,6 +568,11 @@ class Settings(BaseSettings):
     network_telegram_webhook_secret: str = ""
     network_telegram_chat_limit_per_hour: int = 20
     network_telegram_global_limit_per_minute: int = 60
+    # The scheduled catalog sync of listed network shops on Shopify
+    # (core/commerce/catalog_autosync.py): a listed shop's Shopify catalog is read
+    # again once it is this many minutes old, or sooner when a Shopify product
+    # webhook marks it. 0 turns the sync off. Env: AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES.
+    network_catalog_sync_minutes: int = 60
     # Platform subdomains <slug>.<apex> for network shops without a host of
     # their own, served through the Firebase Hosting front (a wildcard CNAME
     # *.<apex> -> <site>.web.app). Firebase allows 20 custom domains per apex,
@@ -806,6 +817,19 @@ class Settings(BaseSettings):
     # published at GET /onboarding-desk/evidence-key. Empty: packs are built unsigned.
     # Env: AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY.
     onboarding_desk_evidence_signing_key: str = ""
+    # Agent identity for desk and case agents (core/agent_identity/, docs/onboarding-desk/agent-identity.md):
+    # before each agent action the desk checks the agent's identity credential with the identity
+    # provider and its Grantex grant, and acts only within both. Off by default: off, no identity
+    # provider is called and every agent acts exactly as before.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED.
+    onboarding_desk_agent_identity_enabled: bool = False
+    # The registered identity provider (connectors/agent_identity/registry.py), for example ``mock``
+    # in local runs. Empty while identity is on: every agent action is held.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_PROVIDER.
+    onboarding_desk_agent_identity_provider: str = ""
+    # How long an identity status and grant check is reused, never past the credential's own expiry.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_STATUS_CACHE_SECONDS.
+    onboarding_desk_agent_identity_status_cache_seconds: int = Field(default=60, ge=0, le=3600)
     # Insights (core/insights/): run facts, daily rollups and the Executive and
     # Finance views. Off by default, the kill switch for the whole deployment:
     # off, no run fact is written, the rollup tasks skip, GET /insights/status
@@ -829,6 +853,24 @@ class Settings(BaseSettings):
     insights_bi_host: str = ""
     insights_bi_database: str = ""
     insights_bi_max_logins_per_tenant: int = 3
+    # Insights background exports (core/insights/export_jobs.py, migration v6z110): the
+    # Google Cloud Storage bucket that holds export files for seven days (a lifecycle
+    # rule should delete objects after eight). Unset: background exports answer
+    # 503 ``export_storage_unconfigured``; inline exports (up to 50,000 rows) still
+    # work. Env: AGENTICORG_INSIGHTS_EXPORT_BUCKET.
+    insights_export_bucket: str = ""
+    # WhatsApp delivery of scheduled reports (core/reports/delivery.py, Cloud API with
+    # WHATSAPP_TOKEN and WHATSAPP_PHONE_ID). WhatsApp refuses a business-initiated
+    # free-form message to anyone who has not written in the last 24 hours, so a
+    # scheduled report is sent as this approved template (a document header, and one
+    # body variable for the report name unless the body flag is off). Unset: the file
+    # goes as a plain document, delivered only inside that 24-hour window.
+    # Env: AGENTICORG_WHATSAPP_REPORT_TEMPLATE, AGENTICORG_WHATSAPP_REPORT_TEMPLATE_LANGUAGE,
+    # AGENTICORG_WHATSAPP_REPORT_TEMPLATE_BODY_TEXT, AGENTICORG_WHATSAPP_GRAPH_API_VERSION.
+    whatsapp_report_template: str = Field(default="", max_length=512, pattern=r"^[a-z0-9_]*$")
+    whatsapp_report_template_language: str = Field(default="en", pattern=r"^[a-z]{2,3}(_[A-Z]{2})?$")
+    whatsapp_report_template_body_text: bool = True
+    whatsapp_graph_api_version: str = Field(default="v23.0", pattern=r"^v\d{2}\.\d$")
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;

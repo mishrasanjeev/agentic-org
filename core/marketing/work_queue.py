@@ -1135,7 +1135,7 @@ def _cta(action_key: Any) -> dict[str, str]:
     return {
         "action_key": key,
         "label": CTA_LABELS.get(key, key.replace("_", " ").title()),
-        "path": CTA_PATHS.get(key, "/dashboard/cmo"),
+        "path": CTA_PATHS.get(key, "/dashboard/marketing-ops"),
     }
 
 
@@ -1191,7 +1191,7 @@ CTA_LABELS = {
 }
 
 CTA_PATHS = {
-    "none": "/dashboard/cmo",
+    "none": "/dashboard/marketing-ops",
     "setup": "/dashboard/connectors",
     "reconnect": "/dashboard/connectors",
     "add_scope": "/dashboard/connectors",
@@ -1203,12 +1203,12 @@ CTA_PATHS = {
     "fix_connector_payload": "/dashboard/connectors",
     "wait_for_quota_reset": "/dashboard/connectors",
     "enable_connector": "/dashboard/connectors",
-    "map_fields": "/dashboard/cmo?panel=data-readiness",
-    "complete_mapping": "/dashboard/cmo?panel=data-readiness",
-    "fix_required_mapping": "/dashboard/cmo?panel=data-readiness",
-    "complete_backfill": "/dashboard/cmo?panel=data-readiness",
-    "retry_backfill": "/dashboard/cmo?panel=data-readiness",
-    "resolve_blocker": "/dashboard/cmo?panel=data-readiness",
+    "map_fields": "/dashboard/marketing-ops?panel=data-readiness",
+    "complete_mapping": "/dashboard/marketing-ops?panel=data-readiness",
+    "fix_required_mapping": "/dashboard/marketing-ops?panel=data-readiness",
+    "complete_backfill": "/dashboard/marketing-ops?panel=data-readiness",
+    "retry_backfill": "/dashboard/marketing-ops?panel=data-readiness",
+    "resolve_blocker": "/dashboard/marketing-ops?panel=data-readiness",
     "resolve_overdue_approvals": "/dashboard/approvals",
     "review_pending_approvals": "/dashboard/approvals",
     "review_escalated_approval": "/dashboard/approvals",
@@ -1221,12 +1221,12 @@ CTA_PATHS = {
     "manual_reconcile_before_retry": "/dashboard/approvals",
     "wait_for_idempotent_retry": "/dashboard/approvals",
     "confirm_write_or_reconcile": "/dashboard/approvals",
-    "restore_required_kpis": "/dashboard/cmo?kpi=all",
-    "review_kpi_readiness": "/dashboard/cmo?kpi=all",
-    "resolve_reconciliation": "/dashboard/cmo?panel=reconciliation",
-    "resolve_report_reconciliation": "/dashboard/cmo?panel=reconciliation",
-    "review_report_quality": "/dashboard/reports",
-    "review_report_quality_warnings": "/dashboard/reports",
+    "restore_required_kpis": "/dashboard/marketing-ops?kpi=all",
+    "review_kpi_readiness": "/dashboard/marketing-ops?kpi=all",
+    "resolve_reconciliation": "/dashboard/marketing-ops?panel=reconciliation",
+    "resolve_report_reconciliation": "/dashboard/marketing-ops?panel=reconciliation",
+    "review_report_quality": "/dashboard/report-schedules",
+    "review_report_quality_warnings": "/dashboard/report-schedules",
     "fix_report_connectors": "/dashboard/connectors",
     "refresh_report_sources": "/dashboard/connectors",
     "connect_real_kpi_sources": "/dashboard/connectors",

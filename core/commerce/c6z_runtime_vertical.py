@@ -583,6 +583,15 @@ def _normalize_payment_rail_preference(value: Any) -> str:
     return preference
 
 
+# How much of a Shopify catalog one read takes: SHOPIFY_CATALOG_PAGE_SIZE products a page, at most
+# SHOPIFY_CATALOG_MAX_PAGES pages (the most fetch_products allows), so SHOPIFY_CATALOG_READ_LIMIT products.
+# Every catalog read (the sync route default, the setup flow, the artifact refresh and the scheduled
+# sync) uses these, so a store reads the same products wherever the read starts.
+SHOPIFY_CATALOG_PAGE_SIZE = 50
+SHOPIFY_CATALOG_MAX_PAGES = 20
+SHOPIFY_CATALOG_READ_LIMIT = SHOPIFY_CATALOG_PAGE_SIZE * SHOPIFY_CATALOG_MAX_PAGES
+
+
 class ShopifyAdminGraphQLClient:
     """Small read-only Shopify Admin GraphQL client.
 
@@ -600,16 +609,22 @@ class ShopifyAdminGraphQLClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.credentials = credentials
+        # Whether the last fetch_products stopped at its limit with more products in the store.
+        self.read_limit_reached = False
         self._timeout_seconds = timeout_seconds
         self._retry_attempts = max(1, retry_attempts)
         self._retry_backoff_seconds = max(0.0, retry_backoff_seconds)
         self._transport = transport
 
-    async def fetch_products(self, *, page_size: int = 50, max_pages: int = 10) -> list[dict[str, Any]]:
+    async def fetch_products(
+        self, *, page_size: int = SHOPIFY_CATALOG_PAGE_SIZE, max_pages: int = SHOPIFY_CATALOG_MAX_PAGES
+    ) -> list[dict[str, Any]]:
+        """Read at most ``page_size`` x ``max_pages`` products; ``read_limit_reached`` says whether more exist."""
         if page_size < 1 or page_size > 100:
             raise C6ZRuntimeValidationError("page_size must be between 1 and 100")
-        if max_pages < 1 or max_pages > 20:
-            raise C6ZRuntimeValidationError("max_pages must be between 1 and 20")
+        if max_pages < 1 or max_pages > SHOPIFY_CATALOG_MAX_PAGES:
+            raise C6ZRuntimeValidationError(f"max_pages must be between 1 and {SHOPIFY_CATALOG_MAX_PAGES}")
+        self.read_limit_reached = False
 
         try:
             await validate_public_url_async(
@@ -684,6 +699,7 @@ class ShopifyAdminGraphQLClient:
         if more:
             # The store has more products than one sync reads; say so instead of passing it silently.
             logger.warning("shopify_catalog_read_limit_reached", products_read=len(products), limit=max_products)
+        self.read_limit_reached = more
         return products
 
     @property
@@ -854,6 +870,7 @@ query C6ZProductsWithDetails($first: Int!, $after: String) {
           }
           inventoryItem {
             id
+            tracked
           }
         }
       }
@@ -861,6 +878,11 @@ query C6ZProductsWithDetails($first: Int!, $after: String) {
   }
 }
 """
+
+
+def _untracked(variant: Mapping[str, Any]) -> bool:
+    item = variant.get("inventoryItem")
+    return isinstance(item, Mapping) and item.get("tracked") is False
 
 
 def normalize_shopify_product_node(
@@ -893,6 +915,8 @@ def normalize_shopify_product_node(
                 ),
                 "updated_at": _safe_optional_text(variant.get("updatedAt")),
                 **({"gtin": gtin} if (gtin := variant_gtin(variant)) else {}),
+                # Shopify keeps selling an untracked item whatever its count says (read with the details query).
+                **({"inventory_tracked": False} if _untracked(variant) else {}),
                 "selected_options": tuple(
                     {
                         "name": _safe_optional_text(option.get("name")),

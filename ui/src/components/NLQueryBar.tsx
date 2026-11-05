@@ -43,7 +43,7 @@ function detectNavigationIntent(text: string): NavIntent | null {
 
   // "go to dashboard" / "show dashboard"
   if (/^(?:show\s+(?:me\s+)?|go\s+to\s+|open\s+)(?:the\s+)?dashboard$/.test(q)) {
-    return { path: "/dashboard" };
+    return { path: "/dashboard/insights" };
   }
 
   // "go to approvals" / "show approvals"
@@ -66,10 +66,10 @@ function detectNavigationIntent(text: string): NavIntent | null {
   if (cxoMatch) {
     const role = cxoMatch[1];
     const roleToPath: Record<string, string> = {
-      finance: "/dashboard/cfo", cfo: "/dashboard/cfo",
-      hr: "/dashboard/chro", chro: "/dashboard/chro",
-      marketing: "/dashboard/cmo", cmo: "/dashboard/cmo",
-      operations: "/dashboard/coo", coo: "/dashboard/coo",
+      finance: "/dashboard/insights?view=finance", cfo: "/dashboard/insights?view=finance",
+      hr: "/dashboard/insights?view=hr", chro: "/dashboard/insights?view=hr",
+      marketing: "/dashboard/insights?view=marketing", cmo: "/dashboard/insights?view=marketing",
+      operations: "/dashboard/insights?view=operations", coo: "/dashboard/insights?view=operations",
     };
     return { path: roleToPath[role] };
   }
@@ -242,16 +242,16 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
                 type="button"
                 onClick={() => {
                   const domainRouteMap: Record<string, string> = {
-                    finance: "/dashboard/cfo",
-                    hr: "/dashboard/chro",
-                    marketing: "/dashboard/cmo",
-                    ops: "/dashboard/coo",
-                    operations: "/dashboard/coo",
+                    finance: "/dashboard/insights?view=finance",
+                    hr: "/dashboard/insights?view=hr",
+                    marketing: "/dashboard/insights?view=marketing",
+                    ops: "/dashboard/insights?view=operations",
+                    operations: "/dashboard/insights?view=operations",
                     sales: "/dashboard/sales",
-                    backoffice: "/dashboard/coo",
+                    backoffice: "/dashboard/insights?view=back_office",
                     compliance: "/dashboard/enforce-audit",
                   };
-                  const route = domainRouteMap[result.domain.toLowerCase()] || "/dashboard";
+                  const route = domainRouteMap[result.domain.toLowerCase()] || "/dashboard/insights";
                   navigate(route);
                   setDropdownOpen(false);
                   setQuery("");

@@ -27,6 +27,7 @@ import structlog
 from sqlalchemy import func, select
 
 from core.commerce import custom_domains as cd
+from core.commerce import network_registrations as reg
 from core.commerce.ledger import record_commerce_event
 from core.commerce.ucp.state import attested_host, is_published, ucp_state
 from core.commerce.ucp.store import find_serving_binding
@@ -333,10 +334,13 @@ async def claim_platform_subdomain(
 
 # enterprise-gate: process-local-ok reason=directory cache expires on its ttl; the database is the source of truth
 _DIRECTORY_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+# enterprise-gate: process-local-ok reason=host-to-shop cache expires on its ttl; the database is the source of truth
+_HOST_SHOP_CACHE: dict[str, tuple[float, ShopRef | None]] = {}
 
 
 def reset_directory_cache() -> None:
     _DIRECTORY_CACHE.clear()
+    _HOST_SHOP_CACHE.clear()
 
 
 async def _config_for(listing: CommerceNetworkListingRow) -> C6ZMerchantCommerceConfigRow | None:
@@ -408,6 +412,11 @@ async def _listed_rows(slug: str | None = None) -> list[CommerceNetworkListingRo
         return list((await session.scalars(query.order_by(CommerceNetworkListingRow.opted_in_at))).all())
 
 
+async def listed_rows() -> list[CommerceNetworkListingRow]:
+    """Every listed shop, oldest listing first (servable or not; platform context read)."""
+    return await _listed_rows()
+
+
 async def directory() -> list[dict[str, Any]]:
     """Every listed shop that is servable right now (cached for a minute)."""
     cached = _DIRECTORY_CACHE.get("all")
@@ -458,6 +467,46 @@ async def resolve_shop(slug: str) -> ShopRef:
     )
 
 
+async def shop_for_host(host: str) -> ShopRef | None:
+    """The listed, servable shop whose web address is ``host`` (its own storefront answers there), else None.
+
+    The host must be indexed as a UCP serving host, a listing of that exact merchant scope must be
+    ``listed``, and ``_servable_host`` must return this same host (published, still bound, address
+    live). Cached for a minute per host; None while the network is off.
+    """
+    if not network_enabled():
+        return None
+    now = time.monotonic()
+    cached = _HOST_SHOP_CACHE.get(host)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    shop: ShopRef | None = None
+    binding = await find_serving_binding(host)
+    if binding is not None:
+        async with get_platform_session() as session:
+            listing = (
+                await session.scalars(
+                    select(CommerceNetworkListingRow).where(
+                        CommerceNetworkListingRow.tenant_id == uuid.UUID(binding.tenant_id),
+                        CommerceNetworkListingRow.merchant_id == binding.merchant_id,
+                        CommerceNetworkListingRow.seller_agent_id == binding.seller_agent_id,
+                        CommerceNetworkListingRow.status == "listed",
+                    )
+                )
+            ).first()
+        if listing is not None and await _servable_host(listing, await _config_for(listing)) == host:
+            shop = ShopRef(
+                slug=listing.slug,
+                tenant_id=str(listing.tenant_id),
+                merchant_id=listing.merchant_id,
+                seller_agent_id=listing.seller_agent_id,
+                host=host,
+                display_name=listing.display_name,
+            )
+    _HOST_SHOP_CACHE[host] = (now + DIRECTORY_TTL_SECONDS, shop)
+    return shop
+
+
 # --- the merchant's view ----------------------------------------------------------------------
 
 
@@ -465,8 +514,15 @@ def surfaces_view(
     listing: CommerceNetworkListingRow | None,
     config: C6ZMerchantCommerceConfigRow,
     domain: MerchantCustomDomainRow | None,
+    *,
+    feed: reg.FeedSummary | None = None,
 ) -> dict[str, Any]:
-    """Where the shop stands on each surface, for the Sell everywhere page."""
+    """Where the shop stands on each surface, for the Sell everywhere page.
+
+    ``feed`` is what the shop's product feed holds now (None: not read). The outside programs
+    (ChatGPT app directory, Google, Microsoft, Perplexity) come from the operator's registration
+    setting and the shop's own eligibility (``core.commerce.network_registrations``).
+    """
     host = published_host(config)
     listed = listing is not None and listing.status == "listed"
     if domain is not None and domain.status not in INACTIVE_STATUSES:
@@ -481,6 +537,7 @@ def surfaces_view(
     from core.commerce.payment_handoff import payment_settings
 
     payments = payment_settings({"provider_policy": config.provider_policy or {}})
+    states = reg.registrations()
     if reachable:
         mcp_status = "live"
     elif waiting_for_web:
@@ -500,9 +557,17 @@ def surfaces_view(
             "status": telegram_status,
             "link": telegram_link(listing.slug) if listing is not None else None,
         },
-        "google": {"status": "registration_pending"},
-        "microsoft": {"status": "registration_pending"},
-        "perplexity": {"status": "registration_pending"},
+        **{
+            program: reg.program_view(
+                program,
+                slug=listing.slug if listing is not None else None,
+                listed=listed,
+                web_live=reachable,
+                feed=feed,
+                states=states,
+            )
+            for program in reg.PROGRAMS
+        },
         "payments": {"status": "live" if payments else "off", "mode": payments.mode if payments else None},
     }
 

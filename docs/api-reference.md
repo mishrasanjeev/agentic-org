@@ -599,6 +599,151 @@ Returns all CMO dashboard KPI data. Requires JWT with CMO or CEO role.
 
 ---
 
+## Insights
+
+The Insights API serves the same numbers as the Insights dashboard, with the same filters, so finance and BI
+teams never screen-scrape. Every route needs a signed-in user of the tenant; role and domain scope apply exactly
+as in the UI (a CFO's run metrics keep to the finance domain, the audit explorer is for auditors and
+administrators). Reads use the `reporting-read` rate-limit class (300 per minute), exports and export jobs
+`reporting-export` (30 per minute). Interactive OpenAPI docs are off in production; this section is the contract.
+
+Every metric response carries `definition`, `source`, `data_quality` (`measured`, `estimated`, `seeded`,
+`simulated`, `mixed` or `no_data`) and `computed_at`. Missing data is `no_data` with a `hint` saying what to
+record; nothing is filled in.
+
+### Catalogue, views and status
+
+| Method and path | Returns |
+| --- | --- |
+| `GET /api/v1/insights/catalog` | The views and metrics the caller may read, with definitions, units, groupings and filters |
+| `GET /api/v1/insights/views/{view}` | A landing view: its tiles, charts and needs-you list for the period |
+| `GET /api/v1/insights/status` | Whether Insights is on for the tenant, the caller's views, and `late_data` when yesterday's rollup is missing |
+
+### One metric
+
+```
+GET /api/v1/insights/metrics/{metric_key}
+    ?from=2026-10-01&to=2026-10-31        tenant-local days (default: the last 30 days)
+    &granularity=day|week|month
+    &compare=previous|none                previous period of the same length (default previous)
+    &company_id=<uuid>                    one of the tenant's companies
+    &group_by=agent                       one dimension the metric offers
+    &group_by=agent&group_by=status       run metrics: two dimensions (group_by[]=... also accepted)
+    &filter[domain]=finance,hr            run metrics: limit a run dimension to these values
+```
+
+Run metrics (`runs.volume`, `runs.success_rate`, `runs.straight_through_rate`, `runs.latency`) take `filter[...]`
+on `agent`, `agent_type`, `domain`, `entrypoint`, `task_type`, `environment` and `status`, and two `group_by`
+dimensions at once; their grouped `rows` then carry `groups` (each dimension's raw value) beside the display
+`group`. A filter never widens the caller's scope: a CFO asking for `filter[domain]=hr` gets `no_data`.
+
+Refusals are 422 with `{"error", "message"}`: `group_by_not_allowed`, `filter_not_allowed`, `invalid_filter`,
+`invalid_period`, `invalid_company_id`. A metric outside the caller's views is 403 `insights_view_forbidden`.
+
+`GET /api/v1/insights/metrics/{metric_key}/export?format=csv|xlsx|json` takes the same parameters and returns the
+file (at most 50,000 rows; above that, 413 with `background: true`: ask for a background export). XLSX files
+carry a Filters sheet and a Definitions sheet. Personal data is masked by the tenant's masking setting;
+`include_pii=true` (administrators and auditors) asks for raw values and is recorded. Every export writes a signed
+`insights.export` audit row (who, what, filters, row count, format).
+
+### Explorers and run evidence
+
+| Method and path | Returns |
+| --- | --- |
+| `GET /api/v1/insights/explorers` | The explorers the caller may open, with their columns, filters and sorts |
+| `GET /api/v1/insights/explore/{key}` | One page: `filter[column]=a,b`, `sort`, `order=asc\|desc`, `page`, `page_size` (at most 200), plus `from`, `to`, `company_id` |
+| `GET /api/v1/insights/explore/{key}/export?format=csv\|xlsx\|json` | Every filtered row (at most 50,000), audited as above |
+| `GET /api/v1/insights/runs/{fact_id}?at=<started_at>` | One run's evidence: trace waterfall, the first failure, model gateway records, approval, audit rows |
+| `GET /api/v1/insights/runs/{fact_id}/bundle?at=<started_at>` | The run evidence as canonical JSON; `X-Content-SHA256` is its SHA-256 |
+
+Explorer keys: `agents`, `runs`, `workflows`, `approvals`, `cost`, `value`, `quality`, `connectors`, `audit`. A
+run of another tenant, or outside the caller's domains, is 404.
+
+### Entity pages and search
+
+| Method and path | Returns |
+| --- | --- |
+| `GET /api/v1/insights/entities/{kind}/{id}` | `kind` is `agent`, `workflow`, `connector`, `company`, `user` or `cost_centre`: `title`, `facts`, `cards` (metrics scoped to the entity for `from`/`to`), `timeline` (audit log), `links` |
+| `GET /api/v1/insights/search?q=` | Entities the caller may open whose name matches `q` (at least two characters), and a run when `q` is its id |
+
+Who may open each kind: agents (administrators, CxO roles, developers, domain leads, analysts and auditors, within
+their domains), workflows and connectors (administrators and the COO), companies (administrators, CFO, COO,
+auditor), people (administrators and auditors), cost centres (administrators and the CFO). Another kind is 403; an
+entity of another tenant or outside the caller's domains is 404.
+
+### Saved views and what changed
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/saved-views?view_key=` | The caller's saved views and the shared ones, on views the caller may open |
+| `POST /api/v1/insights/saved-views` | `{"view_key", "name", "filters", "shared"}`; `view_key` is a landing view or `explore:<explorer>`; 409 when the name is taken |
+| `PATCH /api/v1/insights/saved-views/{id}` | The owner renames, refilters, shares or unshares it |
+| `DELETE /api/v1/insights/saved-views/{id}` | The owner, or an administrator for a shared view |
+| `GET /api/v1/insights/changes` | Counts since the caller's last visit (7 days on a first visit, 30 at most), each with a link |
+| `POST /api/v1/insights/changes/seen` | Records the visit |
+
+### Background exports, packs and sign-off
+
+| Method and path | Purpose |
+| --- | --- |
+| `POST /api/v1/insights/exports` | Ask for a file: `{"kind", "format", "params", "include_pii"}`; 202 with the job |
+| `GET /api/v1/insights/exports` | The caller's files (and files shared with them by a scheduled report), newest first |
+| `GET /api/v1/insights/exports/{id}` | One job's status, row count, verification status and signature |
+| `GET /api/v1/insights/exports/{id}/download` | The file, streamed through the API (no signed URL); audited |
+| `POST /api/v1/insights/exports/{id}/sign` | An auditor or administrator signs a ready evidence pack once: `{"statement"}` |
+
+Kinds: `metric` (params as the metric route: `key`, `from`, `to`, `granularity`, `group_by` as a list,
+`filter` as an object), `explorer` (`key`, `query`), `run_bundle`, `view_pdf` (`view`), `view_pptx` (`view`,
+format `pptx`: the view as a PowerPoint deck), `finance_pack`
+(administrators and the CFO), `partner_pack` (administrators and the CFO: one PDF per client company and an XLSX rollup) and `evidence_pack` (administrators and auditors, at most 366 days). Files are kept
+7 days; at most 500,000 rows per file. Someone else's file, or another tenant's, is 404. Metric and explorer
+files are `csv`, `xlsx`, `json` or `parquet` (typed columns; the definitions and filters in the file's key-value
+metadata as `insights.*` and `insights.filters`); the inline metric and explorer exports take the same formats.
+
+### Value, alerts and BI access
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/value` | Baselines, hourly rates, the ROI floor and the period's money-saved estimate (administrators and the CFO) |
+| `POST /api/v1/insights/value/baselines`, `/rates`, `/confirm`; `PUT /settings` | Administrators maintain and confirm the money-saved assumptions (audited) |
+| `GET /api/v1/insights/alerts?state=open\|acked` | The caller's alerts; `POST /api/v1/insights/alerts/{id}/ack` acknowledges one |
+| `GET`, `POST /api/v1/insights/bi-access`; `DELETE /api/v1/insights/bi-access/{role_name}` | Per-tenant read-only BI database logins over the `insights_*` views (administrators) |
+
+### Benchmarks
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/benchmarks` | The organisation's figures for the last 30 complete days against the 25th, 50th and 75th percentiles of the opted-in cohorts it belongs to (`all`, `plan:<plan>`), each with its position; or, while it has not opted in, why there are none (administrators, the CFO and the COO) |
+| `PUT /api/v1/insights/benchmarks/opt-in` | `{"opt_in": true\|false}`; an active human administrator; audited (`insights.benchmarks.opt_in`, `insights.benchmarks.opt_out`) |
+
+Benchmarks are run success rate, cost per run (USD), approvals per 100 runs and average run time, over production
+runs that were measured (never demo data). A tenant counts from 100 runs in the window; a cohort is published from
+20 tenants. Both floors are enforced by the database function `public.insights_benchmark_cohorts` (migration
+v6z117), which returns percentiles only; the published table holds no tenant id. Figures are recomputed nightly at
+04:10 UTC.
+
+### Budgets
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/budgets?company_id=` | The organisation's budgets (one company's with `company_id`), each with this period's ledger spend, percent used and state; administrators, the CFO and auditors |
+| `POST /api/v1/insights/budgets` | `{"name", "period", "threshold_usd", "warn_at_percent", "company_id", "cost_center_id", "notify_channels"}`; administrators and the CFO, signed in (not an API key); 409 when the name is taken |
+| `PATCH /api/v1/insights/budgets/{id}` | Change any of those fields; a new limit, period or scope may warn again this period |
+| `DELETE /api/v1/insights/budgets/{id}` | Delete it; the signed `insights.budget.deleted` audit row keeps its values |
+
+`period` is `daily`, `weekly` or `monthly` (UTC); `threshold_usd` is more than 0 and at most 10,000,000;
+`warn_at_percent` is 1 to 100 (default 80); a company or cost centre must be the organisation's own. The only
+channel is `email` (the company's alert address, else the first administrator); `slack` and `webhook` are
+refused. Every change writes a signed `insights.budget.created|updated|deleted` audit row with the values before
+and after. Breaches raise the `cost.budget` alert, and a tenant-wide monthly budget the month's forecast is above
+raises `cost.forecast_over_budget`.
+
+Scopes: every Insights role holds `insights:read`, and every one except the auditor `insights:write`. Route
+enforcement asks for `insights:write` on Insights changes (acknowledging an alert, budgets) and only
+`insights:read` on the `insights_personal` actions that change no organisation state (background exports, saved
+views, the last visit, signing an evidence pack). BI logins and the money-saved changes are the `insights_admin`
+family, whose writes need `agenticorg:admin` at the route as well. Each handler then decides who may act.
+
 ## NL Query (Chat)
 
 ### Submit Query

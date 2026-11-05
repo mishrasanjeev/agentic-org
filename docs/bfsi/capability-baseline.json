@@ -1563,9 +1563,9 @@
           "api/v1/departments.py",
           "core/billing/budget_evaluator.py",
           "api/v1/costs.py",
-          "ui/src/pages/CostDashboard.tsx"
+          "core/insights/metrics_cost.py"
         ],
-        "note": "Departments, cost centres, budget alerts, cost dashboard; no irregularity detection."
+        "note": "Departments, cost centres, budget alerts, Insights cost views and explorer; no irregularity detection."
       },
       "grantex": {
         "status": "none",
@@ -4630,7 +4630,7 @@
         "evidence": [
           "api/v1/observability.py",
           "observability/timeline.py",
-          "ui/src/pages/Observability.tsx"
+          "ui/src/pages/InsightsRun.tsx"
         ],
         "note": "A tenant-scoped run waterfall exists behind the timeline flag. It does not yet prove every model, tool and memory lookup is instrumented."
       },
@@ -4674,7 +4674,7 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/pages/Observability.tsx",
+          "ui/src/pages/Monitoring.tsx",
           "api/v1/observability.py",
           "observability/workload.py"
         ],
@@ -5088,7 +5088,7 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/pages/CFODashboard.tsx",
+          "ui/src/pages/InsightsDashboard.tsx",
           "ui/src/pages/GovernedCases.tsx",
           "ui/src/pages/Approvals.tsx",
           "core/rbac.py"

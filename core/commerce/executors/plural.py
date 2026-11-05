@@ -260,8 +260,9 @@ def order_reference(session_id: str, decision_id: str) -> str:
     return "aoc-" + hashlib.sha256(f"{session_id}|{decision_id}".encode()).hexdigest()[:44]
 
 
-def refund_reference(order_id: str, decision_id: str) -> str:
-    return "aor-" + hashlib.sha256(f"{order_id}|{decision_id}".encode()).hexdigest()[:44]
+def refund_reference(order_id: str, request_key: str) -> str:
+    """The refund ``merchant_order_reference``: from the order id and the refund request id (or decision id)."""
+    return "aor-" + hashlib.sha256(f"{order_id}|{request_key}".encode()).hexdigest()[:44]
 
 
 def request_id(reference: str, operation: str) -> str:
@@ -337,6 +338,9 @@ class RefundRequest:
     currency: str
     order_total_minor_units: int
     allowance_max_minor_units: int | None
+    # The merchant refund reference (``refund_reference(order_id, request_id)``): a repeated request
+    # id reuses it, so the journal refuses a second call. None: derived from the decision id.
+    reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -506,7 +510,7 @@ class PluralExecutor:
         """Refund ``amount`` of a captured Plural order under a consumed ``refund`` decision."""
         from core.commerce.payment_records import OperationRecord
 
-        key = refund_reference(request.order_id, decision.decision_id)
+        key = request.reference or refund_reference(request.order_id, decision.decision_id)
         record = OperationRecord(
             tenant_id=request.tenant_id,
             merchant_id=request.merchant_id,

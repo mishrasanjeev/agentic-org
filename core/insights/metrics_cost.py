@@ -42,7 +42,6 @@ from typing import Any
 
 from core.config import settings
 from core.insights.metrics import (
-    COSTS_LINK,
     TOP_ROWS,
     UNATTRIBUTED,
     MetricContext,
@@ -618,10 +617,10 @@ def _budget_state(used_pct: float | None, warn_at: int) -> str:
 
 async def budget_rows(ctx: MetricContext) -> list[dict[str, Any]]:
     """Each budget alert's threshold against the ledger's spend for its current period (as the evaluator sums it)."""
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     from core.billing.budget_evaluator import _period_start
-    from core.models.agent import Agent, AgentCostLedger
+    from core.insights.budgets import spend_of
     from core.models.budget_alert import BudgetAlert
 
     if "budgets" in ctx.cache:
@@ -633,21 +632,10 @@ async def budget_rows(ctx: MetricContext) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for alert in alerts:
         try:
-            since = _period_start(alert.period, ctx.now)
+            _period_start(alert.period, ctx.now)
         except ValueError:
             continue
-        # The ledger stores naive UTC midnights.
-        since_naive = since.replace(tzinfo=None)
-        spend = select(func.coalesce(func.sum(AgentCostLedger.cost_usd), 0)).where(
-            AgentCostLedger.tenant_id == ctx.tenant_id, AgentCostLedger.period_date >= since_naive
-        )
-        if alert.company_id is not None or alert.cost_center_id is not None:
-            spend = spend.join(Agent, Agent.id == AgentCostLedger.agent_id)
-            if alert.company_id is not None:
-                spend = spend.where(Agent.company_id == alert.company_id)
-            if alert.cost_center_id is not None:
-                spend = spend.where(Agent.cost_center_id == alert.cost_center_id)
-        actual = Decimal((await ctx.session.execute(spend)).scalar_one() or 0)
+        actual = await spend_of(ctx.session, ctx.tenant_id, alert, ctx.now)
         threshold = Decimal(alert.threshold_usd or 0)
         used = pct(float(actual), float(threshold))
         rows.append(
@@ -661,6 +649,7 @@ async def budget_rows(ctx: MetricContext) -> list[dict[str, Any]]:
                 "warn_at_percent": int(alert.warn_at_percent),
                 "state": _budget_state(used, int(alert.warn_at_percent)),
                 "currency": "USD",
+                "tenant_wide": alert.company_id is None and alert.cost_center_id is None,
             }
         )
     ctx.cache["budgets"] = rows
@@ -673,7 +662,8 @@ async def resolve_cost_budgets(ctx: MetricContext) -> dict[str, Any]:
     if not rows:
         return no_data(
             envelope["source"],
-            f"No budget alert is set. Add one to track spend against a limit ({COSTS_LINK}).",
+            "No budget is set for this organisation, so spend is not tracked against a limit. "
+            "An administrator or the CFO can set one under Insights, Budgets.",
             **{k: v for k, v in envelope.items() if k != "source"},
         )
     flagged = [row for row in rows if row["state"] != "ok"]

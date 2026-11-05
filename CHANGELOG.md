@@ -52,6 +52,508 @@
 - Keep the BI login table's visually hidden labels inside its horizontal
   scroll container at mobile widths.
 
+## Unreleased - Commerce close-out: hosted refunds, durable merchant emails, held stock, loyalty re-price, 1,000-product reads
+
+- Orders paid on a merchant's Plural hosted page (executor `plural_hosted`) can now be refunded through
+  `POST /commerce/runtime/ucp/orders/{id}/refunds`, with the merchant's own Plural credentials (the vault
+  credential the checkout's link was issued under). Refundable is the order total less refunds already recorded on
+  the order (completed or pending) or journalled for it; no agent payment allowance applies. The arbiter decision,
+  the same-currency check, the journal and the ledger events are as for executed orders. The Plural call is the one
+  the executor already makes (`POST /pay/v1/refunds/{plural order id}`).
+- Refund idempotency: the Plural `merchant_order_reference` is now derived from the order id and the request id.
+  A repeated `request_id` for the same order returns the earlier refund (`replayed: true`) without a second Plural
+  call, and records a missing order adjustment under its fixed id. This also applies to `plural_pine` orders.
+- Payments no order matches are kept in `commerce_unmatched_payments`. Administrators see them on the Orders page
+  under **Payments with no order** (`GET /commerce/runtime/payments/unmatched`) and can refund the full paid amount
+  once (`POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds`, tenant administrators). The unmatched-payment
+  email now says to refund it from AgenticOrg on the Orders page, or in Plural.
+- The Orders page has a **Refund** action with a confirmation step and shows each order's refunds.
+- Merchant emails (new order, payment needing attention) go through a durable outbox,
+  `commerce_merchant_notifications`, written in the transaction of the order or payment. A beat sweep
+  (`sweep-merchant-notifications`, every 60 s, maintenance queue) sends due rows with `FOR UPDATE SKIP LOCKED`
+  leasing and backoff, and marks a row `dead` after eight attempts. A send that no administrator accepted (an SMTP
+  failure for every recipient) is retried. The kick after commit is now a best-effort fast path.
+- Plural links hold stock: a new Plural link is refused with `out_of_stock` when the inventory less the units held
+  by other checkouts' still-payable links (issued, not lapsed) is less than the quantity. The message says when the
+  held stock frees up. Only checkouts updated within the link lifetime are read.
+- Stock at payment: before a Plural payment becomes an order, the catalog is checked again. When stock is short the
+  order is still created (the money is taken), marked `stock_short` with the short lines, and the merchant is
+  emailed with the new reason `out_of_stock_at_payment` to ship what they can or refund.
+- Loyalty on re-price: when Complete re-prices a checkout, the loyalty forecast is recomputed from the new total
+  with the Shopify reads; without them the stored loyalty is kept.
+- Shopify catalog reads take up to 1,000 products (`SHOPIFY_CATALOG_READ_LIMIT`, 50 a page, 20 pages) everywhere:
+  the sync route default, the setup flow, the artifact refresh and the scheduled sync. The sync answer carries
+  `read_limit` and `read_limit_reached`, and the setup page tells the merchant when the store has more.
+- Migration v6z122 adds `commerce_merchant_notifications` and `commerce_unmatched_payments` (forced row-level
+  security).
+- Review fixes: the refund bound counts journalled refunds plus hand-recorded refund adjustments no journalled
+  call accounts for; only an explicit Plural refusal (a 4xx other than 408/409/425/429, or a failed status) marks a
+  refund failed, while 5xx answers, timeouts and unknown statuses stay unknown and counted; a replayed in-flight
+  refund answers `replayed` before the bound check.
+- Refund reconciliation: beat task `reconcile-plural-refunds` (every 5 minutes, maintenance queue) reads the Plural
+  order for refunds unknown for 5 minutes and records refunded or failed; admins can ask again with
+  `POST /commerce/runtime/ucp/orders/{id}/refunds/check` and
+  `POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds/check` (**Check refund again** on the Orders page).
+- A stock-short payment refunded through its order gets a new request id after Plural refuses a refund.
+- Held stock also counts orders made since the catalog was last read, no longer counts canceled checkouts, runs
+  under a per-merchant advisory lock in the transaction that marks the Plural order as being created, and treats
+  stock as unconfirmed when a scan limit is reached. The check at payment subtracts the same orders.
+- The outbox leases one row just before its send. Loyalty is kept when the recomputed lookup gives nothing. A
+  payment Plural reported without its order id still gets its outbox row and email.
+## Unreleased - Onboarding desk: agent identity and the agent-ready merchant offer
+
+- Agent identity for desk and case agents, off by default (`AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED`,
+  `..._PROVIDER`, `..._STATUS_CACHE_SECONDS`). Off, no identity provider is called and every agent acts as before.
+- A vendor-neutral identity provider interface (`connectors/framework/agent_identity_provider.py`): resolve an agent
+  identity credential (identifier, attestation and its SHA-256, trust tier, allowed scopes, status, expiry, key
+  thumbprint), check its status, present it, prove key possession and take an enrolment. Providers register in
+  `connectors/agent_identity/registry.py` or through the `agenticorg.agent_identity_providers` entry-point group. A
+  `mock` provider with `active`, `revoked`, `suspended`, `expired`, `unknown` and `unreachable` fixtures runs in local
+  and test only.
+- Before each outreach send, text reply and case provider call, the agent's identity status and its Grantex grant are
+  checked; the action runs only within both scope sets. Revoked, suspended or expired identities and unbound grants
+  stop the action; unknown or unreachable ones hold it (outreach is rescheduled, a text gets no reply, a case run is
+  refused with `authorization_unavailable` before the case moves). Checks are cached briefly and never past the
+  credential's expiry.
+- `POST /onboarding-desk/agent-identity/{role}/bind` registers the agent's key on its Grantex agent and proves
+  possession (`/v1/agents/{id}/keys`, `/challenge`, `/prove`); grant tokens are checked for `cnf.jkt`.
+  `GET /onboarding-desk/agent-identity` shows each agent's check.
+- Contact attempts, transcript replies, desk agent actions and case tool calls record the agent identity identifier,
+  attestation hash and trust tier. With identity on, the evidence pack gains `agent_identity` and `enrolment` sections.
+- Verification providers can declare `accepts_presented_identity`; the case investigator then presents its identity
+  on `verify_business`. The mock verification provider echoes it in the handle's `accepted_identity`.
+- The agent-ready merchant offer per tenant (`GET`/`PUT /onboarding-desk/agent-ready-settings`), shown after a person
+  approves the case, on the applicant page (English and French) and by text. Accepting records an `agent_enrolment`
+  consent naming the person and requests a Grantex consent grant; the hand-off to the identity provider carries only
+  the verification reference and registry-verified fields, and records the provider's reference and status as
+  received. Verifications older than the configured age are not shared. Withdrawing revokes the grant and blocks any
+  further sharing. The partner report gains `funnel.agent_ready` with identity on.
+- HELP and PERSON text replies never wait on the identity check; only the agent's own reply does. A misbehaving or
+  slow identity provider or grant check holds the action, and one lead or tenant failing never stops an outreach run.
+- An enrolment accepts only a grant issued for it (enrolment purpose and scope, issued after it began, not expired);
+  withdrawal revokes every enrolment grant the person holds and records a revocation that failed. The consent page
+  link is kept while approval is pending.
+- Migration v6z121 adds the identity columns to contact attempts, the `web` consent channel and the encrypted consent
+  subject, and the `onboarding_desk_agent_actions` and `onboarding_desk_enrolments` tables (forced row-level security).
+## Unreleased - Shop owner feedback: catalog check, delivery areas and buyer choice of shops
+
+- The Sell everywhere page shows a catalog check under **Your catalog** (`core.commerce.catalog_health`, in the
+  merchant setup view as `catalog.health`): products and variants counted, problems that keep a variant from being
+  offered (no usable price, stock below zero) and warnings (a SKU shared by several variants, no SKU, stock not
+  tracked, out of stock, no image, no description, no barcode, a very short title), each with examples and a
+  one-line fix. It is for the merchant only; search order stays random.
+- A SKU shared by several variants of one catalog source (`core.commerce.sku_keys`) no longer names an item: the
+  variants stay listed and on sale under their own ids, but a catalog lookup or checkout item addressed by that SKU
+  is not resolved (it used to pick the first variant), and per-SKU price and stock facts in `source_facts` do not
+  apply to them. A variant without a usable price stays unlisted and unsold, as before.
+- Shopify syncs record when a variant's stock is not tracked (`inventory_tracked: false`, read with the details query).
+- Catalog uploads return `warnings` for products with no image, description or barcode; the upload is still stored.
+- Shopify delivery zones that cover only some states or provinces of a country (`includeAllProvinces: false`) are
+  followed: the destination's `address_region` must be one of them (by code or name, accents ignored), and the buyer
+  is asked for the state when it is missing. A zone with the whole country serves any address there, as before.
+- Merchants can set a local delivery area, a list of up to 50 postal code prefixes, in the policies step
+  (`delivery_postal_prefixes`, stored at `provider_policy.ucp.fulfillment.postal_code_prefixes`). Outside it, or without
+  a postal code, the checkout offers no shipping option and says why, so no payment link is issued. Pickup is not
+  affected. A UK district prefix such as `SW1` covers that district only (SW1A, SW1P), not SW10 to SW19.
+- The hosted MCP server's `search_catalog` takes `exclude_shops` and `only_shops` (up to 50 shop slugs each), applied
+  before the random shuffle and echoed as `shops_excluded`, `only_shops` and `unknown_shops`; a one-shop search of an
+  excluded shop is refused with `shop_excluded`, and one outside a given `only_shops` with `shop_not_in_only_shops`.
+- The Telegram shopper keeps a per-chat avoid list: `/avoid <shop>`, `/avoid`, `/avoid clear`, `/allow <shop>`, and
+  `avoid_shop`/`allow_shop` tools when the buyer says so in words. Avoided shops are left out of network searches,
+  no checkout tool (open, read, update, pickup, payment link) acts there, and avoiding the chosen shop unpicks it.
+  The system prompt asks the assistant to offer the shop choice.
+## Unreleased - Network registrations: shop pages, product feeds, program status and directory readiness
+
+- A listed network shop's web address (its platform subdomain or its own domain) now serves a small shop site
+  built from its verified catalog: `/` (the shop and its products), `/products/<handle>` (price, stock, images,
+  description, details, shipping and returns, and schema.org `Product` or `ProductGroup` JSON-LD with `gtin` and
+  `shippingDetails`), `/sitemap.xml`, `/robots.txt` and `/llms.txt`. The products are the newest snapshot of every
+  catalog source with the shop's source precedence, as `/ucp/catalog/search` serves them, and only while Grantex
+  verifies the catalog; otherwise the pages answer 503 with `Retry-After`. Every catalog text is escaped for its
+  context; pages carry a restrictive Content-Security-Policy and `Cache-Control: private`.
+- `/feeds/google.xml` on the same host is the shop's product feed (RSS 2.0, `g:` namespace) for Google Merchant
+  Center and Microsoft Merchant Center: one item per sellable variant with id, title, description, link (the
+  product page), image, availability, price and sale price, brand, gtin or `identifier_exists`, condition,
+  product type, item group and the shop's flat-rate shipping per country. Variants with no price, a zero price,
+  no stock figure or no image are left out. `GET /api/v1/network/feeds` lists every servable shop's website,
+  feed, sitemap and eligible item count.
+- `api/middleware/merchant_host.py` sends those paths to the new `/shop-site` routes only when the request's host
+  is a listed, servable network shop (`core.commerce.network.shop_for_host`). On another merchant host it answers
+  them with 404 itself, and with 503 and `Retry-After` when the lookup fails, so they never reach authentication;
+  the API's own host is unchanged. The `/api/v1/network/feeds` index is built at most once every five minutes. The
+  Firebase Hosting config rewrites the new paths too, and `scripts/release_merchant_domain_site.py --check-host`
+  reports whether each host reaches the shop site after a release.
+- The Sell everywhere page's Google, Microsoft and Perplexity rows, and a new ChatGPT app directory line, read
+  `AGENTICORG_NETWORK_REGISTRATIONS` (`not_started`, `submitted` or `live` per program, optionally per shop) and
+  the shop's own eligibility: listed, web address live, catalog verified and at least one eligible feed item.
+  They show Coming, Submitted, Live or Not eligible yet with the reason, and the shop's feed address.
+- The hosted MCP server in network mode now has a title, website, icons and instructions, every tool declares the
+  no-auth security scheme, and `MCP_OPENAI_APPS_CHALLENGE` serves the ChatGPT domain-verification token.
+  `mcp-server/shopping/server.json` registers the hosted endpoint in the MCP registry as
+  `io.github.mishrasanjeev/agenticorg-shopping`; `mcp-server/shopping/openai-plugin/` is the ChatGPT app
+  directory package.
+- The privacy notice gains a "Shopping network buyers" section (what the MCP server and the Telegram bot handle
+  and keep, and for how long), and a draft `/network-terms` page sets out the network terms for buyers and shops
+  (version 2026-10-25).
+- New runbook `docs/runbooks/network-registrations.md`: the owner's steps for each program, the sources read on
+  2026-11-04, and how to record each program's status.
+## Unreleased - WhatsApp report delivery through an approved template, and BI tool guides
+
+- Scheduled reports sent on WhatsApp go as the approved template named by `AGENTICORG_WHATSAPP_REPORT_TEMPLATE`
+  (the file as its document header, the report's name as its body variable), which WhatsApp delivers outside the
+  24-hour window. Without a template the file goes as a plain document, as before.
+- Every WhatsApp response is now checked: a refusal fails the channel with WhatsApp's code and title (131047
+  outside the window says to set a template) instead of being reported as sent. ZIP packs are skipped with the
+  reason (WhatsApp does not accept them). Logs keep only a number's last four digits. The Graph API version is
+  a setting (`AGENTICORG_WHATSAPP_GRAPH_API_VERSION`, default `v23.0`; it was v18.0, hard-coded).
+- Activation needs the organisation's WhatsApp Business account, token and an approved template:
+  `docs/runbooks/whatsapp-report-delivery.md`.
+- The BI access runbook adds Power BI (Desktop and the gateway) and Looker Studio over the same `insights_bi` views.
+
+## Unreleased - Hindi for the approvals, agents, workflows and report scheduler pages
+
+- The pages Insights actions open now follow the app's language: the approval queue (its cards and
+  sub-navigation), the agents list, the workflows list and the Report Scheduler. English is unchanged. Values the
+  API sends or compares (status, priority, domain, report type, channel) are unchanged; shown server values map to
+  labels and fall back to the raw value.
+- New locale namespaces `approvals`, `agentsList` and `workflowsList`; `reportSchedules` is extended. A browser
+  test renders each page in Hindi and checks key and placeholder parity for these namespaces.
+
+## Unreleased - Insights opt-in cross-tenant benchmarks
+
+- An administrator can opt the organisation in to benchmarks (the card on the Executive, Finance and Operations
+  views). An opted-in organisation sees its run success rate, cost per run, approvals per 100 runs and average run
+  time for the last 30 complete days against the 25th, 50th and 75th percentiles of all opted-in organisations and
+  of its plan, with where it sits. One that has not opted in sees why the card is empty.
+- Privacy floors are enforced in the database: `public.insights_benchmark_cohorts` (SECURITY DEFINER, owned by the
+  Insights platform role) counts only opted-in, live organisations' measured production rollups, only those with
+  at least 100 runs in the window, and returns only cohorts of at least 20, whatever the caller passes. It returns
+  percentiles, never an organisation's figure or id, and `insights_benchmarks` stores no tenant id.
+- A nightly task (04:10 UTC) publishes the cohorts; the Platform view shows how many organisations opted in.
+- Migration v6z117 adds `insights_benchmark_optins` (forced row-level security), `insights_benchmarks`, the two
+  functions and the platform role's grants; `scripts/create_app_role.sql` allow-lists both functions.
+
+## Unreleased - Insights views as PowerPoint and tables as Parquet
+
+- **PowerPoint**: each landing view has a **PowerPoint** file next to its PDF (a background export kept on the
+  Downloads page for seven days): a title slide with the period, filters and data quality, the tiles as a table,
+  and for each chart a native PowerPoint chart with its text summary and its data as a table; the chart's
+  definition and source are in the slide notes. Figures with no data say so and why.
+- **Parquet**: every metric and explorer export (inline and background) also downloads as Parquet with typed
+  columns (whole numbers, numbers, flags and dates keep their types) and the definitions and filters in the file's
+  metadata. New dependency `pyarrow` 26.0.0.
+- Migration v6z116 lets `insights_exports` hold the `view_pptx` kind and the `pptx` and `parquet` formats;
+  downgrade refuses while such exports exist.
+
+## Unreleased - Insights budgets you can set, and the forecast alert
+
+- **Budgets page** (`/dashboard/insights/budgets`, linked from the Insights header and the Finance view's budget
+  tile): administrators and the CFO add, change and delete spend limits for the organisation, a company or a cost
+  centre (daily, weekly or monthly, in USD, with a warn-at percent); auditors read them. Each shows this period's
+  spend from the agent cost ledger, the percent used and its state. API: `/api/v1/insights/budgets`. Every change
+  is a signed audit row with the values before and after.
+- **Forecast alert**: `cost.forecast_over_budget` (owner CFO) opens when the month's spend forecast is above a
+  tenant-wide monthly budget: `watch`, or `act` at 120% of it. The forecast is converted to USD with the
+  organisation's recorded rate; without one, no forecast alert is raised.
+- **Budget email**: the budget evaluator no longer posts `slack` or `webhook` alerts to the platform-wide
+  `SLACK_BUDGET_WEBHOOK_URL` and `BUDGET_ALERT_WEBHOOK_URL` (one URL for every tenant) and logs them as
+  unsupported; the email escapes the budget's name. No production budget used those channels.
+
+## Unreleased - Insights actions work for every role their page serves
+
+- Every Insights action other than reading answered 403 ("Missing scope: agenticorg:admin") to all roles but the
+  administrator: a CFO could not acknowledge an alert, save a view or start a background export (the finance pack,
+  a view PDF), and an auditor could not sign a period evidence pack. The Insights route family's write side was
+  the administrator's scope, and the other roles hold only `insights:read`.
+- Every Insights role except the auditor now also holds `insights:write`, and the family's writes take it
+  (acknowledging an alert). POSTs that change no organisation state (a background export, the caller's own saved
+  views and last visit, an auditor's evidence-pack signature) move to the `insights_personal` family, which needs
+  only `insights:read`, so auditors stay read-only. BI database logins and the money-saved baselines, rates and
+  settings move to the `insights_admin` family, whose writes stay the administrator's at the route as well as in
+  the handler. Each handler still decides who may act.
+- Sessions pick up the new scope when their token is next issued (at most 60 minutes).
+
+## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
+
+- The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,
+  with the tool and connector, error code, latency and attempt; never the parameters or the result). The
+  Engineering view gains **Tool calls** (per tool: calls, failures, refusals, replays, success rate, p95 latency)
+  and the connectors explorer shows each connector's calls, success rate and p95 latency for the last seven days.
+  Developers may now open the connectors explorer.
+- The Compliance view gains **Guardrail outcomes** (by stage, detector, action and mode) and **Security events**
+  (failed sign-ins, rate-limit and scope denials, session revocations, API-key use and webhook signature failures,
+  with a spike flag when a kind's last day is three standard deviations above its previous 30 days).
+- The counters are written only while Insights is on for the organisation and never fail or slow the request they
+  count.
+- Migration v6z115 lets gateway calls be stored without a workflow step or a stored agent, adds `connector_name`,
+  `run_id`, `attempt` and `replayed` to `tool_calls`, and adds `guardrail_events` and `security_events_daily`
+  (forced row-level security). Downgrade refuses while gateway tool calls exist.
+
+## Unreleased - Insights performance, browser journeys, remaining exports and self-observability
+
+- **Performance on a million runs**: `scripts/seed_perf_tenant.py` seeds a local synthetic tenant with 1,000,000
+  runs (it refuses any non-local database) and `scripts/insights_perf_bench.py` times every landing view and
+  explorer. Locally the slowest view answers in 0.74 s and the slowest explorer in 0.45 s at p95
+  (`docs/insights/phase4-perf-local.json`). Insights reads now plan every statement for its own parameters; a
+  prepared statement's generic plan could not prune the monthly run partitions and took the runs explorer from
+  0.3 s to 9 s on its sixth request.
+- **Browser journeys**: twelve Playwright journeys (`ui/tests/browser/insights.spec.ts`) cover each role's landing
+  view with a WCAG 2.2 AA scan, a drill to one run, CSV, XLSX and JSON downloads, the view PDF and a weekly
+  schedule; the deploy workflow runs them.
+- **Exports**: a chart downloads as PDF as well as PNG and SVG; decision tiles have their own export menu; the
+  Value waterfall is a chart card with the same menu; the Platform view's daily figures download as CSV, XLSX or
+  JSON (`GET /api/v1/platform/insights/export`, audited as `platform.insights.export.read`).
+- **The dashboard's own health**: Prometheus histograms for metric, view and explorer answer times, export jobs by
+  kind and outcome, and the last successful rollup sweep; a synthetic check kind `insights_landing` that fails a
+  landing view slower than its budget (1.5 s by default); and **Dashboard operations** on the Platform view: export
+  jobs by status, the failure rate, the oldest open job and tenants whose rollup is more than two hours late.
+- The Report Scheduler keeps an Insights prefill until the form closes.
+- Migration v6z114 adds `insights_platform_operations` (aggregates only, owned by the platform aggregate role,
+  column grants on `insights_exports` status and creation time) and the `insights_landing` synthetic check kind.
+
+## Unreleased - Legacy dashboards retired into Insights
+
+- `/dashboard` now opens each role's landing page: Insights for the roles that have a view, the workbench or the
+  agents list for the rest, and the commerce runtime for merchants.
+- The CEO, CFO, CHRO, COO, CBO, Cost, Partner and Observatory dashboard pages are removed. Their addresses redirect
+  to the matching Insights view (CEO to Executive, CFO to Finance, CHRO to HR, COO to Operations, CBO to Back
+  office, Cost to the cost explorer, Partner to the Partner view) and the Observatory to the audit explorer for
+  administrators and auditors, otherwise to the audit log.
+- The CMO dashboard becomes **Marketing operations** (`/dashboard/marketing-ops`, with ABM at
+  `/dashboard/marketing-ops/abm`): its working panels stay, the KPI cards move to the Marketing view. The old
+  addresses redirect and keep their query.
+- Observability becomes **Monitoring** (`/dashboard/monitoring`): workload and synthetic checks; a run's trace is on
+  its Insights run page, where administrators can also open the run debugger. The scope dashboard becomes the
+  enforcement summary inside the enforcement audit log.
+- The navigation, the natural-language bar, the Companies page, alert links and cost drills point at the new homes;
+  the budget hint now says when no budget alert is set. The Report Scheduler stays the scheduling page.
+
+## Unreleased - Insights Partner view, client pack, saved views and what changed
+
+- **Partner view** (administrators, CFO, COO, auditor) for a CA firm's client companies: active clients with each
+  one's health (its recorded score less 25 per overdue deadline and 5 per filing waiting), runs and run success in
+  the period, open deadlines, filings waiting and the balance outstanding; deadlines not yet filed; filings waiting
+  for approval by type; what the firm invoiced, received and is owed, per currency. No revenue is estimated.
+- **Partner client pack** (administrators and the CFO): a ZIP with one PDF per client company (summary, open
+  deadlines, the period's invoices), `partner.xlsx` (clients, deadlines, filings, billing, filters, definitions) and
+  a signed manifest, from Downloads.
+- **Saved views** on every landing view and explorer: save the current filters under a name, optionally shared
+  with everyone who may open that view; open one from the list; delete your own (administrators may delete a shared
+  one). `GET/POST /api/v1/insights/saved-views`, `PATCH/DELETE /api/v1/insights/saved-views/{id}`.
+- **What changed since you last looked** on the landing views: agents added, agent status changes, approvals
+  decided and failed runs within your domains, alerts for your role and (administrators and auditors)
+  configuration changes, each linking to the rows (`GET /api/v1/insights/changes`; the visit is recorded with
+  `POST /api/v1/insights/changes/seen`).
+- Migration v6z113 adds `saved_views` and `insights_user_state` (forced row-level security) and the
+  `partner_pack` export kind.
+
+## Unreleased - Insights Domain and Back-office views, entity pages and search
+
+- Domain leads and analysts land on a new **My domain** view (runs, success and straight-through rates, latency,
+  run confidence, approvals and feedback, limited to their assigned domain; nothing when no domain is assigned) and
+  open the agents, runs, approvals, cost and quality explorers for that domain. Administrators get a
+  **Back office** view: overdue compliance deadlines (and those due in 30 days), the period's transaction findings
+  by severity, and approvals and runs of the backoffice, legal, risk, corporate and comms agents.
+- New metrics: `runs.confidence` (mean confidence, runs below their agent's floor), `quality.feedback`,
+  `backoffice.deadlines`, `backoffice.txn_findings`. The Finance, HR and Operations views carry the cards the legacy
+  CxO dashboards had (success and straight-through rates, agents by status); the Executive view shows confidence.
+- **Entity pages** (Level 3) for one agent, workflow, connector, company, person or cost centre
+  (`GET /api/v1/insights/entities/{kind}/{id}`): facts, metric cards scoped to the entity, its timeline from the audit
+  log and links to the explorers filtered to it and to its management page. Explorer rows and the run page open
+  them. Who may open each kind follows the explorers; an entity outside the caller's tenant or domains is 404.
+- **Search**: Ctrl/Cmd-K on Insights pages finds agents, workflows, connectors, companies, people and cost centres by
+  name, and a run by its id (`GET /api/v1/insights/search?q=`), among what the caller may open. Breadcrumbs on the
+  explorer, run and entity pages.
+
+## Unreleased - Insights Phase 4 foundation
+
+- The platform view's reconciled-nights count no longer resets every day: today's rollup (still being rolled) and
+  yesterday's (not yet due to reconcile) are skipped, so the Phase 1 gate of 14 reconciled nights can show as
+  met. A day older than that which never reconciled still ends the streak, as do a mismatch and a gap. Migration
+  v6z112 replaces `insights_platform_tenants` in place.
+- The metrics API takes `filter[dim]=a,b` on run metrics (agent, agent type, domain, entry point, task type,
+  environment, status) and two `group_by` dimensions at once (`group_by[]` also accepted); grouped rows carry each
+  dimension's value. Inline exports and background export jobs take the same filters and record them. A filter
+  never widens a domain-limited caller.
+- The legacy partner dashboard (`GET /api/v1/companies/partner-dashboard`) is enforced on the server for the roles
+  its page admits (admin, CFO, COO, auditor); other roles get 403.
+- Tests: tenant isolation across every Insights view, metric, explorer, export format, value summary, alerts list,
+  run evidence, run bundle and background job kind (download and sign-off included), both directions, under a
+  NOBYPASSRLS role; English and Hindi parity for every Insights namespace; every explorer the UI links to exists
+  in the registry (`ui/src/lib/insights/explorerKeys.generated.json`, written by
+  `scripts/generate_insights_metric_keys.py`).
+- `docs/api-reference.md` has an Insights section: views, metrics, filters and grouping, exports, explorers, run
+  evidence, background jobs and sign-off, value, alerts and BI access.
+
+## Unreleased - Scheduled Insights reports
+
+- The Report Scheduler schedules an Insights view (PDF), the finance pack or the period evidence pack for a period
+  preset (last 7 or 30 days, last week, last month, month to date) in the tenant's time zone. "Schedule weekly" on
+  every Insights view opens it prefilled. A run builds the file as the schedule's owner with that user's access,
+  emails recipients a link to Downloads (they open it when signed in) and sends the file to Slack and WhatsApp. A
+  view with no data for the period is not sent.
+- Run history for every schedule (`GET /api/v1/report-schedules/{id}/runs`, the History button): when, scheduled or
+  run now, delivered, generated, failed or blocked, and why.
+- Cron schedules run at their real times in the tenant's time zone (`core/reports/cron.py`); before this every cron
+  string ran daily because `croniter` is not installed. The CHRO and COO can open the Report Scheduler.
+- Migration v6z111 adds `report_schedule_runs` and `report_schedules.created_by`. The Phase 3 acceptance script is
+  `docs/insights/phase3-acceptance.md`.
+
+## Unreleased - Insights PDFs, finance pack and period evidence pack
+
+- Every Insights view has "PDF of this view": the tiles as a table and each chart as its data with a bar per row,
+  with the organisation, period, filters, data quality and when it was computed on every page.
+- Finance pack (administrators and the CFO), from the Finance view: a ZIP of `finance.xlsx` (spend by day, agent
+  and model, budgets, tokens, money saved with its assumptions, filters and definitions), the Finance view PDF and
+  a manifest of SHA-256 checksums.
+- Period evidence pack (administrators and auditors), from the Compliance view: the summary PDF, CSVs of the
+  period's audit rows (chain position and signature check), approval decisions (delegation, votes, time to decide),
+  delegations, data subject requests (no subject), residency attestations and the change log, `verification.json`
+  (row signatures and the audit chain re-verified over the period, anchor and witness checkpoints) and a signed
+  manifest. An auditor signs a ready pack once on the Downloads page (`POST /api/v1/insights/exports/{id}/sign`);
+  the sign-off is a signed audit row.
+- Charts export as SVG and PNG from their menu, with the title, period, filters and data quality drawn in.
+- Masking keeps ids and digests whole (a UUID that begins with eight digits read as an account number).
+
+## Unreleased - Insights background exports and Downloads
+
+- `POST /api/v1/insights/exports`: a metric or explorer table too large for an inline export (up to 500,000 rows) or
+  a run evidence bundle is built by the worker with the caller's scope as read when it was asked for, stored for seven
+  days and listed on the new Downloads page (`/dashboard/insights/downloads`); the requester gets an email with a link
+  and a web push. `GET /api/v1/insights/exports/{id}/download` streams the file through the API with one signed audit
+  row (no signed URLs); others see only their own files, administrators the tenant's. An inline export that is too
+  large now offers "Prepare it in the background".
+- Exports mask PII (emails, phone numbers, Aadhaar, PAN, bank account and IFSC) when the tenant's `pii_masking`
+  governance setting is on, which is the default; administrators and auditors may ask for raw values
+  (`include_pii`), recorded on the audit row.
+- Migration v6z110 adds `insights_exports` (forced row-level security). Setting `AGENTICORG_INSIGHTS_EXPORT_BUCKET`;
+  daily `insights-expire-exports`. Runbook: `docs/runbooks/insights-exports.md`.
+
+## Unreleased - Insights evidence, Compliance and Engineering views
+
+- Run evidence draws the run's own trace as a waterfall (each span indented under its parent, placed by when it
+  started and sized by how long it took, errors in the critical colour, with a data table and a text summary) and
+  opens with why the run failed: the error span with no erroring child, its exception and the tool or model it was
+  calling. Approvals show who decided under whose delegation and each vote; audit rows show whether their signature
+  verifies and their place in the audit chain.
+- `GET /api/v1/insights/runs/{id}/bundle?at=...`: the run's evidence as one JSON file whose SHA-256 is in
+  `X-Content-SHA256` (the checksum of the file's bytes). Administrators and auditors also get each audit row's signed
+  payload, signature and chain links. Every download writes a signed `insights.export` audit row.
+- Compliance view (administrators and auditors): audit rows verified, approvals decided directly or under a
+  delegation, approvals decided in under 20 seconds, open data subject requests and their median completion time,
+  residency attestations expiring within 30 days, and changes made (agents, prompts, governance, spend controls,
+  settings, access, delegations, packs). Auditors read the Runs, Approvals and Security and audit explorers.
+- Engineering view (administrators and developers, limited to the developer's domain): run success rate and p95
+  latency, model calls that failed or fell back, the slowest steps by p95, the latest eval pass rate (administrators)
+  and prompt edits. Developers read the Agents, Runs and Quality explorers for their domain.
+- Landing views refresh every 60 seconds while the page is visible, in place, and show a banner when yesterday's daily
+  figures are not rolled up by 03:00 tenant time (`late_data` on `GET /api/v1/insights/status`).
+
+## Unreleased - Insights role views
+
+- Four more Insights views, each the landing view of its role: Operations (COO), HR (CHRO), Marketing (CMO) and
+  Commerce (merchant); administrators switch between all six. A role view's run and approval metrics read its own
+  domains only (Operations: agents filed under `ops` and `operations`), within the caller's.
+- New metrics: workflow runs and stalled workflow runs, unhealthy connectors (Operations); professional tax returns
+  filed (HR); new leads, content drafts and the median draft approval time (Marketing); the shopping funnel (carts,
+  checkouts started and completed, orders, orders paid, drawn in order with the share kept between stages), orders
+  and order webhooks given up (Commerce). Each tile drills to the explorer or page behind it.
+- `docs/insights/phase2-usability-test.md`: the moderated usability test that gates Phase 2 (five roles, seven tasks,
+  three minutes each, at least six of seven per participant).
+
+## Unreleased - Insights money saved and alerts
+
+- Money saved (estimated), on the Executive and Finance views and the Money saved page
+  (`/dashboard/insights/value`): completed tasks times the minutes of work each replaces, valued at the hourly
+  rate of the role that would do it by hand, less AI spend, the time people spent deciding approvals (from when
+  they first saw them, capped at 30 minutes, 5 minutes when never opened) and the redo of failed tasks. Only
+  measured runs count; agent types with no baseline are listed and never valued. Net saved, hours saved and ROI
+  stay hidden until a tenant administrator has confirmed every baseline and rate the period uses; ROI shows once
+  the period's spend reaches INR 5,000 or USD 60 (or the tenant's own floor). The estimate carries a confidence
+  (the share of hours from confirmed baselines) and a gross-to-net waterfall.
+- Seeded defaults: minutes per task for the 29 built-in agent types, and loaded hourly rates per role with their
+  source: for USD tenants the BLS OEWS May 2025 national median hourly wage times 1.43 (BLS ECEC, June 2026); for
+  INR tenants the MoSPI PLFS Annual Report 2025 monthly earnings by occupation division over 208 hours, times 1.17
+  (employer EPF and gratuity). An administrator confirms, edits or adds baselines and rates (an edit counts as
+  confirmed by its author); every change writes a signed `insights.value.change` audit row. The CFO reads the page.
+- A ninth explorer, Value and savings, shows the estimate line by line.
+- Insights alerts: every 15 minutes each tenant's rules open one alert per condition (run success rate, pending
+  and expired approvals, budgets, cost per run up more than 25% week on week, pricing coverage, unhealthy
+  connectors, workflows past their timeout, agents idle 30 days, shadow agents ready to promote), refresh it while
+  it holds and resolve it when it clears. Each alert has an owner role (an agent's alerts go to the head of its
+  domain); `act` alerts email the owner role's active users once. Alerts appear in the needs-you list, where a
+  person acknowledges them (`POST /insights/alerts/{id}/ack`, audited).
+- `POST /approvals/viewed` records when a person first saw a pending approval; the Approvals page sends it.
+- Migration `v6z109_insights_value_alerts`: `value_baselines`, `value_rates` and `insights_alerts` (forced
+  row-level security), and `hitl_queue.first_viewed_at`.
+
+## Unreleased - Insights explorers and run evidence
+
+- Eight Insights explorers, the tables behind every tile (`/dashboard/insights/explore/<key>`): Agents, Runs,
+  Workflows, Approvals, Cost and drivers, Quality and learning, Connectors, and Security and audit. Each declares
+  its columns once (`core/insights/explore_registry.py`); the API filters (`filter[column]=value`), sorts and pages
+  only by declared columns and answers 422 for anything else. Tables of runs, approvals, workflows and the audit
+  log page in SQL; per-agent tables are built whole (at most 50,000 rows). Every explorer exports CSV, XLSX or
+  JSON with its filters (at most 50,000 rows, one signed `insights.export` audit row), and the XLSX describes each
+  column.
+- Who sees what is decided on the server: administrators read every explorer; the CFO, CHRO, CMO and COO read
+  agents, runs, approvals, cost and quality limited to their domains (a COO's `ops` includes agents filed under
+  `operations`); the COO also reads workflows and connectors; the audit log is for administrators. Cost is
+  tenant-wide for administrators and the CFO, as in the Finance view.
+- Agents shows runs, success rate, p95, spend, last run, idle days (from the last run in 90 days, or creation) and
+  the shadow promotion checks with the reason an agent is not eligible, the same checks the promote endpoint
+  applies. Cost and drivers splits each agent's change against the previous period into volume, price and mix
+  (metered units per model when both periods are metered, otherwise runs) and names the driver. Quality and
+  learning lists every learned rule with its agent's feedback, and revokes a rule through the agent's existing
+  endpoint after checking the rule is still the one shown. The runs table covers at most the period's last 31
+  days, and says so.
+- Run evidence (`/dashboard/insights/runs/<id>?at=<started_at>`): one run's fact, model gateway records, trace
+  spans, approvals and audit rows. No output text, prompt or tool argument is returned. A run outside the
+  caller's tenant, domains or company is not found.
+- Insights tiles now open the explorer rows behind them (failed runs, slowest runs, pending approvals, spend
+  drivers). The CHRO, CMO and COO get Insights with their explorers until their landing views arrive.
+
+## Unreleased - Current prices and stock at the payment link
+
+- Before a payment link is issued (Shopify checkout or Plural page) or an executor runs, Complete checks the
+  cart against the shop's catalog as it is now (`core/commerce/ucp/catalog_recheck.py`). A new price or
+  currency re-prices the checkout at the current catalog, keeping the buyer, delivery choice, hand-off
+  records and consent, and refuses this Complete with `price_changed`, so the buyer's agent confirms the new
+  total before it completes again. A product no longer sold (`item_unavailable`) or fewer in stock than the
+  cart holds (`out_of_stock`) set the checkout to `incomplete`. A checkout whose items match is untouched.
+  ACP maps `price_changed` to `conflict`; the Telegram shopper asks the buyer before paying a new price. The
+  check is skipped while an earlier Plural link of the checkout can still be paid (its payment must keep matching
+  its cart, and the daily maximum keeps counting it), and a Complete that negotiated other capabilities than the
+  checkout sets it `incomplete` instead of re-pricing it.
+- Catalog search, lookup and checkout read only the newest snapshot of each catalog source (Shopify, an upload),
+  so a product removed from the shop is no longer offered from an older snapshot.
+- Listed network shops on Shopify are read again on the existing beat and worker every ten minutes when due:
+  once their catalog is an hour old (`AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES`, default 60, 0 turns it off),
+  or as soon as a Shopify product webhook marked them (it only marked them before). At most 25 Shopify reads
+  per run, in a random order; a shop whose read failed waits an hour; one run at a time (a Redis lock, and the
+  beat entry expires). The scheduled read never marks a shop `blocked_missing_credentials`, and deletes the
+  shop's Shopify snapshots past the newest two once they are six hours old. Uploaded catalogs are left alone.
+- A Plural payment that no order matches (`amount_mismatch`, `paid_after_cancel`, `checkout_changed`,
+  `order_mismatch`, and the new `paid_twice`: an older link of an already paid checkout paid too) now emails the tenant's active administrators once per payment link, with the Plural
+  order, the reason, the buyer's contact as given and what to do (refund in Plural or contact the buyer). It
+  was only a ledger event and an error log.
+
+## Unreleased - Fair search across the network's shops
+
+- UCP catalog search orders a shop's products best match first: a whole word of the title counts most (more
+  again when the whole query is in the title), then a whole word of the brand, category or tags, then part of a
+  word, then the description, details and variants. Words are split on spaces and trimmed of punctuation, so
+  hyphenated and Devanagari words count whole. Ties and searches without a query keep title order. Only the
+  product's own text counts. Variant barcodes are served only with a valid GTIN check digit.
+- The Telegram shopper asks up to 20 shops (it asked the first 10 to join, one after another), ten at a time,
+  picked and ordered at random on every search, keeps a share of about 20 products across them with shorter
+  descriptions so the answer fits, gives each shop at most 10 seconds, and its instructions say the order means
+  nothing. The hosted MCP endpoint's network search asks up to 50 of up to 500 listed shops at random, 3
+  products each by default, and shuffles `list_shops`.
+- One product sold by several shops (the same GTIN, check digit verified) is also listed together, one offer per
+  shop with that item's own price, lowest price first in the currency most offers use:
+  `same_product_at_several_shops` in the Telegram shopper, `same_products` in the MCP network search.
+
 ## Unreleased - Insights Platform view and per-tenant BI database access
 
 ### Added

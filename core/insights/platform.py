@@ -58,6 +58,13 @@ TENANTS_SQL = text(
     "reconciled_nights, last_rollup_status FROM public.insights_platform_tenants(:p_from, :p_to)"
 )
 
+OPERATIONS_SQL = text(
+    "SELECT exports_queued, exports_running, exports_ready, exports_failed, exports_expired, "
+    "oldest_open_minutes, tenants_late, max_lag_hours FROM public.insights_platform_operations(:p_from, :p_to)"
+)
+# The function counts a tenant as late when its newest rollup is older than this (v6z114).
+ROLLUP_LATE_AFTER_HOURS = 2
+
 
 class PlatformRangeError(ValueError):
     """The requested range is reversed or longer than the functions allow."""
@@ -246,6 +253,27 @@ async def platform_tenants(session: Any, start: date, end: date) -> list[dict[st
             }
         )
     return out
+
+
+async def platform_operations(session: Any, start: date, end: date) -> dict[str, Any]:
+    """Export jobs made in the range by status, the oldest open job, and tenants whose rollup is late."""
+    await _bounded(session)
+    rows = (await session.execute(OPERATIONS_SQL, {"p_from": start, "p_to": end})).mappings().all()
+    row = rows[0] if rows else {}
+    exports = {
+        status: int(row.get(f"exports_{status}") or 0)
+        for status in ("queued", "running", "ready", "failed", "expired")
+    }
+    finished = exports["ready"] + exports["failed"] + exports["expired"]
+    lag = row.get("max_lag_hours")
+    return {
+        "exports": exports,
+        "export_failure_rate": _rate(exports["failed"], finished),
+        "oldest_open_minutes": row.get("oldest_open_minutes"),
+        "tenants_late": int(row.get("tenants_late") or 0),
+        "max_lag_hours": float(lag) if lag is not None else None,
+        "late_after_hours": ROLLUP_LATE_AFTER_HOURS,
+    }
 
 
 def totals(daily: list[dict[str, Any]], tenants: list[dict[str, Any]]) -> dict[str, Any]:

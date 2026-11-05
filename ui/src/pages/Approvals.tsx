@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import ApprovalCard from "@/components/ApprovalCard";
@@ -27,6 +28,7 @@ function extractPage(data: any): PageResult {
 }
 
 export default function Approvals() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<HITLItem[]>([]);
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
@@ -75,13 +77,19 @@ export default function Approvals() {
       setItems(merged);
       setTotal(results.reduce((acc, r) => acc + r.total, 0));
       setPages(Math.max(1, ...results.map((r) => r.pages)));
-      if (which === "pending") setPendingTotal(results[0].total);
+      if (which === "pending") {
+        setPendingTotal(results[0].total);
+        // Record that a person has seen these approvals (money saved prices review time from it).
+        // Best effort: the list never waits on it or fails because of it.
+        const ids = merged.map((item) => item.id).slice(0, 100);
+        if (ids.length > 0) api.post("/approvals/viewed", { ids }).catch(() => undefined);
+      }
     } catch (e: unknown) {
       // Explicit error state: never render "No pending approvals" on a failed fetch.
       setItems([]);
       setTotal(0);
       setPages(1);
-      setError(extractApiError(e, "Failed to load approvals"));
+      setError(extractApiError(e, t("approvals.loadFailed")));
     } finally {
       setLoading(false);
     }
@@ -91,10 +99,15 @@ export default function Approvals() {
     setFeedback(null);
     try {
       await api.post(`/approvals/${id}/decide`, { decision, notes });
-      setFeedback({ type: "success", msg: `Decision "${decision}" submitted successfully.` });
+      setFeedback({
+        type: "success",
+        msg: t("approvals.decisionSubmitted", {
+          decision: t(`approvals.decisionWord.${decision}`, { defaultValue: decision }),
+        }),
+      });
       fetchApprovals(tab, page);
     } catch (e: unknown) {
-      setFeedback({ type: "error", msg: extractApiError(e, "Failed to submit decision") });
+      setFeedback({ type: "error", msg: extractApiError(e, t("approvals.submitFailed")) });
     }
   }
 
@@ -112,20 +125,20 @@ export default function Approvals() {
     <div className="space-y-6">
       <ApprovalsSubnav />
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Approval Queue</h2>
-        <Badge variant="destructive">{pendingCount} pending</Badge>
+        <h2 className="text-2xl font-bold">{t("approvals.title")}</h2>
+        <Badge variant="destructive">{t("approvals.pendingBadge", { total: pendingCount })}</Badge>
       </div>
 
       <div className="flex gap-4 items-center border-b pb-2">
         <button onClick={() => switchTab("pending")} className={`px-3 py-1 text-sm font-medium ${tab === "pending" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
-          Pending{tab === "pending" ? ` (${total})` : pendingTotal !== null ? ` (${pendingTotal})` : ""}
+          {t("approvals.tabPending")}{tab === "pending" ? ` (${total})` : pendingTotal !== null ? ` (${pendingTotal})` : ""}
         </button>
         <button onClick={() => switchTab("decided")} className={`px-3 py-1 text-sm font-medium ${tab === "decided" ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
-          Decided{tab === "decided" ? ` (${total})` : ""}
+          {t("approvals.tabDecided")}{tab === "decided" ? ` (${total})` : ""}
         </button>
         <div className="ml-auto">
           <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="border rounded px-3 py-1 text-sm">
-            {PRIORITIES.map((p) => <option key={p} value={p}>{p === "all" ? "All Priorities" : p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+            {PRIORITIES.map((p) => <option key={p} value={p}>{p === "all" ? t("approvals.allPriorities") : t(`approvals.priority.${p}`, { defaultValue: p.charAt(0).toUpperCase() + p.slice(1) })}</option>)}
           </select>
         </div>
       </div>
@@ -137,17 +150,17 @@ export default function Approvals() {
       )}
 
       {loading ? (
-        <p className="text-muted-foreground">Loading approvals...</p>
+        <p className="text-muted-foreground">{t("approvals.loading")}</p>
       ) : error ? (
         <div
           className="rounded-lg px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 flex items-center justify-between"
           data-testid="approvals-error"
         >
-          <span>Failed to load approvals: {error}</span>
-          <Button variant="outline" size="sm" onClick={() => fetchApprovals(tab, page)}>Retry</Button>
+          <span>{t("approvals.loadFailedWithError", { error })}</span>
+          <Button variant="outline" size="sm" onClick={() => fetchApprovals(tab, page)}>{t("approvals.retry")}</Button>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground">{tab === "pending" ? "No pending approvals." : "No decided items."}</p>
+        <p className="text-muted-foreground">{tab === "pending" ? t("approvals.noPending") : t("approvals.noDecided")}</p>
       ) : (
         <div className="space-y-4">
           {filtered.map((item) => (
@@ -159,14 +172,14 @@ export default function Approvals() {
       {!loading && !error && (total > PER_PAGE || pages > 1) && (
         <div className="flex items-center justify-between text-sm text-muted-foreground" data-testid="approvals-pagination">
           <span>
-            Showing {displayed.length} of {total} on page {page} of {pages}
+            {t("approvals.showing", { shown: displayed.length, total, page, pages })}
           </span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              Previous
+              {t("approvals.previous")}
             </Button>
             <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
-              Next
+              {t("approvals.next")}
             </Button>
           </div>
         </div>

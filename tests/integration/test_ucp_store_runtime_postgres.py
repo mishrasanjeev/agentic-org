@@ -281,11 +281,9 @@ async def test_merchant_config_and_catalog_inputs_are_read_inside_the_tenant(db)
         tenant_id=tenant, merchant_id=merchant_id, seller_agent_id=seller
     )
     assert [r.cache_record_id for r in records] == [shared.cache_record_id]
-    # Newest evidence wins for a product; each product carries its evidence row's currency.
-    assert products == [
-        {"product_ref": "p1", "title": "Tote (new)", "_evidence_currency": "INR"},
-        {"product_ref": "p2", "_evidence_currency": "USD"},
-    ]
+    # Only the newest snapshot of a source counts (p2 was removed since the older one); each
+    # product carries its evidence row's currency.
+    assert products == [{"product_ref": "p1", "title": "Tote (new)", "_evidence_currency": "INR"}]
     other_scope = await store.load_catalog_inputs(tenant_id=tenant, merchant_id="other", seller_agent_id=seller)
     assert other_scope == ([], [])
 

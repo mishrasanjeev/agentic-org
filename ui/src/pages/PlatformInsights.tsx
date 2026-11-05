@@ -25,6 +25,7 @@ import {
   platformApi,
   platformMetric,
   platformRange,
+  type PlatformOperations,
   type PlatformPosture,
   type PlatformRangePreset,
   type PlatformSummary,
@@ -227,8 +228,15 @@ function Body({
         filters={{ from: summary.period.from, to: summary.period.to }}
         currency="USD"
         kind="line"
-        exportable={false}
+        download={(format) =>
+          // The menu offers CSV, XLSX and JSON here (no PDF: the platform figures are not a registry metric).
+          platformApi.exportFile("daily", format === "pdf" ? "csv" : format, {
+            from: summary.period.from,
+            to: summary.period.to,
+          })
+        }
       />
+      <OperationsPanel operations={summary.operations} benchmarks={summary.benchmarks} />
       <TenantTable data={tenants} />
       <PostureChecklist posture={posture} />
     </>
@@ -384,6 +392,84 @@ function GateBullet({ nights, gate, status }: { nights: number; gate: number; st
 }
 
 // ---------------------------------------------------------------- posture
+
+// ---------------------------------------------------------------- operations
+
+function OperationsPanel({
+  operations,
+  benchmarks,
+}: {
+  operations: PlatformOperations;
+  benchmarks: { opted_in: number; min_tenants: number };
+}) {
+  const { t } = useTranslation();
+  const ex = operations.exports;
+  const late = operations.tenants_late > 0;
+  const stuck = operations.oldest_open_minutes !== null && operations.oldest_open_minutes > 60;
+  const rows: Array<{ key: string; label: string; value: string }> = [
+    {
+      key: "exports",
+      label: t("platformInsights.operations.exports"),
+      value: t("platformInsights.operations.exportsDetail", {
+        ready: ex.ready,
+        failed: ex.failed,
+        expired: ex.expired,
+        open: ex.queued + ex.running,
+      }),
+    },
+    {
+      key: "failure",
+      label: t("platformInsights.operations.exportFailure"),
+      value:
+        operations.export_failure_rate === null
+          ? MISSING
+          : `${(operations.export_failure_rate * 100).toFixed(1)}%`,
+    },
+    {
+      key: "oldest",
+      label: t("platformInsights.operations.oldestOpen"),
+      value:
+        operations.oldest_open_minutes === null
+          ? t("platformInsights.operations.noneOpen")
+          : t("platformInsights.operations.minutes", { count: operations.oldest_open_minutes }),
+    },
+    {
+      key: "rollup",
+      label: t("platformInsights.operations.rollupLate", { hours: operations.late_after_hours }),
+      value: late
+        ? t("platformInsights.operations.rollupLateDetail", {
+            count: operations.tenants_late,
+            hours: operations.max_lag_hours ?? 0,
+          })
+        : t("platformInsights.operations.rollupOnTime"),
+    },
+    {
+      key: "benchmarks",
+      label: t("platformInsights.operations.benchmarks"),
+      value: t("platformInsights.operations.benchmarksDetail", { optedIn: benchmarks.opted_in, min: benchmarks.min_tenants }),
+    },
+  ];
+
+  return (
+    <section aria-labelledby="platform-operations-title" className="flex flex-col gap-3 rounded-lg border bg-background p-4">
+      <header className="flex items-center justify-between gap-2">
+        <h2 id="platform-operations-title" className="text-sm font-semibold text-foreground">
+          {t("platformInsights.operations.title")}
+        </h2>
+        <StateChip state={late || stuck ? "act" : "ok"} />
+      </header>
+      <p className="text-xs text-muted-foreground">{t("platformInsights.operations.definition")}</p>
+      <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" data-testid="platform-operations">
+        {rows.map((row) => (
+          <div key={row.key} className="rounded-md border p-2">
+            <dt className="text-muted-foreground">{row.label}</dt>
+            <dd className="mt-1 font-medium text-foreground">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
 
 function PostureChecklist({ posture }: { posture: PlatformPosture }) {
   const { t } = useTranslation();

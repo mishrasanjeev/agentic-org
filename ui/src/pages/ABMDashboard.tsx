@@ -1,11 +1,12 @@
 /**
- * ABM (Account-Based Marketing) Dashboard
+ * ABM accounts (the second page of Marketing operations, /dashboard/marketing-ops/abm)
  *
  * Executive view of target accounts, intent scores, campaigns, and
  * pipeline influence.  Supports CSV upload, per-account intent drill-down,
  * and one-click campaign launch.
  */
 
+import MarketingTabs from "@/components/MarketingTabs";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { abmApi } from "../lib/api";
@@ -339,6 +340,7 @@ export default function ABMDashboard() {
 
   return (
     <div className="space-y-6">
+      <MarketingTabs current="abm" />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

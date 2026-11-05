@@ -5,6 +5,7 @@
  * delete, run now, empty state, loading state, and form validation.
  */
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -20,6 +21,8 @@ const originalFetch = globalThis.fetch;
 // Import component under test
 // ---------------------------------------------------------------------------
 
+// The page renders through react-i18next; load the English resources.
+import "@/i18n";
 import ReportScheduler from "@/pages/ReportScheduler";
 
 // ---------------------------------------------------------------------------
@@ -159,7 +162,7 @@ describe("ReportScheduler", () => {
   it("shows loading state while fetching schedules", () => {
     mockFetch.mockReturnValue(new Promise(() => {}));
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     expect(screen.getByText("Loading schedules...")).toBeInTheDocument();
   });
@@ -169,7 +172,7 @@ describe("ReportScheduler", () => {
   it("renders schedule list after loading", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -182,7 +185,7 @@ describe("ReportScheduler", () => {
   it("shows report types with human-readable labels", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -195,7 +198,7 @@ describe("ReportScheduler", () => {
   it("shows delivery channel types under report names", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("email, slack")).toBeInTheDocument();
@@ -207,7 +210,7 @@ describe("ReportScheduler", () => {
   it("shows Active/Paused status badges", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       const activeButtons = screen.getAllByText("Active");
@@ -222,7 +225,7 @@ describe("ReportScheduler", () => {
   it("shows empty state when no schedules exist", async () => {
     setupFetch([]);
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(
@@ -236,7 +239,7 @@ describe("ReportScheduler", () => {
   it("renders header and New Schedule button", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     expect(screen.getByText("Report Schedules")).toBeInTheDocument();
     expect(screen.getByText("+ New Schedule")).toBeInTheDocument();
@@ -245,7 +248,7 @@ describe("ReportScheduler", () => {
   it("clicking New Schedule opens the create form", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -267,7 +270,7 @@ describe("ReportScheduler", () => {
   it("create form has all report type options", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -294,7 +297,7 @@ describe("ReportScheduler", () => {
   it("create form has schedule presets", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -315,7 +318,7 @@ describe("ReportScheduler", () => {
   it("create form has format options", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -336,7 +339,7 @@ describe("ReportScheduler", () => {
   it("create form shows delivery channel checkboxes", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -355,7 +358,7 @@ describe("ReportScheduler", () => {
   it("email input appears when Email checkbox is checked", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -373,7 +376,7 @@ describe("ReportScheduler", () => {
   it("submitting create form calls POST API", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -410,7 +413,7 @@ describe("ReportScheduler", () => {
   it("Cancel button closes the form", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -436,7 +439,7 @@ describe("ReportScheduler", () => {
   it("clicking Active/Paused badge calls PATCH API to toggle", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -467,7 +470,7 @@ describe("ReportScheduler", () => {
   it("Run button calls run-now API endpoint", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -499,7 +502,7 @@ describe("ReportScheduler", () => {
   it("Del button calls DELETE API after confirmation", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -528,7 +531,7 @@ describe("ReportScheduler", () => {
   it("Edit button opens form pre-filled with schedule data", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
@@ -552,7 +555,7 @@ describe("ReportScheduler", () => {
   it("shows error banner when fetch fails", async () => {
     mockFetch.mockRejectedValue(new Error("Network Error"));
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Network Error")).toBeInTheDocument();
@@ -565,7 +568,7 @@ describe("ReportScheduler", () => {
   it("dismiss button clears error banner", async () => {
     mockFetch.mockRejectedValue(new Error("Network Error"));
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Network Error")).toBeInTheDocument();
@@ -583,7 +586,7 @@ describe("ReportScheduler", () => {
   it("renders table with correct column headers", async () => {
     setupFetch();
 
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText("Report")).toBeInTheDocument();
@@ -597,7 +600,7 @@ describe("ReportScheduler", () => {
 
   it("blocks submit and shows inline error when email recipient is invalid (TC_001)", async () => {
     setupFetch();
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
     });
@@ -629,7 +632,7 @@ describe("ReportScheduler", () => {
 
   it("exposes execution time + day-of-week + advanced cron controls (TC_002)", async () => {
     setupFetch();
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
     });
@@ -657,7 +660,7 @@ describe("ReportScheduler", () => {
 
   it("composes a real cron string from frequency + time before POST (TC_002)", async () => {
     setupFetch();
-    render(<ReportScheduler />);
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText("CFO Daily Briefing")).toBeInTheDocument();
     });
@@ -692,4 +695,75 @@ describe("ReportScheduler", () => {
       ]);
     });
   });
+
+  it("schedules an Insights view weekly from the Insights page's link, with the view and period", async () => {
+    setupFetch();
+    render(
+      <MemoryRouter initialEntries={["/dashboard/report-schedules?type=insights_view&view=finance"]}>
+        <ReportScheduler />
+      </MemoryRouter>,
+    );
+    // The form opens prefilled: Insights view, Finance, last week, weekly.
+    const view = (await screen.findByLabelText("Insights view")) as HTMLSelectElement;
+    expect(view.value).toBe("finance");
+    expect((screen.getByLabelText("Period covered") as HTMLSelectElement).value).toBe("last_week");
+    expect((screen.getByLabelText("Report Type") as HTMLSelectElement).value).toBe("insights_view");
+    expect(screen.getByText("Output Format").closest("div")).toHaveAttribute("hidden");
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText("recipient@company.com"), {
+        target: { value: "cfo@company.com" },
+      });
+    });
+    const submitBtns = screen.getAllByText("Create Schedule");
+    await act(async () => {
+      fireEvent.click(submitBtns[submitBtns.length - 1]);
+    });
+    await waitFor(() => {
+      const post = mockFetch.mock.calls.find(
+        (call: unknown[]) => (call[0] as string).endsWith("/report-schedules") && (call[1] as RequestInit)?.method === "POST",
+      );
+      expect(post).toBeTruthy();
+      const body = JSON.parse((post![1] as RequestInit).body as string);
+      expect(body.report_type).toBe("insights_view");
+      expect(body.params).toEqual({ view: "finance", period: "last_week" });
+      expect(body.cron_expression).toBe("0 9 * * 1");
+    });
+  });
+
+  it("shows a schedule's run history with why a run did not deliver", async () => {
+    const insights = {
+      ...MOCK_SCHEDULES[0],
+      id: "sched-ins",
+      report_type: "insights_view",
+      params: { view: "finance", period: "last_week" },
+    };
+    setupFetch([insights]);
+    const base = mockFetch.getMockImplementation()!;
+    mockFetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/report-schedules/sched-ins/runs")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            runs: [
+              { id: "r1", trigger: "schedule", status: "blocked", reason: "no_data: every figure of the view has no data", export_id: null, started_at: "2026-11-02T03:30:00Z", finished_at: null },
+              { id: "r2", trigger: "manual", status: "delivered", reason: null, export_id: "e1", started_at: "2026-11-01T03:30:00Z", finished_at: null },
+            ],
+          }),
+        };
+      }
+      return base(url, options);
+    });
+    render(<MemoryRouter><ReportScheduler /></MemoryRouter>);
+    expect(await screen.findByText("Insights view (PDF) · Finance · last week (monday to sunday)")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText("History"));
+    });
+    const history = await screen.findByTestId("history-sched-ins");
+    expect(history).toHaveTextContent("blocked");
+    expect(history).toHaveTextContent("no_data: every figure of the view has no data");
+    expect(history).toHaveTextContent("Run now");
+    expect(history).toHaveTextContent("File on Downloads");
+  });
 });
+

@@ -60,7 +60,15 @@ from observability import tracing
 
 logger = structlog.get_logger()
 
-KINDS: tuple[str, ...] = ("model", "knowledge", "guardrail", "audit_chain", "adversarial", "eval_dataset")
+KINDS: tuple[str, ...] = (
+    "model",
+    "knowledge",
+    "guardrail",
+    "audit_chain",
+    "adversarial",
+    "eval_dataset",
+    "insights_landing",
+)
 STATUSES: tuple[str, ...] = ("ok", "failed", "error")
 TRIGGERS: tuple[str, ...] = ("schedule", "manual")
 GUARDRAIL_EXPECTATIONS: tuple[str, ...] = ("blocked", "detected", "clean")
@@ -108,6 +116,7 @@ _KEYS: dict[str, tuple[str, ...]] = {
     "knowledge": ("query", "top_k", "min_results", "max_latency_ms"),
     "guardrail": ("stage", "text", "expect", "max_latency_ms"),
     "audit_chain": ("recent", "max_latency_ms"),
+    "insights_landing": ("views", "max_view_ms", "max_latency_ms"),
     "adversarial": ("min_recall", "max_false_positives", "max_latency_ms"),
     "eval_dataset": (
         "dataset_id",
@@ -163,6 +172,16 @@ def validate_config(kind: str, config: Any) -> dict[str, Any]:
         clean["expect"] = expect
     elif kind == "audit_chain":
         clean["recent"] = _number(config, "recent", low=1, high=10_000, default=1000)
+    elif kind == "insights_landing":
+        from core.insights import registry
+
+        views = config.get("views")
+        if views is None:
+            views = list(registry.VIEWS)
+        if not isinstance(views, list) or not views or any(v not in registry.VIEWS for v in views):
+            raise ValueError(f"views must be a list of: {', '.join(registry.VIEWS)}")
+        clean["views"] = list(dict.fromkeys(views))
+        clean["max_view_ms"] = _number(config, "max_view_ms", low=100, high=60_000, default=1500)
     elif kind == "adversarial":
         clean["min_recall"] = _percent(config, "min_recall", default=50)
         clean["max_false_positives"] = _number(config, "max_false_positives", low=0, high=1000, default=0)
@@ -373,6 +392,19 @@ async def _probe_audit_chain(tenant_id: uuid.UUID, config: dict[str, Any]) -> tu
     return [], detail
 
 
+async def _probe_insights_landing(tenant_id: uuid.UUID, config: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    from core.insights.telemetry import time_landing_views
+
+    timings = await time_landing_views(tenant_id, config["views"])
+    reasons = []
+    for view, outcome in timings.items():
+        if outcome.get("error"):
+            reasons.append(f"insights_view_failed:{view}")
+        elif outcome["ms"] > config["max_view_ms"]:
+            reasons.append(f"insights_view_slow:{view}")
+    return reasons, {"views": timings, "budget_ms": config["max_view_ms"]}
+
+
 async def _probe_adversarial(tenant_id: uuid.UUID, config: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
     """The adversarial set over the tenant's rules; the detail is the report without case texts."""
     from core.governance.guardrails import adversarial
@@ -468,6 +500,7 @@ _PROBES = {
     "audit_chain": "_probe_audit_chain",
     "adversarial": "_probe_adversarial",
     "eval_dataset": "_probe_eval_dataset",
+    "insights_landing": "_probe_insights_landing",
 }
 
 

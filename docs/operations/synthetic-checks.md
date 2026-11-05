@@ -8,7 +8,7 @@ chain still verify".
 
 Implementation: `observability/synthetic.py` (configuration, probes, running, storage),
 `core/tasks/synthetic_tasks.py` (the sweep and the prune), `api/v1/observability.py` (the
-endpoints), and the **Checks** tab of the console page `/dashboard/observability`.
+endpoints), and the **Checks** tab of the console page `/dashboard/monitoring`.
 
 ## The switch
 
@@ -48,8 +48,10 @@ does not have a completed stored run. `max_latency_ms` is a result threshold, no
 | `adversarial` | `min_recall` (50, a percentage), `max_false_positives` (0) | Dry-runs the tenant's guardrail rules over the adversarial evaluation set (`docs/governance/guardrails.md`). The result keeps the counts, per-category recall and the ids of missed cases; never a case's text. The Guardrails page shows these checks and their latest result. | `adversarial_recall_below_minimum`, `adversarial_controls_wrongly_caught`, `adversarial_cases_not_evaluated` |
 | `eval_dataset` | `dataset_id` (required), `version` (the latest when omitted), `system` (required, the prompt), `model` (required), `judges` with `judge_model`, `limit` (25), `min_pass_rate` (100, a percentage) | Scores the first `limit` cases of a version of one of the tenant's evaluation datasets with the prompt and model (`docs/governance/evaluation-datasets.md`) and keeps the run in the evaluation history with the label `scheduled:<model>`. One billed model call per case each run, plus one per case and judge. Needs `AGENTICORG_EVALS_V2_ENABLED` and `AGENTICORG_PROMPT_COMPARE_ENABLED`; off, the run is an error. The result keeps the run id, the counts, the pass rate and the judges' means. | `eval_pass_rate_below_minimum`, `eval_cases_not_answered` |
 
+| `insights_landing` | `views` (every Insights landing view when omitted), `max_view_ms` (1500) | Answers each listed Insights landing view for the tenant, as the API does for the last 30 days, and times it (`core/insights/telemetry.py`); each timing is also observed in `agenticorg_insights_view_seconds`. The result keeps each view's time in milliseconds and the budget; never a figure. | `insights_view_slow:<view>`, `insights_view_failed:<view>` |
+
 An unknown configuration key is refused, so a check cannot be pointed at anything but these
-six paths; there is no arbitrary URL probe.
+seven paths; there is no arbitrary URL probe.
 
 A `model` check makes a real, billed model call on every run. Keep its prompt short and its
 interval long enough for the question it answers.
@@ -96,7 +98,8 @@ to the calling principal (`created_by`, `updated_by`).
 ## Storage
 
 `synthetic_checks` and `synthetic_check_results` (migration `v6z42_synthetic_checks`), both
-tenant-scoped under row-level security.
+tenant-scoped under row-level security. Migrations `v6z46_synthetic_check_kinds` and
+`v6z114_insights_operations` widened the kind check.
 
 ## Tests
 

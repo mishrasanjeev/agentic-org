@@ -21,6 +21,7 @@ vi.mock("@/lib/api", () => ({
 
 let mockRole = "admin";
 vi.mock("@/contexts/AuthContext", () => ({
+  useOptionalRole: () => mockRole,
   useAuth: () => ({
     user: { user_id: "u1", email: "x@example.com", name: "X", role: mockRole, domain: "all", tenant_id: "t1" },
     isAuthenticated: true,
@@ -143,7 +144,7 @@ function financeView(): InsightsViewResponse {
       }),
     ],
     needs_you: [
-      { kind: "budget", title: "Ops monthly", link: "/dashboard/costs", state: "act", detail: "125.5% of the monthly budget used" },
+      { kind: "budget", title: "Ops monthly", link: "/dashboard/insights/explore/cost", state: "act", detail: "125.5% of the monthly budget used" },
     ],
   };
 }
@@ -250,6 +251,24 @@ describe("InsightsDashboard", () => {
     expectNoBadText();
   });
 
+  it("shows the late-data banner and refreshes the numbers in place every minute", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-01T06:00:00Z"));
+    routeGet(
+      { executive: executiveView() },
+      { enabled: true, views: ["executive"], platform_operator: false, settings: SETTINGS, late_data: true },
+    );
+    renderPage();
+    await screen.findByTestId("insights-tiles");
+    expect(screen.getByTestId("insights-late-data")).toHaveTextContent("Yesterday's figures are not in yet");
+    expect(viewCalls()).toHaveLength(1);
+    vi.advanceTimersByTime(60_000);
+    await waitFor(() => expect(viewCalls()).toHaveLength(2));
+    // A quiet refresh: the tiles stay on screen, no skeleton replaces them.
+    expect(screen.getByTestId("insights-tiles")).toBeInTheDocument();
+    expect(screen.queryByTestId("insights-loading")).not.toBeInTheDocument();
+  });
+
   it("switching tabs loads the Finance view and writes it to the URL", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     routeGet({ executive: executiveView(), finance: financeView() });
@@ -336,6 +355,8 @@ describe("InsightsDashboard", () => {
     mockGet.mockImplementation((url: string) => {
       if (url === "/insights/status")
         return Promise.resolve({ data: { enabled: true, views: ["executive"], platform_operator: false, settings: SETTINGS } });
+      if (url === "/insights/explorers") return Promise.resolve({ data: { explorers: [] } });
+      if (!url.startsWith("/insights/views/")) return Promise.reject(new Error(`not under test: ${url}`));
       calls += 1;
       if (calls === 1) return Promise.reject({ response: { status: 422, data: { detail: "company_id is not a company of this tenant" } } });
       return Promise.resolve({ data: executiveView() });

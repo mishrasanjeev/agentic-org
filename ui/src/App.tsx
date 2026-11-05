@@ -6,12 +6,16 @@ import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteSeo from "./components/RouteSeo";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "./lib/roles";
+import { AGENT_CREATOR_ROLES, ALL_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "./lib/roles";
 
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 import "./pages/documentation.css";
+import { INSIGHTS_ROLES } from "@/lib/insights/metrics";
+import { ENTITY_SEGMENTS } from "@/lib/insights/entities";
+import LegacyRedirect from "@/components/LegacyRedirect";
+import { defaultLandingForRole } from "@/contexts/AuthContext";
 
 /* -- Lazy import with auto-reload on chunk failure -- */
 function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
@@ -40,8 +44,8 @@ const Support = lazyRetry(() => import("./pages/legal/Support"));
 const Privacy = lazyRetry(() => import("./pages/legal/Privacy"));
 const Terms = lazyRetry(() => import("./pages/legal/Terms"));
 const Refund = lazyRetry(() => import("./pages/legal/Refund"));
+const NetworkTerms = lazyRetry(() => import("./pages/legal/NetworkTerms"));
 const Playground = lazyRetry(() => import("./pages/Playground"));
-const Dashboard = lazyRetry(() => import("./pages/Dashboard"));
 const Agents = lazyRetry(() => import("./pages/Agents"));
 const AgentCreate = lazyRetry(() => import("./pages/AgentCreate"));
 const SOPUpload = lazyRetry(() => import("./pages/SOPUpload"));
@@ -68,8 +72,7 @@ const Channels = lazyRetry(() => import("./pages/Channels"));
 const CMOVendorSandboxConnectors = lazyRetry(() => import("./pages/CMOVendorSandboxConnectors"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
-const Observability = lazyRetry(() => import("./pages/Observability"));
-const Observatory = lazyRetry(() => import("./pages/Observatory"));
+const Monitoring = lazyRetry(() => import("./pages/Monitoring"));
 const Settings = lazyRetry(() => import("./pages/Settings"));
 const AccountSecurity = lazyRetry(() => import("./pages/AccountSecurity"));
 const AccessDenied = lazyRetry(() => import("./pages/AccessDenied"));
@@ -84,18 +87,18 @@ const SellEverywhere = lazyRetry(() => import("./pages/SellEverywhere"));
 const Orders = lazyRetry(() => import("./pages/Orders"));
 
 /* -- Role-specific dashboards -- */
-const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
-const CostDashboard = lazyRetry(() => import("./pages/CostDashboard"));
 const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
 const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
+const InsightsBudgets = lazyRetry(() => import("./pages/InsightsBudgets"));
+const InsightsExplorer = lazyRetry(() => import("./pages/InsightsExplorer"));
+const InsightsRun = lazyRetry(() => import("./pages/InsightsRun"));
+const InsightsEntity = lazyRetry(() => import("./pages/InsightsEntity"));
+const InsightsDownloads = lazyRetry(() => import("./pages/InsightsDownloads"));
+const InsightsValue = lazyRetry(() => import("./pages/InsightsValue"));
 const PlatformInsights = lazyRetry(() => import("./pages/PlatformInsights"));
 const StatusPage = lazyRetry(() => import("./pages/Status"));
 const SSOCallback = lazyRetry(() => import("./pages/SSOCallback"));
-const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
-const CHRODashboard = lazyRetry(() => import("./pages/CHRODashboard"));
-const COODashboard = lazyRetry(() => import("./pages/COODashboard"));
-const CBODashboard = lazyRetry(() => import("./pages/CBODashboard"));
-const CEODashboard = lazyRetry(() => import("./pages/CEODashboard"));
+const MarketingOperations = lazyRetry(() => import("./pages/MarketingOperations"));
 
 /* -- ABM Dashboard -- */
 const ABMDashboard = lazyRetry(() => import("./pages/ABMDashboard"));
@@ -120,7 +123,6 @@ const Billing = lazyRetry(() => import("./pages/Billing"));
 const BillingCallback = lazyRetry(() => import("./pages/BillingCallback"));
 
 /* -- Scope Enforcement -- */
-const ScopeDashboard = lazyRetry(() => import("./pages/ScopeDashboard"));
 const EnforceAuditLog = lazyRetry(() => import("./pages/EnforceAuditLog"));
 
 /* -- Blog / Content pages -- */
@@ -154,7 +156,6 @@ const CAFirmsSolution = lazyRetry(() => import("./pages/CAFirmsSolution"));
 const CompanyDashboard = lazyRetry(() => import("./pages/CompanyDashboard"));
 const CompanyOnboard = lazyRetry(() => import("./pages/CompanyOnboard"));
 const CompanyDetail = lazyRetry(() => import("./pages/CompanyDetail"));
-const PartnerDashboard = lazyRetry(() => import("./pages/PartnerDashboard"));
 const CAOperations = lazyRetry(() => import("./pages/CAOperations"));
 const ProfessionalTax = lazyRetry(() => import("./pages/ProfessionalTax"));
 const ClientPortal = lazyRetry(() => import("./pages/ClientPortal"));
@@ -199,6 +200,7 @@ export default function App() {
       <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
+      <Route path="/network-terms" element={<NetworkTerms />} />
       <Route path="/refund" element={<Refund />} />
       <Route path="/refund-policy" element={<Navigate to="/refund" replace />} />
       <Route path="/cancellation" element={<Navigate to="/refund" replace />} />
@@ -239,10 +241,8 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
-            <Layout>
-              <Dashboard />
-            </Layout>
+          <ProtectedRoute allowedRoles={ALL_ROLES}>
+            <LegacyRedirect to={(role) => defaultLandingForRole(role)} />
           </ProtectedRoute>
         }
       />
@@ -250,18 +250,82 @@ export default function App() {
         path="/dashboard/cfo"
         element={
           <ProtectedRoute allowedRoles={["admin", "cfo"]}>
-            <Layout>
-              <CFODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=finance" />
           </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/insights"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo"]}>
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
             <Layout>
               <InsightsDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/explore/:explorer?"
+        element={
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsExplorer />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/value"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cfo"]}>
+            <Layout>
+              <InsightsValue />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/runs/:runId"
+        element={
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsRun />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      {/* Level 3 entity pages: agents, workflows, connectors, companies, users, cost-centres. */}
+      {Object.values(ENTITY_SEGMENTS).map((segment) => (
+        <Route
+          key={segment}
+          path={`/dashboard/insights/${segment}/:id`}
+          element={
+            <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+              <Layout>
+                <InsightsEntity />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+      ))}
+      <Route
+        path="/dashboard/insights/downloads"
+        element={
+          // Scheduled Insights reports may be sent to anyone in the organisation who reads Insights.
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsDownloads />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/budgets"
+        element={
+          // Administrators and the CFO change budgets; auditors read them (the API decides).
+          <ProtectedRoute allowedRoles={["admin", "cfo", "auditor"]}>
+            <Layout>
+              <InsightsBudgets />
             </Layout>
           </ProtectedRoute>
         }
@@ -290,8 +354,36 @@ export default function App() {
         path="/dashboard/costs"
         element={
           <ProtectedRoute allowedRoles={["admin", "cfo", "ceo"]}>
+            <LegacyRedirect to="/dashboard/insights?view=finance" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/marketing-ops"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cmo"]}>
             <Layout>
-              <CostDashboard />
+              <MarketingOperations />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/marketing-ops/abm"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "cmo"]}>
+            <Layout>
+              <ABMDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/monitoring"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <Monitoring />
             </Layout>
           </ProtectedRoute>
         }
@@ -300,9 +392,7 @@ export default function App() {
         path="/dashboard/cmo"
         element={
           <ProtectedRoute allowedRoles={["admin", "cmo"]}>
-            <Layout>
-              <CMODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/marketing-ops" keepQuery />
           </ProtectedRoute>
         }
       />
@@ -350,9 +440,7 @@ export default function App() {
         path="/dashboard/chro"
         element={
           <ProtectedRoute allowedRoles={["admin", "chro"]}>
-            <Layout>
-              <CHRODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=hr" />
           </ProtectedRoute>
         }
       />
@@ -360,9 +448,7 @@ export default function App() {
         path="/dashboard/coo"
         element={
           <ProtectedRoute allowedRoles={["admin", "coo"]}>
-            <Layout>
-              <COODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=operations" />
           </ProtectedRoute>
         }
       />
@@ -370,9 +456,7 @@ export default function App() {
         path="/dashboard/cbo"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <Layout>
-              <CBODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=back_office" />
           </ProtectedRoute>
         }
       />
@@ -380,9 +464,7 @@ export default function App() {
         path="/dashboard/ceo"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <Layout>
-              <CEODashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=executive" />
           </ProtectedRoute>
         }
       />
@@ -390,16 +472,14 @@ export default function App() {
         path="/dashboard/abm"
         element={
           <ProtectedRoute allowedRoles={["admin", "cmo"]}>
-            <Layout>
-              <ABMDashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/marketing-ops/abm" />
           </ProtectedRoute>
         }
       />
       <Route
         path="/dashboard/report-schedules"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "cmo"]}>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "cmo", "chro", "coo"]}>
             <Layout>
               <ReportScheduler />
             </Layout>
@@ -459,10 +539,8 @@ export default function App() {
       <Route
         path="/dashboard/observatory"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
-            <Layout>
-              <Observatory />
-            </Layout>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
+            <LegacyRedirect to={(role) => (role === "admin" || role === "auditor" ? "/dashboard/insights/explore/audit" : "/dashboard/audit")} />
           </ProtectedRoute>
         }
       />
@@ -470,9 +548,7 @@ export default function App() {
         path="/dashboard/scopes"
         element={
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
-            <Layout>
-              <ScopeDashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/enforce-audit" />
           </ProtectedRoute>
         }
       />
@@ -785,9 +861,7 @@ export default function App() {
         path="/dashboard/observability"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <Layout>
-              <Observability />
-            </Layout>
+            <LegacyRedirect to="/dashboard/monitoring" />
           </ProtectedRoute>
         }
       />
@@ -887,9 +961,7 @@ export default function App() {
         path="/dashboard/partner"
         element={
           <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
-            <Layout>
-              <PartnerDashboard />
-            </Layout>
+            <LegacyRedirect to="/dashboard/insights?view=partner" />
           </ProtectedRoute>
         }
       />

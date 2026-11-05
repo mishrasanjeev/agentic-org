@@ -269,7 +269,15 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # Reviewed addition: DELETE /insights/bi-access/{role_name} (api/v1/insights_bi.py)
 # keeps the insights_bi_logins row (sets revoked_at) and drops only the tenant's
 # read-only Postgres login, which owns no data; 41 -> 42.
-DELETE_HANDLER_CAP = 42
+# Reviewed addition: DELETE /insights/saved-views/{view_id} (api/v1/insights_saved_views.py)
+# hard-deletes a saved view: a person's named filter preset (the dashboard's URL query), not tenant
+# business data, an audit row or a decryptable artefact; only its owner, or an administrator for a
+# shared one, may delete it; 42 -> 43.
+# Reviewed addition: DELETE /insights/budgets/{budget_id} (api/v1/insights_budgets.py)
+# hard-deletes a budget_alerts row: the organisation's own spend-limit setting, not business
+# data or a decryptable artefact; only an administrator or the CFO (a person) may delete it,
+# and a signed insights.budget.deleted audit row keeps every value it had; 43 -> 44.
+DELETE_HANDLER_CAP = 44
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

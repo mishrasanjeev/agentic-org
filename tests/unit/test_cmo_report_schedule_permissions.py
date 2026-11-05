@@ -15,12 +15,16 @@ def test_cmo_report_schedule_types_are_domain_limited() -> None:
         "grantex:scopes": ["report_schedules.read", "report_schedules.write"],
     }
 
-    assert _allowed_report_types(claims) == {"cmo_weekly", "campaign_report"}
+    # The CMO's own report types, and the Insights view schedule (limited to the Marketing view when it runs).
+    assert _allowed_report_types(claims) == {"cmo_weekly", "campaign_report", "insights_view"}
     _assert_report_type_allowed("cmo_weekly", claims)
     _assert_report_type_allowed("campaign_report", claims)
     with pytest.raises(HTTPException) as exc:
         _assert_report_type_allowed("cfo_daily", claims)
     assert exc.value.status_code == 403
+    with pytest.raises(HTTPException) as pack:
+        _assert_report_type_allowed("insights_finance_pack", claims)
+    assert pack.value.status_code == 403
 
 
 def test_admin_report_schedule_types_are_unrestricted() -> None:

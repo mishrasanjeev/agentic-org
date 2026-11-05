@@ -1,0 +1,31 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mishrasanjeev/agenticorg-shopping",
+  "title": "AgenticOrg shopping network",
+  "description": "Search shops on the AgenticOrg network and open a checkout. No tool takes payment.",
+  "version": "5.1.0",
+  "websiteUrl": "https://agenticorg.ai",
+  "icons": [
+    {
+      "src": "https://agenticorg.ai/favicon-512x512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    },
+    {
+      "src": "https://agenticorg.ai/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/mishrasanjeev/agentic-org",
+    "source": "github",
+    "subfolder": "mcp-server"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.agenticorg.ai/mcp"
+    }
+  ]
+}

@@ -68,6 +68,11 @@ RUN_KEY = "run.id"
 # carries it, so the run's spans can be told apart from a sibling run sharing
 # the same trace (observability/timeline.py).
 _run_scope: ContextVar[str | None] = ContextVar("agenticorg_run_scope", default=None)
+
+
+def current_run_scope() -> str | None:
+    """The run id of the run being traced in this context, or None outside a traced run."""
+    return _run_scope.get()
 AUDIT_TRACE_ID_WIDTH = 64
 _TRACES_PATH = "/v1/traces"
 

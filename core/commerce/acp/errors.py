@@ -85,6 +85,7 @@ MESSAGE_ERROR_MAP: dict[str, str] = {
     "not_found": "not_found",
     "out_of_stock": "out_of_stock",
     "item_unavailable": "invalid",
+    "price_changed": "conflict",
     "invalid_quantity": "invalid",
     "invalid_quantity_unit": "invalid",
     "quantity_unit_mismatch": "invalid",

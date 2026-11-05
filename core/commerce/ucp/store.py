@@ -24,6 +24,7 @@ from sqlalchemy import select
 
 from core.commerce.oacp_artifacts import DurableOacpArtifactCacheRepository, OacpArtifactCacheRepositoryQuery
 from core.commerce.oacp_merchant_config import merchant_config_id
+from core.commerce.ucp.items import newest_per_source
 from core.database import get_platform_session, get_tenant_session
 from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow, C6ZMerchantCommerceConfigRow
 from core.models.tenant import Tenant
@@ -218,7 +219,7 @@ async def load_catalog_inputs(
         ).all()
     products: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for row in evidence_rows:
+    for row in newest_per_source(evidence_rows):
         for product in row.products or []:
             if not isinstance(product, Mapping):
                 continue

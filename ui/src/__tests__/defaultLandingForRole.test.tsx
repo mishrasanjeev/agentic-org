@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import appSource from "../App.tsx?raw";
 import * as roleLists from "../lib/roles";
+import { INSIGHTS_ROLES } from "../lib/insights/metrics";
 
 const authState = vi.hoisted(() => ({ role: "analyst" }));
 const apiPut = vi.hoisted(() => vi.fn());
@@ -40,6 +41,8 @@ function allowedRolesFor(path: string): readonly string[] {
   ).exec(appSource);
   if (!match) throw new Error(`no ProtectedRoute for ${path}`);
   const expr = match[1].trim();
+  // [...INSIGHTS_ROLES] (the Insights routes share the list in lib/insights/metrics.ts).
+  if (expr === "[...INSIGHTS_ROLES]") return INSIGHTS_ROLES;
   if (expr.startsWith("[")) {
     return expr
       .slice(1, -1)
@@ -54,18 +57,22 @@ function allowedRolesFor(path: string): readonly string[] {
 
 describe("defaultLandingForRole", () => {
   it("sends each role to its expected page", () => {
-    expect(defaultLandingForRole("admin")).toBe("/dashboard");
-    expect(defaultLandingForRole("cfo")).toBe("/dashboard");
-    expect(defaultLandingForRole("auditor")).toBe("/dashboard");
-    expect(defaultLandingForRole("analyst")).toBe("/dashboard/workbench");
-    expect(defaultLandingForRole("developer")).toBe("/dashboard/agents");
-    expect(defaultLandingForRole("domain_lead")).toBe("/dashboard/agents");
+    // The home and CxO dashboards are retired: every Insights role lands on its Insights view.
+    for (const role of ["admin", "cfo", "chro", "cmo", "coo", "auditor", "analyst", "developer", "domain_lead"]) {
+      expect(defaultLandingForRole(role)).toBe("/dashboard/insights");
+    }
     expect(defaultLandingForRole("merchant")).toBe("/dashboard/commerce-runtime");
+    // Never /dashboard for a known role: /dashboard redirects to the landing and would loop. Only a role not
+    // loaded yet goes there (the redirect runs again once the session has loaded).
+    for (const role of [...roleLists.ALL_ROLES, "viewer"]) {
+      expect(defaultLandingForRole(role)).not.toBe("/dashboard");
+    }
+    expect(defaultLandingForRole(undefined)).toBe("/dashboard");
   });
 
-  it("puts the analyst on a workbench route that admits the analyst", () => {
-    expect(roleLists.WORKBENCH_ROLES).toContain("analyst");
-    expect(allowedRolesFor("/dashboard")).not.toContain("analyst");
+  it("keeps /dashboard working for every role as a redirect to the landing", () => {
+    expect(allowedRolesFor("/dashboard")).toEqual(roleLists.ALL_ROLES);
+    expect(appSource).toMatch(/path="\/dashboard"[\s\S]{0,200}LegacyRedirect to=\{\(role\) => defaultLandingForRole\(role\)\}/);
   });
 
   it.each([...roleLists.ALL_ROLES])("lands %s on a route that admits it", (role) => {
@@ -108,13 +115,13 @@ describe("Onboarding finish", () => {
     }
   });
 
-  it("lands an analyst on the workbench, not Access Denied", async () => {
-    expect(await finishOnboardingAs("analyst")).toBe("/dashboard/workbench");
+  it("lands an analyst on Insights, not Access Denied", async () => {
+    expect(await finishOnboardingAs("analyst")).toBe("/dashboard/insights");
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith("/org/onboarding", expect.anything()));
   });
 
-  it("lands an admin on the dashboard", async () => {
-    expect(await finishOnboardingAs("admin")).toBe("/dashboard");
+  it("lands an admin on Insights", async () => {
+    expect(await finishOnboardingAs("admin")).toBe("/dashboard/insights");
   });
 
   it("lands a merchant on the commerce runtime even when saving fails", async () => {

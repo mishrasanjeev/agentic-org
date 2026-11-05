@@ -22,6 +22,7 @@ from __future__ import annotations
 import csv
 import importlib.util
 import io
+import json
 import os
 import uuid
 from collections.abc import AsyncIterator
@@ -59,6 +60,12 @@ BASE_TABLES = (
     "spend_fx_rates",
     "budget_alerts",
     "audit_log",
+    # v6z109: the views read money saved and alerts.
+    "value_baselines",
+    "value_rates",
+    "insights_alerts",
+    # Exports read the tenant's PII masking setting (v6z110 release).
+    "governance_config",
 )
 
 pytestmark = [
@@ -187,6 +194,13 @@ def _request(role: str, *, domains: list[str] | None, admin: bool = False) -> Si
 
 ADMIN = _request("admin", domains=None, admin=True)
 CFO = _request("cfo", domains=["finance"])
+
+
+def _with_query(request: SimpleNamespace, query: str) -> SimpleNamespace:
+    """The same caller, with ``query`` as the request's query string (filters, ``group_by[]``)."""
+    from starlette.datastructures import QueryParams
+
+    return SimpleNamespace(state=request.state, query_params=QueryParams(query))
 
 
 def _seed(world: World) -> SimpleNamespace:
@@ -344,6 +358,51 @@ async def test_views_metrics_and_exports_keep_to_the_tenant(world, monkeypatch) 
 
     grouped = await api.insights_metric("runs.volume", ADMIN, tenant_id=str(seed.a), group_by="agent")
     assert {r["group"]: r["value"] for r in grouped["rows"]} == {"Invoice matcher": 5, "Leave checker": 1}
+
+    # Two dimensions at once: labels join the values, rows carry each dimension's raw value.
+    two = await api.insights_metric("runs.volume", ADMIN, tenant_id=str(seed.a), group_by=["agent", "status"])
+    assert {r["group"]: r["value"] for r in two["rows"]} == {
+        "Invoice matcher · completed": 4,
+        "Invoice matcher · failed": 1,
+        "Leave checker · completed": 1,
+    }
+    assert all(set(r["groups"]) == {"agent", "status"} for r in two["rows"])
+
+    # filter[dim]=a,b narrows run metrics; group_by[] is accepted as well.
+    hr_only = await api.insights_metric("runs.volume", _with_query(ADMIN, "filter[domain]=hr"), tenant_id=str(seed.a))
+    assert hr_only["value"] == 1 and hr_only["filters"] == {"domain": ["hr"]}
+    failed = await api.insights_metric(
+        "runs.volume", _with_query(ADMIN, "filter[status]=failed,refused&group_by[]=domain"), tenant_id=str(seed.a)
+    )
+    assert failed["value"] == 1 and {r["group"]: r["value"] for r in failed["rows"]} == {"finance": 1}
+    # A filter cannot widen a domain-limited caller: the CFO's finance scope still applies.
+    widened = await api.insights_metric("runs.volume", _with_query(CFO, "filter[domain]=hr"), tenant_id=str(seed.a))
+    assert widened["data_quality"] == "no_data"
+    for metric, caller, query, error in (
+        ("cost.spend", CFO, "filter[domain]=finance", "filter_not_allowed"),
+        ("cost.spend", CFO, "group_by[]=agent&group_by[]=domain", "group_by_not_allowed"),
+        ("runs.volume", ADMIN, "filter[tenant_id]=x", "filter_not_allowed"),
+        ("runs.volume", ADMIN, "filter=finance", "invalid_filter"),
+        ("runs.volume", ADMIN, "filter[domain]=,", "invalid_filter"),
+        ("runs.volume", ADMIN, "group_by[]=agent&group_by[]=status&group_by[]=domain", "group_by_not_allowed"),
+    ):
+        with pytest.raises(HTTPException) as bad:
+            await api.insights_metric(metric, _with_query(caller, query), tenant_id=str(seed.a))
+        assert (bad.value.status_code, bad.value.detail["error"]) == (422, error), (metric, query)
+
+    # The export applies and records the filters.
+    finance_json = await api.insights_export(
+        "runs.volume", _with_query(ADMIN, "filter[domain]=finance"), tenant_id=str(seed.a), format="json"
+    )
+    body = json.loads(finance_json.body)
+    assert body["filters"]["filter"] == {"domain": ["finance"]} and body["filters"]["group_by"] is None
+    assert sum(r["value"] for r in body["rows"]) == 5
+    # A chart also exports as a PDF (audited like the other formats).
+    chart_pdf = await api.insights_export("runs.volume", ADMIN, tenant_id=str(seed.a), format="pdf", group_by="agent")
+    assert chart_pdf.body[:5] == b"%PDF-" and chart_pdf.media_type == "application/pdf"
+    disposition = chart_pdf.headers["content-disposition"]
+    assert "runs.volume" in disposition and disposition.endswith('.pdf"')
+    world.scalar("DELETE FROM audit_log WHERE tenant_id = :t RETURNING 1", t=seed.a)
 
     # Export: tenant A's rows only, and one signed audit row in tenant A.
     exported = await api.insights_export("runs.volume", ADMIN, tenant_id=str(seed.a), format="csv")

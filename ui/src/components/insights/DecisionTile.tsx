@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
-import type { MetricResponse } from "@/lib/insights/api";
+import type { InsightsFilters, MetricResponse } from "@/lib/insights/api";
 import { computeDelta, formatLowerBound, formatMetricValue } from "@/lib/insights/format";
 import { isEmptyMetric, lineData } from "@/lib/insights/chartData";
 import { chartColor } from "@/lib/insights/tokens";
 import DataQualityBadge from "./DataQualityBadge";
 import EmptyState from "./EmptyState";
+import ExportMenu from "./ExportMenu";
 import StateChip from "./StateChip";
 
 /** Tiny trend line for a tile. Plain SVG: it carries no axes, so recharts would be overkill. */
@@ -43,10 +44,13 @@ export default function DecisionTile({
   metric,
   action,
   currency,
+  filters,
 }: {
   metric: MetricResponse;
   action?: { to: string; label: string } | null;
   currency?: string | null;
+  /** With the page's filters, the tile's number downloads as CSV, XLSX or JSON (every number is exportable). */
+  filters?: InsightsFilters;
 }) {
   const { t } = useTranslation();
   const cur = metric.currency || currency || null;
@@ -102,6 +106,7 @@ export default function DecisionTile({
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <DataQualityBadge quality={metric.data_quality} />
+        {filters && !empty ? <ExportMenu metricKey={metric.key} title={metric.title} filters={filters} /> : null}
         {action ? (
           <Link to={action.to} className="insights-target text-xs font-medium text-primary underline-offset-4 hover:underline">
             {action.label}

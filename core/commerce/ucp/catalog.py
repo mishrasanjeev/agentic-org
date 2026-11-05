@@ -32,8 +32,9 @@ from core.commerce.c6z_runtime_vertical import (
     contains_private_or_executable_value,
     evaluate_runtime_cache_record,
 )
-from core.commerce.catalog_upload import reads_private_or_reserved
+from core.commerce.catalog_upload import gtin_or_none, reads_private_or_reserved
 from core.commerce.oacp_artifacts import OacpPersistentArtifactCacheRecord, is_verified_oacp_cache_record
+from core.commerce.sku_keys import ambiguous_skus, sku_is_ambiguous
 
 # The artifact types (Grantex families merchant_profile, seller_agent_card, catalog_snapshot,
 # offer_price_snapshot, inventory_snapshot) that back catalog search and lookup, as in the
@@ -223,7 +224,7 @@ def _ucp_variant(variant: Mapping[str, Any], product: Mapping[str, Any]) -> dict
     if options:
         item["options"] = options
     gtin = variant.get("gtin")
-    if isinstance(gtin, str) and gtin.isdigit():
+    if isinstance(gtin, str) and gtin_or_none(gtin) == gtin:
         item["barcodes"] = [{"type": "GTIN", "value": gtin}]
     return item
 
@@ -360,6 +361,43 @@ def _search_text(product: Mapping[str, Any]) -> str:
     return " ".join(_plain(part) or "" for part in parts).lower()
 
 
+def _match_score(product: Mapping[str, Any], tokens: Sequence[str], phrase: str) -> int:
+    """How well a product matches the query words: a word in the title counts most (more as a whole word),
+    then the brand, category and tags, then anything else searched (description, details, variants).
+
+    Only the product's own text counts; nothing about the shop (who it is, what it pays) changes the score.
+    """
+    title = (_plain(product.get("title")) or "").lower()
+    named = " ".join(
+        [_plain(product.get("vendor")) or "", _plain(product.get("product_type")) or ""]
+        + [_plain(tag) or "" for tag in product.get("tags") or () if isinstance(tag, str)]
+    ).lower()
+    title_words, named_words = _words(title), _words(named)
+    score = 0
+    for token in tokens:
+        word = token.strip(_WORD_EDGES)
+        if word in title_words:
+            score += 4
+        elif word in named_words:
+            score += 3
+        elif token in title or token in named:
+            # Part of a longer word ("tea" in "steak") counts less than a whole word.
+            score += 2
+        else:
+            score += 1
+    if len(tokens) > 1 and phrase in title:
+        score += 2
+    return score
+
+
+# Words are split on spaces and trimmed of punctuation, so "t-shirt" and Devanagari words stay whole.
+_WORD_EDGES = "\"'.,;:!?()[]{}<>|/\\"
+
+
+def _words(text: str) -> set[str]:
+    return {word.strip(_WORD_EDGES) for word in text.split()} - {""}
+
+
 def _encode_cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(json.dumps({"o": offset}).encode("utf-8")).decode("ascii").rstrip("=")
 
@@ -399,7 +437,8 @@ def search_catalog(
     price_currency: str | None = None,
     shop_details: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
-    """Matching UCP products, ordered by title. Every query token must match (case-insensitive).
+    """Matching UCP products, best match first (``_match_score``), then by title. Every query token must
+    match (case-insensitive); without a query they are ordered by title.
 
     Queries match the product's own fields and details, not ``shop_details`` (they hold for every
     product, so they would match all of them).
@@ -409,8 +448,9 @@ def search_catalog(
     currency conversion (price_filter.json allows ignoring it, with a message).
     """
     tokens = [token for token in re.split(r"\s+", (query or "").lower()) if token]
+    phrase = " ".join(tokens)
     wanted_categories = {item.strip().lower() for item in categories or () if isinstance(item, str) and item.strip()}
-    matches: list[tuple[str, dict[str, Any]]] = []
+    matches: list[tuple[int, str, dict[str, Any]]] = []
     for product in products:
         rendered = ucp_product(product, shop_details)
         if rendered is None:
@@ -427,9 +467,10 @@ def search_catalog(
             continue
         if applies and price_max is not None and low > price_max:
             continue
-        matches.append((rendered["title"].lower(), rendered))
-    matches.sort(key=lambda pair: (pair[0], pair[1]["id"]))
-    return [rendered for _title, rendered in matches]
+        score = _match_score(product, tokens, phrase) if tokens else 0
+        matches.append((score, rendered["title"].lower(), rendered))
+    matches.sort(key=lambda item: (-item[0], item[1], item[2]["id"]))
+    return [rendered for _score, _title, rendered in matches]
 
 
 def lookup_catalog(
@@ -441,8 +482,16 @@ def lookup_catalog(
 
     A variant id or SKU resolves ``exact`` to that variant; a product id resolves
     ``featured`` to its first available variant (else its first variant). Every
-    returned variant carries ``inputs`` naming the request ids it answers.
+    returned variant carries ``inputs`` naming the request ids it answers. A SKU that
+    several variants of one catalog source share (``core.commerce.sku_keys``) resolves
+    nothing: it names no one item.
     """
+    ambiguous = ambiguous_skus(products)
+    shared: set[str] = set()
+    for product in products:
+        for variant in product.get("variants") or ():
+            if isinstance(variant, Mapping) and sku_is_ambiguous(product, variant, ambiguous):
+                shared.add(str(ucp_variant_id(variant) or ""))
     rendered_by_id: dict[str, dict[str, Any]] = {}
     for product in products:
         rendered = ucp_product(product, shop_details)
@@ -453,7 +502,7 @@ def lookup_catalog(
     for product_id, rendered in rendered_by_id.items():
         for variant in rendered["variants"]:
             variant_index[variant["id"]] = product_id
-            if variant.get("sku"):
+            if variant.get("sku") and variant["id"] not in shared:
                 sku_index.setdefault(variant["sku"], (product_id, variant["id"]))
     selected: dict[str, dict[str, list[dict[str, str]]]] = {}
     order: list[str] = []

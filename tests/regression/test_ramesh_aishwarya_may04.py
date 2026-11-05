@@ -126,19 +126,13 @@ def test_demo_request_ca_trial_fields_are_not_ignored_and_confirmation_sends(mon
 
 
 def test_partner_dashboard_source_uses_filing_units_for_overdue_labels() -> None:
+    # The partner dashboard page was retired into the Insights Partner view (Phase 4). Its client rows keep the
+    # May 4 fixes: overdue work is counted in deadlines per client (not "clients"), and health is the stored
+    # score after the filing penalties (core/insights/metrics_partner.client_health).
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
-    src = (root / "ui" / "src" / "pages" / "PartnerDashboard.tsx").read_text(
-        encoding="utf-8"
-    )
-    assert "partnerDashboard.overdueFilings" in src
-    assert "overdue_filings" in src
-    assert "{overdueFilings} clients" not in src
-    # May 4 fix coerced health_score with Number(...). The May 6 fix kept that
-    # coercion but split it across lines so inactive companies (health_score
-    # === null) can render as N/A. Assert the field is still mapped AND the
-    # Number() coercion path still exists, without requiring the original
-    # contiguous substring.
-    assert "health_score:" in src
-    assert "Number(c.health_score" in src
+    src = (root / "core" / "insights" / "metrics_partner.py").read_text(encoding="utf-8")
+    assert '"overdue_deadlines": overdue.get(company_id, 0)' in src
+    assert '"health": client_health(' in src
+    assert not (root / "ui" / "src" / "pages" / "PartnerDashboard.tsx").exists()

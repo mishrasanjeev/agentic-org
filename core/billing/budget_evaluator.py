@@ -9,8 +9,10 @@ sent via the configured channel(s). Alerts are idempotent per period —
 we track ``last_triggered_at`` and skip if it was already triggered in
 the current window.
 
-Channels supported: ``email``, ``slack``, ``webhook``. Multiple channels
-can be set as a comma-separated list.
+Channel: ``email`` (the tenant's own recipient). ``slack`` and ``webhook``
+are logged as unsupported and not sent: they posted to one platform-wide URL
+for every tenant. The Insights ``cost.budget`` alert shows the same breach in
+the app.
 """
 
 from __future__ import annotations
@@ -182,40 +184,28 @@ async def _send_notification(
                     continue
                 # core.email.send_email is synchronous; wrap the HTML
                 # body since that's the signature it expects.
-                html_body = f"<h2>{subject}</h2><p>{body}</p>"
+                # The budget's name is typed by a tenant user: escape it.
+                from html import escape
+
+                html_body = f"<h2>{escape(subject)}</h2><p>{escape(body)}</p>"
                 await asyncio.to_thread(
                     send_email,
                     to,
                     subject,
                     html_body,
                 )
-            elif channel == "slack":
-                import os
-
-                webhook = os.getenv("SLACK_BUDGET_WEBHOOK_URL", "")
-                if webhook:
-                    import httpx
-
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        await client.post(webhook, json={"text": body})
-            elif channel == "webhook":
-                import os
-
-                url = os.getenv("BUDGET_ALERT_WEBHOOK_URL", "")
-                if url:
-                    import httpx
-
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        await client.post(
-                            url,
-                            json={
-                                "alert_name": alert.name,
-                                "tenant_id": str(alert.tenant_id),
-                                "spend_usd": float(spend),
-                                "threshold_usd": float(alert.threshold_usd),
-                                "percent": percent,
-                            },
-                        )
+            else:
+                # ``slack`` and ``webhook`` once posted to one platform-wide URL
+                # (SLACK_BUDGET_WEBHOOK_URL, BUDGET_ALERT_WEBHOOK_URL) for every
+                # tenant's budget, so a tenant's spend reached the platform's
+                # channel. The budgets API offers email only; the in-app Insights
+                # alert covers the rest.
+                logger.warning(
+                    "budget_alert_channel_unsupported",
+                    alert_id=str(alert.id),
+                    tenant_id=str(alert.tenant_id),
+                    channel=channel[:20],
+                )
         # enterprise-gate: broad-except-ok reason=budget-notification-failure-logged-and-alert-evaluation-continues
         except Exception:
             logger.exception("budget_alert_notify_failed", channel=channel)

@@ -42,7 +42,30 @@ TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000b1"))
 COMPANY = str(uuid.UUID("00000000-0000-4000-8000-0000000000c2"))
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROLES = ("admin", "cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant")
-EXPECTED_VIEWS: dict[str, set[str]] = {"admin": {"executive", "finance"}, "cfo": {"finance"}}
+EXPECTED_VIEWS: dict[str, set[str]] = {
+    "admin": {
+        "executive",
+        "finance",
+        "operations",
+        "hr",
+        "marketing",
+        "commerce",
+        "compliance",
+        "engineering",
+        "back_office",
+        "domain",
+        "partner",
+    },
+    "cfo": {"finance", "partner"},
+    "coo": {"operations", "partner"},
+    "chro": {"hr"},
+    "cmo": {"marketing"},
+    "merchant": {"commerce"},
+    "auditor": {"compliance", "partner"},
+    "developer": {"engineering"},
+    "domain_lead": {"domain"},
+    "analyst": {"domain"},
+}
 
 
 # ---------------------------------------------------------------- fakes
@@ -87,6 +110,10 @@ class FakeSession:
 
     def add(self, obj) -> None:
         self.added.append(obj)
+
+    async def get(self, _model, _key):
+        # No saved governance settings: PII masking is on (the default).
+        return None
 
 
 @pytest.fixture(scope="module")
@@ -158,7 +185,7 @@ def test_role_matrix_for_views(app, role: str) -> None:
         status = client.get("/api/v1/insights/status")
         assert status.status_code == 200, status.text
         assert set(status.json()["views"]) == EXPECTED_VIEWS.get(role, set())
-        for view in ("executive", "finance"):
+        for view in registry.VIEWS:
             resp = client.get(f"/api/v1/insights/views/{view}")
             expected = 200 if view in EXPECTED_VIEWS.get(role, set()) else 403
             assert resp.status_code == expected, (role, view, resp.status_code, resp.text)
@@ -212,7 +239,7 @@ def test_a_caller_without_insights_read_is_refused_by_the_scope_family(app) -> N
 
 def test_unknown_view_and_metric_are_not_found(app) -> None:
     with _role_client(app, "admin") as client:
-        assert client.get("/api/v1/insights/views/operations").status_code == 404
+        assert client.get("/api/v1/insights/views/sales").status_code == 404
         assert client.get("/api/v1/insights/metrics/runs.nothing").status_code == 404
 
 
@@ -298,7 +325,7 @@ def _assert_no_invented_numbers(metric: dict[str, Any]) -> None:
     assert metric.get("compare_value") is None
 
 
-@pytest.mark.parametrize("view", ("executive", "finance"))
+@pytest.mark.parametrize("view", tuple(registry.VIEWS))
 def test_an_empty_tenant_shows_no_numbers(app, view: str) -> None:
     with _role_client(app, "admin") as client:
         resp = client.get(f"/api/v1/insights/views/{view}")
@@ -874,11 +901,13 @@ def test_budget_state() -> None:
 def test_insights_family_rate_classes_and_role_scopes_are_pinned() -> None:
     from api.route_enforcement import GRANTABLE_ROUTE_SCOPES, RATE_LIMIT_CLASSES, SCOPE_FAMILIES, required_scopes_for
 
-    assert SCOPE_FAMILIES["insights"] == ("insights:read", "agenticorg:admin")
+    assert SCOPE_FAMILIES["insights"] == ("insights:read", "insights:write")
     assert RATE_LIMIT_CLASSES["reporting-read"] == (300, 60)
     assert RATE_LIMIT_CLASSES["reporting-export"] == (30, 60)
     assert required_scopes_for("insights.read", "GET") == ("insights:read",)
-    assert "insights:read" in GRANTABLE_ROUTE_SCOPES and "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
+    assert required_scopes_for("insights.read", "POST") == ("insights:write",)
+    assert {"insights:read", "insights:write"} <= GRANTABLE_ROUTE_SCOPES
+    assert "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
     holders = {role for role, scopes in ROLE_SCOPES.items() if "insights:read" in scopes}
     assert holders == {"cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant"}
     assert ROLE_SCOPES["admin"] == ["agenticorg:admin"]

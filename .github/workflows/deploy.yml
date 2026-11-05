@@ -189,6 +189,18 @@ jobs:
             ui/playwright-report/text-encoding/
           if-no-files-found: warn
           retention-days: 7
+      - name: Replay the Insights journeys and accessibility scans on the local production build
+        run: npx playwright test --config=e2e/insights.config.ts
+      - name: Upload Insights browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: insights-browser-evidence
+          path: |
+            ui/test-results/insights/
+            ui/playwright-report/insights/
+          if-no-files-found: warn
+          retention-days: 7
 
   frontend-quality:
     needs: lint

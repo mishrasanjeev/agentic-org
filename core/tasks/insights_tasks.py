@@ -258,7 +258,11 @@ def rollup_closed_days() -> dict[str, Any]:
     off = _off()
     if off is not None:
         return off
-    return run_async(_sweep("rollup_closed_days", _roll_closed))
+    result = run_async(_sweep("rollup_closed_days", _roll_closed))
+    from core.insights.telemetry import rollup_last_success
+
+    rollup_last_success.set_to_current_time()
+    return result
 
 
 @app.task(name="core.tasks.insights_tasks.reconcile_yesterday")
@@ -268,3 +272,81 @@ def reconcile_yesterday() -> dict[str, Any]:
     if off is not None:
         return off
     return run_async(_sweep("reconcile_yesterday", _reconcile))
+
+
+async def _evaluate_alerts(tenant: TenantClock, now: datetime) -> int:
+    """Open, refresh and resolve the tenant's alerts; email new ``act`` alerts once. Answers alerts opened."""
+    from core.database import get_tenant_session
+    from core.insights import alerts
+    from core.insights.metrics import MetricContext, apply_statement_timeout, local_today
+    from core.insights.reporting_settings import load_reporting_settings
+
+    async with get_tenant_session(tenant.tenant_id) as session:
+        await apply_statement_timeout(session)
+        reporting = await load_reporting_settings(session, tenant.tenant_id)
+        current, previous = alerts.window(local_today(reporting.zone(), now))
+        ctx = MetricContext(
+            session=session,
+            tenant_id=tenant.tenant_id,
+            reporting=reporting,
+            period=current,
+            compare=previous,
+            now=now,
+        )
+        candidates = await alerts.evaluate(ctx)
+        applied = await alerts.apply(session, tenant.tenant_id, candidates, now)
+    if applied.to_notify:
+        await alerts.notify(tenant.tenant_id, applied.to_notify, now)
+    return applied.opened
+
+
+@app.task(name="core.tasks.insights_tasks.evaluate_alerts")
+def evaluate_alerts() -> dict[str, Any]:
+    """Every 15 minutes: each enabled tenant's Insights alerts (``days`` counts alerts opened)."""
+    off = _off()
+    if off is not None:
+        return off
+    return run_async(_sweep("evaluate_alerts", _evaluate_alerts))
+
+
+@app.task(name="core.tasks.insights_tasks.build_export", acks_late=True)
+def build_export(tenant_id: str, export_id: str) -> dict[str, Any]:
+    """One background export (core/insights/export_jobs.py); the job records why when it cannot be made."""
+    from core.insights import export_jobs
+
+    status = run_async(export_jobs.build(uuid.UUID(tenant_id), uuid.UUID(export_id)))
+    return {"export_id": export_id, "status": status}
+
+
+async def _expire_exports() -> dict[str, Any]:
+    from core.insights import export_jobs
+
+    now = _now()
+    totals = {"tenants": 0, "expired": 0, "failed": 0}
+    # Every tenant, Insights on or off: a file is deleted on time even after Insights was turned off.
+    for tenant in await _tenants():
+        try:
+            totals["expired"] += await export_jobs.expire(tenant.tenant_id, now)
+            totals["tenants"] += 1
+        # enterprise-gate: broad-except-ok reason=one-tenants-export-cleanup-failure-is-logged-the-sweep-continues
+        except Exception as exc:
+            totals["failed"] += 1
+            logger.warning("insights_export_expiry_failed", error_type=type(exc).__name__)
+    return totals
+
+
+@app.task(name="core.tasks.insights_tasks.expire_exports")
+def expire_exports() -> dict[str, Any]:
+    """Daily: delete Insights export files past their seven days and report lost builds as failed."""
+    return run_async(_expire_exports())
+
+
+@app.task(name="core.tasks.insights_tasks.compute_benchmarks")
+def compute_benchmarks() -> dict[str, Any]:
+    """Daily at 04:10 UTC: publish the opted-in cohort figures for the last 30 complete days."""
+    off = _off()
+    if off is not None:
+        return off
+    from core.insights import benchmarks
+
+    return run_async(benchmarks.compute(_now()))

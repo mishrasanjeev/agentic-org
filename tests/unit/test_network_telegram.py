@@ -142,6 +142,8 @@ async def test_the_shopper_searches_opens_a_checkout_and_never_binds_a_payment_t
         "update_checkout",
         "choose_pickup",
         "get_payment_link",
+        "avoid_shop",
+        "allow_shop",
     }
     # The chosen shop is in the system prompt; the remembered turn holds only the texts.
     assert "slug tea-corner" in model.calls[0][0].content

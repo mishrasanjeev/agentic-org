@@ -569,9 +569,7 @@ npx agenticorg-mcp-server`}</code></pre>
           </table>
           <p className="text-xs text-muted-foreground">
             Outbound webhook delivery (AgenticOrg → your endpoint on
-            agent events) is planned — track this feature in the
-            <span className="font-medium"> /dashboard/observatory </span>
-            subscriptions panel when available.
+            agent events) is planned.
           </p>
         </CardContent>
       </Card>

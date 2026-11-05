@@ -194,7 +194,7 @@ async def query_audit(
 # ``details.enforcement_action`` set to the specific reason for denial
 # (scope_denied, rate_limited, idempotency_replay, etc.). This endpoint
 # projects those rows into the shape ``ui/src/pages/EnforceAuditLog.tsx``
-# and ``ui/src/pages/ScopeDashboard.tsx`` consume.
+# and ``ui/src/components/EnforcementSummary.tsx`` consume.
 #
 # Authz: same shape as ``GET /audit`` — tenant-scoped via ``get_current_tenant``,
 # RBAC domain filtering for non-auditor roles. Enforcement audit is part of the

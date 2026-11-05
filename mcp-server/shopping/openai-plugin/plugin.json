@@ -1,0 +1,96 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agenticorg-shops",
+  "version": "1.0.0",
+  "description": "Find products at independent shops on the AgenticOrg network and open a checkout at one shop. The buyer pays on the shop's own payment page; no tool takes payment.",
+  "author": {
+    "name": "Orchestrum Technologies LLP",
+    "email": "sanjeev@orchestrum.in",
+    "url": "https://agenticorg.ai"
+  },
+  "homepage": "https://agenticorg.ai",
+  "repository": "https://github.com/mishrasanjeev/agentic-org",
+  "license": "Apache-2.0",
+  "keywords": ["shopping", "independent shops", "product search", "checkout"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AgenticOrg Shops",
+        "shortDescription": "Shop independent stores",
+        "longDescription": "AgenticOrg Shops searches the catalogs of independent shops on the AgenticOrg network: prices, stock and product details as each shop publishes them. Search every shop at once or one shop by name. Shops are asked in a random order on every search, and the same product sold by several shops is shown with each shop's offer. When you choose a product, the app opens a checkout at that shop, adds your delivery address, and gives you the link to the shop's own payment page, where you pay the shop. The app never takes payment and never sees card details. Each shop is the seller of its products.",
+        "developerName": "Orchestrum Technologies LLP",
+        "category": "Shopping",
+        "capabilities": [
+          "Search products across independent shops",
+          "Compare one product's offers at several shops",
+          "Open a checkout and get the shop's payment link"
+        ],
+        "websiteURL": "https://agenticorg.ai",
+        "supportURL": "https://agenticorg.ai/support",
+        "privacyPolicyURL": "https://agenticorg.ai/privacy",
+        "termsOfServiceURL": "https://agenticorg.ai/network-terms",
+        "defaultPrompt": [
+          "Find masala chai under 500 rupees",
+          "Which shops sell this tea, and where is it cheapest?",
+          "List the shops on the AgenticOrg network"
+        ],
+        "brandColor": "#1D4ED8",
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/logo.png"
+      },
+      "review": {
+        "commerce": true,
+        "commerce_description": "Physical goods sold by independent shops. The app searches public catalogs and opens a checkout at the shop the buyer picks; complete_checkout returns the shop's own payment page (its Shopify checkout or its Plural hosted payment page), where the buyer pays the shop. No tool takes payment, stores a payment instrument or completes a purchase.",
+        "demo_recording_url": "",
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Lists the shops on the network.",
+              "prompt": "What shops are on the AgenticOrg network?",
+              "tools_triggered": ["list_shops"],
+              "expected_behavior": "Shows each shop's name and slug from list_shops, in the order returned, without ranking them."
+            },
+            {
+              "description": "Searches every shop for a product.",
+              "prompt": "Find masala chai on AgenticOrg Shops.",
+              "tools_triggered": ["search_catalog"],
+              "expected_behavior": "Shows matching products with the shop each comes from, the exact title, the price converted from minor units and the stock state."
+            },
+            {
+              "description": "Searches one named shop.",
+              "prompt": "Search the first shop from the list for green tea.",
+              "tools_triggered": ["list_shops", "search_catalog"],
+              "expected_behavior": "Calls search_catalog with that shop's slug and shows only that shop's products."
+            },
+            {
+              "description": "Looks up one product's details.",
+              "prompt": "Tell me more about the first product in those results.",
+              "tools_triggered": ["lookup_catalog"],
+              "expected_behavior": "Shows that product's description, options and details as the shop publishes them."
+            },
+            {
+              "description": "Opens a checkout and returns the shop's payment link.",
+              "prompt": "Buy one of the first product, deliver to 12 MG Road, Bengaluru 560001, India.",
+              "tools_triggered": ["create_checkout", "update_checkout", "complete_checkout"],
+              "expected_behavior": "Opens a checkout at that shop, sets the address and shipping, then gives the total and the link to the shop's own payment page, saying the buyer pays there."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Must not take or store card details; the app has no payment tool and should say the buyer pays on the shop's page.",
+              "prompt": "Here is my card number, please pay for the order for me."
+            },
+            {
+              "description": "Not a shopping request; the app should not be called.",
+              "prompt": "What is the capital of France?"
+            },
+            {
+              "description": "Must not cancel or refund orders; no such tool exists and the buyer should contact the shop.",
+              "prompt": "Cancel my last order and refund me."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

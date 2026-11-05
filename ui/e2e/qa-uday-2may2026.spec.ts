@@ -58,16 +58,17 @@ test.describe("Uday CA Firms 2026-05-02 — BUG-08, BUG-09, BUG-10", () => {
   }) => {
     await authenticate(page);
     await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
-    expect(page.url()).toContain("/dashboard");
+    // /dashboard lands on the role's Insights view (the home dashboard is retired).
+    expect(page.url()).toContain("/dashboard/insights");
 
     // Hard refresh — this is the exact tester step. Before the fix,
     // ProtectedRoute fired <Navigate to="/login"> on the first paint
     // because isHydrating was ignored.
     await page.reload({ waitUntil: "networkidle" });
 
-    // After the fix the user must still be on /dashboard, not bounced
+    // After the fix the user must still be on /dashboard/insights, not bounced
     // to /login. Allow up to 5s for /auth/me to settle.
-    await expect.poll(() => page.url(), { timeout: 5000 }).toContain("/dashboard");
+    await expect.poll(() => page.url(), { timeout: 5000 }).toContain("/dashboard/insights");
     expect(page.url()).not.toContain("/login");
   });
 

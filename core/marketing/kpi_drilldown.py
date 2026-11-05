@@ -63,18 +63,18 @@ CTA_LABELS = {
 }
 
 CTA_PATHS = {
-    "none": "/dashboard/cmo",
+    "none": "/dashboard/marketing-ops",
     "configure_required_connector": "/dashboard/connectors",
     "fix_required_mapping": "/dashboard/connectors",
     "complete_backfill": "/dashboard/connectors",
     "provide_kpi_source_data": "/dashboard/connectors",
     "refresh_source_data": "/dashboard/connectors",
-    "review_degraded_kpi_inputs": "/dashboard/cmo?panel=kpi-lineage",
-    "resolve_spend_reconciliation": "/dashboard/cmo?panel=reconciliation",
-    "review_campaign_attribution_mapping": "/dashboard/cmo?panel=reconciliation",
-    "review_web_to_crm_lead_mapping": "/dashboard/cmo?panel=reconciliation",
-    "resolve_reconciliation": "/dashboard/cmo?panel=reconciliation",
-    "review_kpi_readiness": "/dashboard/cmo?panel=kpi-lineage",
+    "review_degraded_kpi_inputs": "/dashboard/marketing-ops?panel=kpi-lineage",
+    "resolve_spend_reconciliation": "/dashboard/marketing-ops?panel=reconciliation",
+    "review_campaign_attribution_mapping": "/dashboard/marketing-ops?panel=reconciliation",
+    "review_web_to_crm_lead_mapping": "/dashboard/marketing-ops?panel=reconciliation",
+    "resolve_reconciliation": "/dashboard/marketing-ops?panel=reconciliation",
+    "review_kpi_readiness": "/dashboard/marketing-ops?panel=kpi-lineage",
     "connect_ltv_source": "/dashboard/connectors",
     "connect_real_marketing_sources": "/dashboard/connectors",
 }
@@ -539,7 +539,7 @@ def _cta(value: Any) -> dict[str, str]:
     return {
         "action_key": key,
         "label": CTA_LABELS.get(key, key.replace("_", " ").title()),
-        "path": CTA_PATHS.get(key, "/dashboard/cmo"),
+        "path": CTA_PATHS.get(key, "/dashboard/marketing-ops"),
     }
 
 

@@ -20,6 +20,30 @@ TENANT = uuid.uuid4()
 APP_TSX = Path("ui/src/App.tsx").read_text(encoding="utf-8")
 ROLES_TS = Path("ui/src/lib/roles.ts").read_text(encoding="utf-8")
 UI_ROUTES = set(re.findall(r'path="(/dashboard/[^"]*)"', APP_TSX))
+INSIGHTS_METRICS_TS = Path("ui/src/lib/insights/metrics.ts").read_text(encoding="utf-8")
+
+
+def _route_pattern(route: str) -> re.Pattern[str]:
+    """A route path as a regex: ``:name`` is one segment, ``:name?`` an optional one."""
+    parts = []
+    for segment in route.strip("/").split("/"):
+        if segment.startswith(":") and segment.endswith("?"):
+            parts.append("(?:/[^/]+)?")
+        elif segment.startswith(":"):
+            parts.append("/[^/]+")
+        else:
+            parts.append("/" + re.escape(segment))
+    return re.compile("^" + "".join(parts) + "$")
+
+
+def route_for(path: str) -> str | None:
+    """The declared route that serves ``path`` (a literal route first, then a parameterised one)."""
+    if path in UI_ROUTES:
+        return path
+    for route in sorted(UI_ROUTES):
+        if ":" in route and _route_pattern(route).match(path):
+            return route
+    return None
 
 
 def _role_lists() -> dict[str, set[str]]:
@@ -27,6 +51,10 @@ def _role_lists() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for name, body in re.findall(r"export const (\w+_ROLES): readonly string\[\] = \[([^\]]*)\];", ROLES_TS):
         out[name] = set(re.findall(r'"([^"]+)"', body))
+    # The Insights routes share INSIGHTS_ROLES (ui/src/lib/insights/metrics.ts).
+    match = re.search(r"export const INSIGHTS_ROLES: readonly string\[\] = \[([^\]]*)\];", INSIGHTS_METRICS_TS)
+    if match:
+        out["INSIGHTS_ROLES"] = set(re.findall(r'"([^"]+)"', match.group(1)))
     return out
 
 
@@ -39,6 +67,8 @@ def route_guards() -> dict[str, set[str] | None]:
         guard = guard.strip()
         if not guard:
             guards[path] = None
+        elif guard.startswith("[...") and guard.endswith("]"):
+            guards[path] = named[guard[4:-1]]
         elif guard.startswith("["):
             guards[path] = set(re.findall(r'"([^"]+)"', guard))
         else:
@@ -56,7 +86,7 @@ class TestDefinitions:
             for tab in bench.tabs:
                 assert set(tab.roles) <= set(definitions.ALL_ROLES)
                 assert tab.path.startswith("/dashboard/")
-                assert tab.path in UI_ROUTES or tab.path.startswith("/dashboard/workbench/"), tab.path
+                assert route_for(tab.path) or tab.path.startswith("/dashboard/workbench/"), tab.path
 
     def test_a_tab_names_no_role_its_page_would_turn_away(self):
         guards = route_guards()
@@ -64,7 +94,7 @@ class TestDefinitions:
             for tab in bench.tabs:
                 if tab.path.startswith("/dashboard/workbench/"):
                     continue
-                guard = guards.get(tab.path)
+                guard = guards.get(route_for(tab.path) or tab.path)
                 if guard is None:
                     continue
                 shown_to = set(tab.roles) if tab.roles else set(definitions.ALL_ROLES)

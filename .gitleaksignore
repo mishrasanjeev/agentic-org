@@ -119,3 +119,6 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 # not a credential. Later commits build it at run time. Baselined by fingerprint.
 0c7485360824a56a434094b9972814a997afab02:tests/unit/test_catalog_upload_details.py:jwt:191
 85f3caadc77bdafc0cb2fff6720ef033ff1b5b6d:tests/unit/test_catalog_upload_details.py:jwt:237
+# Insights runtime counter unit test: an invented idempotency key (an invoice label) the recorder must
+# store only as a digest, not a credential. Later commits build it at run time. Baselined by fingerprint.
+d76767ca976394726050709f35670bde76692bf2:tests/unit/test_insights_runtime_counters.py:generic-api-key:50

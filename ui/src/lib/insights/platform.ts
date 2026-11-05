@@ -42,10 +42,26 @@ export interface PlatformTotals {
   cost_usd: number;
 }
 
+/** The dashboard's own operations in the range: export jobs by status and late rollups. */
+export interface PlatformOperations {
+  exports: { queued: number; running: number; ready: number; failed: number; expired: number };
+  /** Failed over finished (ready, failed or expired) jobs, 0-1; null when none finished. */
+  export_failure_rate: number | null;
+  /** Minutes since the oldest job still queued or running was made; null when none is open. */
+  oldest_open_minutes: number | null;
+  /** Tenants whose newest rollup is older than ``late_after_hours``. */
+  tenants_late: number;
+  max_lag_hours: number | null;
+  late_after_hours: number;
+}
+
 export interface PlatformSummary {
   period: PlatformPeriod;
   totals: PlatformTotals;
   series: PlatformDay[];
+  operations: PlatformOperations;
+  /** Organisations that opted in to benchmarks, and the cohort floor (a count only). */
+  benchmarks: { opted_in: number; min_tenants: number };
   reconciled_gate_nights: number;
 }
 
@@ -124,10 +140,34 @@ function gate(v: unknown): number {
   return n !== null && n > 0 ? n : DEFAULT_GATE_NIGHTS;
 }
 
+function normaliseOperations(v: unknown): PlatformOperations {
+  const o = obj(v);
+  const e = obj(o.exports);
+  return {
+    exports: {
+      queued: num(e.queued),
+      running: num(e.running),
+      ready: num(e.ready),
+      failed: num(e.failed),
+      expired: num(e.expired),
+    },
+    export_failure_rate: numOrNull(o.export_failure_rate),
+    oldest_open_minutes: numOrNull(o.oldest_open_minutes),
+    tenants_late: num(o.tenants_late),
+    max_lag_hours: numOrNull(o.max_lag_hours),
+    late_after_hours: toFiniteNumber(o.late_after_hours) ?? 2,
+  };
+}
+
 export function normaliseSummary(data: unknown): PlatformSummary {
   const raw = obj(data);
   const t = obj(raw.totals);
   return {
+    operations: normaliseOperations(raw.operations),
+    benchmarks: {
+      opted_in: num(obj(raw.benchmarks).opted_in),
+      min_tenants: toFiniteNumber(obj(raw.benchmarks).min_tenants) ?? 20,
+    },
     period: normalisePeriod(raw.period),
     totals: {
       tenants_active: num(t.tenants_active),
@@ -193,6 +233,18 @@ export function normalisePosture(data: unknown): PlatformPosture {
 }
 
 export const platformApi = {
+  /** The daily figures or the tenant table as a file (CSV, XLSX or JSON); the server audits the export. */
+  async exportFile(
+    dataset: "daily" | "tenants",
+    format: "csv" | "xlsx" | "json" | "parquet",
+    range: PlatformPeriod,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const { data } = await api.get("/platform/insights/export", {
+      params: { dataset, format, from: range.from, to: range.to },
+      responseType: "blob",
+    });
+    return { blob: data as Blob, filename: `platform-${dataset}-${range.from}-${range.to}.${format}` };
+  },
   async summary(range: PlatformPeriod): Promise<PlatformSummary> {
     const { data } = await api.get("/platform/insights/summary", { params: { from: range.from, to: range.to } });
     return normaliseSummary(data);

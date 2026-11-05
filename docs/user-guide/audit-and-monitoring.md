@@ -1,6 +1,6 @@
 ## What evidence you should inspect
 
-Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observability**, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Insights** run pages, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
 
 ![Illustrative audit workspace](/screenshots/audit.webp)
 
@@ -20,7 +20,7 @@ Do not infer that an absent event means no action occurred. Confirm the view's s
 
 ## Understand screen limits
 
-Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
+The **Audit Log** and, for administrators and auditors, the Insights **Security and audit** explorer read audit history (the Observatory screen is retired; its address opens one of these). Neither is an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
 
 In a tenant that keeps spend rate cards, commitments, invoices, reconciliations or spend jobs, the Audit Log hides those audit rows from every reader who is not a human administrator or auditor, including domain roles and machine credentials, even after spend intelligence is turned off. This is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, on by default; `false` shows them to every reader as before. Where the deployment turns on the tamper-evident audit chain (`AGENTICORG_AUDIT_CHAIN_ENABLED`, off by default), audit rows are linked into a hash chain, and a reader with audit access can read the chain status and verify the links through `GET /api/v1/audit/chain` and `GET /api/v1/audit/chain/verify`.
 

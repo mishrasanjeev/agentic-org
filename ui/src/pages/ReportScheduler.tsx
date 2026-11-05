@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router";
+import { useOptionalRole } from "@/contexts/AuthContext";
+import { ROLE_VIEWS } from "@/lib/insights/metrics";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 // SEC-002 (PR-F): direct fetch() calls (instead of the global axios
 // client) need to read the agenticorg_csrf cookie + echo it as the
@@ -36,36 +40,82 @@ interface ReportSchedule {
 /* ── Constants ─────────────────────────────────────────────────────── */
 
 const REPORT_TYPES = [
-  { value: "cfo_daily", label: "CFO Daily Briefing" },
-  { value: "cmo_weekly", label: "CMO Weekly Report" },
-  { value: "pnl_report", label: "P&L Monthly" },
-  { value: "aging_report", label: "AR/AP Aging" },
-  { value: "campaign_report", label: "Campaign Performance" },
+  { value: "cfo_daily", labelKey: "reportSchedules.reportTypes.cfo_daily" },
+  { value: "cmo_weekly", labelKey: "reportSchedules.reportTypes.cmo_weekly" },
+  { value: "pnl_report", labelKey: "reportSchedules.reportTypes.pnl_report" },
+  { value: "aging_report", labelKey: "reportSchedules.reportTypes.aging_report" },
+  { value: "campaign_report", labelKey: "reportSchedules.reportTypes.campaign_report" },
+  { value: "insights_view", labelKey: "reportSchedules.reportTypes.insights_view" },
+  { value: "insights_finance_pack", labelKey: "reportSchedules.reportTypes.insights_finance_pack" },
+  { value: "insights_evidence_pack", labelKey: "reportSchedules.reportTypes.insights_evidence_pack" },
 ] as const;
+
+// Mirrors api/v1/report_schedules.py _REPORT_TYPES_BY_ROLE (administrators may schedule every type); the server
+// also checks the Insights view against the views the role may read.
+const TYPES_BY_ROLE: Record<string, readonly string[]> = {
+  cfo: ["cfo_daily", "aging_report", "pnl_report", "insights_view", "insights_finance_pack"],
+  cmo: ["cmo_weekly", "campaign_report", "insights_view"],
+  chro: ["insights_view"],
+  coo: ["insights_view"],
+};
+
+const INSIGHTS_PERIODS = [
+  { value: "last_7_days", labelKey: "reportSchedules.periods.last_7_days" },
+  { value: "last_30_days", labelKey: "reportSchedules.periods.last_30_days" },
+  { value: "last_week", labelKey: "reportSchedules.periods.last_week" },
+  { value: "last_month", labelKey: "reportSchedules.periods.last_month" },
+  { value: "month_to_date", labelKey: "reportSchedules.periods.month_to_date" },
+] as const;
+
+// Insights view names, shared with the Insights tabs.
+const VIEW_LABEL_KEYS: Record<string, string> = {
+  executive: "insights.tabs.executive",
+  finance: "insights.tabs.finance",
+  operations: "insights.tabs.operations",
+  hr: "insights.tabs.hr",
+  marketing: "insights.tabs.marketing",
+  commerce: "insights.tabs.commerce",
+  compliance: "insights.tabs.compliance",
+  engineering: "insights.tabs.engineering",
+};
+
+interface ScheduleRun {
+  id: string;
+  trigger: string;
+  status: string;
+  reason: string | null;
+  export_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+function isInsightsType(rt: string): boolean {
+  return rt.startsWith("insights_");
+}
 
 type FrequencyPreset = "daily" | "weekly" | "monthly";
 
-const FREQUENCY_PRESETS: { value: FrequencyPreset; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
+const FREQUENCY_PRESETS: { value: FrequencyPreset; labelKey: string }[] = [
+  { value: "daily", labelKey: "reportSchedules.frequencies.daily" },
+  { value: "weekly", labelKey: "reportSchedules.frequencies.weekly" },
+  { value: "monthly", labelKey: "reportSchedules.frequencies.monthly" },
 ];
 
 // Cron weekday convention: 0 or 7 = Sunday, 1 = Monday, ... 6 = Saturday.
 const DAYS_OF_WEEK = [
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-  { value: "0", label: "Sunday" },
+  { value: "1", labelKey: "reportSchedules.days.monday" },
+  { value: "2", labelKey: "reportSchedules.days.tuesday" },
+  { value: "3", labelKey: "reportSchedules.days.wednesday" },
+  { value: "4", labelKey: "reportSchedules.days.thursday" },
+  { value: "5", labelKey: "reportSchedules.days.friday" },
+  { value: "6", labelKey: "reportSchedules.days.saturday" },
+  { value: "0", labelKey: "reportSchedules.days.sunday" },
 ] as const;
 
 const FORMAT_OPTIONS = [
-  { value: "pdf", label: "PDF" },
-  { value: "excel", label: "Excel" },
-  { value: "both", label: "Both" },
+  { value: "pdf", labelKey: "reportSchedules.formats.pdf" },
+  { value: "excel", labelKey: "reportSchedules.formats.excel" },
+  { value: "both", labelKey: "reportSchedules.formats.both" },
 ] as const;
 
 const API_BASE = "/api/v1";
@@ -78,8 +128,14 @@ const WHATSAPP_RE = /^\+?[1-9]\d{7,14}$/;
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
-function reportTypeLabel(rt: string): string {
-  return REPORT_TYPES.find((t) => t.value === rt)?.label ?? rt;
+function reportTypeLabel(t: TFunction, rt: string, params?: Record<string, unknown>): string {
+  const typeKey = REPORT_TYPES.find((r) => r.value === rt)?.labelKey;
+  const label = typeKey ? t(typeKey) : rt;
+  const viewKey = typeof params?.view === "string" ? VIEW_LABEL_KEYS[params.view] : undefined;
+  const view = typeof params?.view === "string" ? (viewKey ? t(viewKey) : params.view) : null;
+  const periodKey = INSIGHTS_PERIODS.find((p) => p.value === params?.period)?.labelKey;
+  const period = periodKey ? t(periodKey) : undefined;
+  return [label, view, period?.toLowerCase()].filter(Boolean).join(" · ");
 }
 
 function formatDate(iso: string | null): string {
@@ -91,14 +147,14 @@ function formatDate(iso: string | null): string {
   }
 }
 
-function statusBadge(active: boolean) {
+function statusBadge(t: TFunction, active: boolean) {
   return active ? (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-      Active
+      {t("reportSchedules.active")}
     </span>
   ) : (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-      Paused
+      {t("reportSchedules.paused")}
     </span>
   );
 }
@@ -162,19 +218,20 @@ function parseCron(cron: string): {
 }
 
 function validateTarget(
+  t: TFunction,
   type: DeliveryChannel["type"],
   target: string,
 ): string | null {
-  const t = target.trim();
-  if (!t) return `${type} recipient is required`;
-  if (type === "email" && !EMAIL_RE.test(t)) {
-    return "Invalid email address (expected name@domain.tld)";
+  const value = target.trim();
+  if (!value) return t("reportSchedules.recipientRequired", { channel: t(`reportSchedules.channelNames.${type}`) });
+  if (type === "email" && !EMAIL_RE.test(value)) {
+    return t("reportSchedules.invalidEmail");
   }
-  if (type === "slack" && !SLACK_RE.test(t)) {
-    return "Invalid Slack channel — use C01ABC23DEF or #channel-name";
+  if (type === "slack" && !SLACK_RE.test(value)) {
+    return t("reportSchedules.invalidSlack");
   }
-  if (type === "whatsapp" && !WHATSAPP_RE.test(t)) {
-    return "Invalid WhatsApp number — use E.164 (e.g. +919876543210)";
+  if (type === "whatsapp" && !WHATSAPP_RE.test(value)) {
+    return t("reportSchedules.invalidWhatsapp");
   }
   return null;
 }
@@ -202,10 +259,7 @@ async function extractError(resp: Response): Promise<string> {
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function ReportScheduler() {
-  // Codex 2026-04-22 i18n tripwire: the page must surface through the
-  // language switcher. Individual strings are wrapped in follow-up PRs.
-  const { t } = useTranslation();
-  void t;
+  const { t, i18n } = useTranslation();
   const [schedules, setSchedules] = useState<ReportSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +285,51 @@ export default function ReportScheduler() {
   const [formWhatsappEnabled, setFormWhatsappEnabled] = useState(false);
   const [formWhatsappTarget, setFormWhatsappTarget] = useState("");
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+  const [formView, setFormView] = useState("executive");
+  const [formPeriod, setFormPeriod] = useState("last_7_days");
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  const [history, setHistory] = useState<ScheduleRun[] | null>(null);
+  const role = useOptionalRole();
+  const allowedTypes = REPORT_TYPES.filter((rt) => role === "admin" || (TYPES_BY_ROLE[role] ?? []).includes(rt.value));
+  const viewOptions = ROLE_VIEWS[role] ?? [];
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // "Schedule this view" on Insights opens the form here, weekly on Monday for last week.
+  useEffect(() => {
+    const type = searchParams.get("type");
+    if (!type || !isInsightsType(type)) return;
+    setEditingId(null);
+    setFormType(type);
+    const view = searchParams.get("view");
+    if (view) setFormView(view);
+    setFormPeriod(searchParams.get("period") || "last_week");
+    setFormFreq("weekly");
+    setFormDayOfWeek("1");
+    setFormTime("09:00");
+    setFormAdvanced(false);
+    setShowForm(true);
+    // The query stays until the form is saved or closed (resetForm): the page can mount again while the session
+    // loads, and a cleared query would then open an empty list instead of the prefilled form.
+  }, [searchParams]);
+
+  async function toggleHistory(id: string) {
+    if (historyFor === id) {
+      setHistoryFor(null);
+      setHistory(null);
+      return;
+    }
+    setHistoryFor(id);
+    setHistory(null);
+    try {
+      const resp = await fetch(`${API_BASE}/report-schedules/${id}/runs`, { credentials: "include" });
+      if (!resp.ok) throw new Error(await extractError(resp));
+      const data = (await resp.json()) as { runs?: ScheduleRun[] };
+      setHistory(Array.isArray(data.runs) ? data.runs : []);
+    } catch (err: unknown) {
+      setHistory([]);
+      setError(err instanceof Error ? err.message : t("reportSchedules.historyLoadFailed"));
+    }
+  }
 
   // TC_002 (Aishwarya 2026-04-21): a stale per-channel error that was
   // set on a previous submit persisted after the user unchecked the
@@ -280,12 +379,12 @@ export default function ReportScheduler() {
       setSchedules(data);
       setError(null);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to load schedules";
+      const msg = e instanceof Error ? e.message : i18n.t("reportSchedules.loadFailed");
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [i18n]);
 
   useEffect(() => {
     fetchSchedules();
@@ -299,28 +398,29 @@ export default function ReportScheduler() {
     const errors: Record<string, string> = {};
     const channels: DeliveryChannel[] = [];
     if (formEmailEnabled) {
-      const err = validateTarget("email", formEmailTarget);
+      const err = validateTarget(t, "email", formEmailTarget);
       if (err) errors.email = err;
       else channels.push({ type: "email", target: formEmailTarget.trim() });
     }
     if (formSlackEnabled) {
-      const err = validateTarget("slack", formSlackTarget);
+      const err = validateTarget(t, "slack", formSlackTarget);
       if (err) errors.slack = err;
       else channels.push({ type: "slack", target: formSlackTarget.trim() });
     }
     if (formWhatsappEnabled) {
-      const err = validateTarget("whatsapp", formWhatsappTarget);
+      const err = validateTarget(t, "whatsapp", formWhatsappTarget);
       if (err) errors.whatsapp = err;
       else channels.push({ type: "whatsapp", target: formWhatsappTarget.trim() });
     }
     if (channels.length === 0 && Object.keys(errors).length === 0) {
-      errors.channels = "At least one delivery channel is required";
+      errors.channels = t("reportSchedules.channelRequired");
     }
     return { channels, errors };
   }
 
   /* ── Reset form ── */
   function resetForm() {
+    if (searchParams.get("type")) setSearchParams({}, { replace: true });
     setFormType("cfo_daily");
     setFormFreq("daily");
     setFormTime("09:00");
@@ -336,6 +436,8 @@ export default function ReportScheduler() {
     setFormSlackTarget("");
     setFormWhatsappEnabled(false);
     setFormWhatsappTarget("");
+    setFormView("executive");
+    setFormPeriod("last_7_days");
     setEditingId(null);
     setShowForm(false);
     setFormFieldErrors({});
@@ -354,6 +456,8 @@ export default function ReportScheduler() {
     setFormCustomCron(parsed.advanced ? parsed.raw : "0 9 * * *");
     setFormFormat(s.format);
     setFormActive(s.is_active);
+    if (typeof s.params?.view === "string") setFormView(s.params.view);
+    if (typeof s.params?.period === "string") setFormPeriod(s.params.period);
 
     const email = s.delivery_channels.find((c) => c.type === "email");
     const slack = s.delivery_channels.find((c) => c.type === "slack");
@@ -378,7 +482,7 @@ export default function ReportScheduler() {
       ? formCustomCron.trim()
       : composeCron(formFreq, formTime, formDayOfWeek, formDayOfMonth);
     if (formAdvanced && cron.split(/\s+/).length !== 5) {
-      errors.cron = "Advanced cron must be a 5-field expression (min hour dom mon dow)";
+      errors.cron = t("reportSchedules.cronInvalid");
     }
     if (Object.keys(errors).length > 0) {
       setFormFieldErrors(errors);
@@ -388,12 +492,20 @@ export default function ReportScheduler() {
     setSubmitting(true);
 
     try {
+      const insights = isInsightsType(formType);
       const payload = {
         report_type: formType,
         cron_expression: cron,
         delivery_channels: channels,
-        format: formFormat,
+        // An Insights report's file type is fixed by its kind (the server sets it).
+        format: insights ? "pdf" : formFormat,
         is_active: formActive,
+        ...(insights
+          ? {
+              params:
+                formType === "insights_view" ? { view: formView, period: formPeriod } : { period: formPeriod },
+            }
+          : {}),
       };
       const csrf = readCsrf();
       const resp = editingId
@@ -423,7 +535,7 @@ export default function ReportScheduler() {
       resetForm();
       fetchSchedules();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : t("reportSchedules.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -431,7 +543,7 @@ export default function ReportScheduler() {
 
   /* ── Delete ── */
   async function handleDelete(id: string) {
-    if (!confirm("Delete this schedule?")) return;
+    if (!confirm(t("reportSchedules.confirmDelete"))) return;
     const csrf = readCsrf();
     setError(null);
     try {
@@ -440,9 +552,9 @@ export default function ReportScheduler() {
         credentials: "include",
         headers: csrf ? { "X-CSRF-Token": csrf } : {},
       });
-      if (!resp.ok) throw new Error(`Delete failed (HTTP ${resp.status})`);
+      if (!resp.ok) throw new Error(t("reportSchedules.deleteFailedStatus", { status: resp.status }));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      setError(err instanceof Error ? err.message : t("reportSchedules.deleteFailed"));
     }
     fetchSchedules();
   }
@@ -461,9 +573,9 @@ export default function ReportScheduler() {
         },
         body: JSON.stringify({ is_active: !s.is_active }),
       });
-      if (!resp.ok) throw new Error(`Update failed (HTTP ${resp.status})`);
+      if (!resp.ok) throw new Error(t("reportSchedules.updateFailedStatus", { status: resp.status }));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      setError(err instanceof Error ? err.message : t("reportSchedules.updateFailed"));
     }
     fetchSchedules();
   }
@@ -483,10 +595,10 @@ export default function ReportScheduler() {
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      alert(`Report triggered. Task ID: ${data.task_id}`);
+      alert(t("reportSchedules.runTriggered", { taskId: data.task_id }));
       fetchSchedules();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Run failed");
+      setError(err instanceof Error ? err.message : t("reportSchedules.runFailed"));
     } finally {
       setActionLoading(null);
     }
@@ -499,9 +611,9 @@ export default function ReportScheduler() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Report Schedules</h1>
+          <h1 className="text-2xl font-bold">{t("reportSchedules.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure automated report generation and delivery
+            {t("reportSchedules.subtitle")}
           </p>
         </div>
         <button
@@ -511,7 +623,7 @@ export default function ReportScheduler() {
           }}
           className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          + New Schedule
+          {t("reportSchedules.newSchedule")}
         </button>
       </div>
 
@@ -523,7 +635,7 @@ export default function ReportScheduler() {
             onClick={() => setError(null)}
             className="ml-2 underline"
           >
-            Dismiss
+            {t("reportSchedules.dismiss")}
           </button>
         </div>
       )}
@@ -532,13 +644,13 @@ export default function ReportScheduler() {
       {showForm && (
         <div className="mb-6 border rounded-lg p-5 bg-card">
           <h2 className="text-lg font-semibold mb-4">
-            {editingId ? "Edit Schedule" : "Create Schedule"}
+            {editingId ? t("reportSchedules.editSchedule") : t("reportSchedules.create")}
           </h2>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Report type */}
             <div>
               <label className="block text-sm font-medium mb-1" htmlFor="rs-report-type">
-                Report Type
+                {t("reportSchedules.reportType")}
               </label>
               <select
                 id="rs-report-type"
@@ -546,18 +658,62 @@ export default function ReportScheduler() {
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
               >
-                {REPORT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
+                {(allowedTypes.length ? allowedTypes : REPORT_TYPES).map((rt) => (
+                  <option key={rt.value} value={rt.value}>
+                    {t(rt.labelKey)}
                   </option>
                 ))}
               </select>
             </div>
 
+            {isInsightsType(formType) && (
+              <>
+                {formType === "insights_view" && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1" htmlFor="rs-insights-view">
+                      {t("reportSchedules.insightsView")}
+                    </label>
+                    <select
+                      id="rs-insights-view"
+                      value={formView}
+                      onChange={(e) => setFormView(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                    >
+                      {(viewOptions.length ? viewOptions : Object.keys(VIEW_LABEL_KEYS)).map((v) => (
+                        <option key={v} value={v}>
+                          {VIEW_LABEL_KEYS[v] ? t(VIEW_LABEL_KEYS[v]) : v}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1" htmlFor="rs-insights-period">
+                    {t("reportSchedules.periodCovered")}
+                  </label>
+                  <select
+                    id="rs-insights-period"
+                    value={formPeriod}
+                    onChange={(e) => setFormPeriod(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  >
+                    {INSIGHTS_PERIODS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {t(p.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t("reportSchedules.insightsDeliveryNote")}
+                  </p>
+                </div>
+              </>
+            )}
+
             {/* Frequency */}
             <div>
               <label className="block text-sm font-medium mb-1" htmlFor="rs-frequency">
-                Frequency
+                {t("reportSchedules.frequency")}
               </label>
               <select
                 id="rs-frequency"
@@ -568,7 +724,7 @@ export default function ReportScheduler() {
               >
                 {FREQUENCY_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>
-                    {p.label}
+                    {t(p.labelKey)}
                   </option>
                 ))}
               </select>
@@ -577,7 +733,7 @@ export default function ReportScheduler() {
             {/* Execution time (HH:MM) — visible for every frequency */}
             <div>
               <label className="block text-sm font-medium mb-1" htmlFor="rs-time">
-                Execution Time (UTC)
+                {t("reportSchedules.executionTime")}
               </label>
               <input
                 id="rs-time"
@@ -593,7 +749,7 @@ export default function ReportScheduler() {
             {formFreq === "weekly" && !formAdvanced && (
               <div>
                 <label className="block text-sm font-medium mb-1" htmlFor="rs-dow">
-                  Day of Week
+                  {t("reportSchedules.dayOfWeek")}
                 </label>
                 <select
                   id="rs-dow"
@@ -603,7 +759,7 @@ export default function ReportScheduler() {
                 >
                   {DAYS_OF_WEEK.map((d) => (
                     <option key={d.value} value={d.value}>
-                      {d.label}
+                      {t(d.labelKey)}
                     </option>
                   ))}
                 </select>
@@ -614,7 +770,7 @@ export default function ReportScheduler() {
             {formFreq === "monthly" && !formAdvanced && (
               <div>
                 <label className="block text-sm font-medium mb-1" htmlFor="rs-dom">
-                  Day of Month
+                  {t("reportSchedules.dayOfMonth")}
                 </label>
                 <input
                   id="rs-dom"
@@ -637,7 +793,7 @@ export default function ReportScheduler() {
                   onChange={(e) => setFormAdvanced(e.target.checked)}
                   className="rounded"
                 />
-                Advanced — write CRON expression directly
+                {t("reportSchedules.advancedToggle")}
               </label>
               {formAdvanced && (
                 <div className="mt-2">
@@ -645,13 +801,12 @@ export default function ReportScheduler() {
                     type="text"
                     value={formCustomCron}
                     onChange={(e) => setFormCustomCron(e.target.value)}
-                    placeholder="0 9 * * 1-5   (every weekday at 09:00 UTC)"
+                    placeholder={t("reportSchedules.cronPlaceholder")}
                     className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
-                    aria-label="Custom cron expression"
+                    aria-label={t("reportSchedules.cronAriaLabel")}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    5 fields: minute (0-59), hour (0-23), day-of-month (1-31),
-                    month (1-12), day-of-week (0-7).
+                    {t("reportSchedules.cronHelp")}
                   </p>
                   {formFieldErrors.cron && (
                     <p className="text-xs text-red-600 mt-1">{formFieldErrors.cron}</p>
@@ -661,9 +816,9 @@ export default function ReportScheduler() {
             </div>
 
             {/* Format */}
-            <div>
+            <div hidden={isInsightsType(formType)}>
               <label className="block text-sm font-medium mb-1" htmlFor="rs-format">
-                Output Format
+                {t("reportSchedules.outputFormat")}
               </label>
               <select
                 id="rs-format"
@@ -673,7 +828,7 @@ export default function ReportScheduler() {
               >
                 {FORMAT_OPTIONS.map((f) => (
                   <option key={f.value} value={f.value}>
-                    {f.label}
+                    {t(f.labelKey)}
                   </option>
                 ))}
               </select>
@@ -689,13 +844,13 @@ export default function ReportScheduler() {
                 className="rounded"
               />
               <label htmlFor="active-toggle" className="text-sm">
-                Schedule active
+                {t("reportSchedules.scheduleActive")}
               </label>
             </div>
 
             {/* Delivery channels */}
             <div className="sm:col-span-2 space-y-3">
-              <p className="text-sm font-medium">Delivery Channels</p>
+              <p className="text-sm font-medium">{t("reportSchedules.channels")}</p>
 
               {/* Email */}
               <div className="space-y-1">
@@ -708,7 +863,7 @@ export default function ReportScheduler() {
                     className="rounded"
                   />
                   <label htmlFor="ch-email" className="text-sm w-24">
-                    Email
+                    {t("reportSchedules.channelLabels.email")}
                   </label>
                   {formEmailEnabled && (
                     <input
@@ -742,7 +897,7 @@ export default function ReportScheduler() {
                   {formSlackEnabled && (
                     <input
                       type="text"
-                      placeholder="Channel ID (e.g. C01ABC23DEF) or #channel-name"
+                      placeholder={t("reportSchedules.slackPlaceholder")}
                       value={formSlackTarget}
                       onChange={(e) => setFormSlackTarget(e.target.value)}
                       className="flex-1 border rounded-lg px-3 py-1.5 text-sm bg-background"
@@ -796,14 +951,14 @@ export default function ReportScheduler() {
                 disabled={submitting}
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
               >
-                {submitting ? "Saving..." : editingId ? "Update Schedule" : "Create Schedule"}
+                {submitting ? t("reportSchedules.saving") : editingId ? t("reportSchedules.updateSchedule") : t("reportSchedules.create")}
               </button>
               <button
                 type="button"
                 onClick={resetForm}
                 className="px-4 py-2 rounded-lg border text-sm hover:bg-muted"
               >
-                Cancel
+                {t("reportSchedules.cancel")}
               </button>
             </div>
           </form>
@@ -813,12 +968,12 @@ export default function ReportScheduler() {
       {/* ── Schedule list ────────────────────────────────────────── */}
       {loading ? (
         <div className="text-center py-12 text-sm text-muted-foreground">
-          Loading schedules...
+          {t("reportSchedules.loading")}
         </div>
       ) : schedules.length === 0 ? (
         <div className="text-center py-12 border rounded-lg bg-card">
           <p className="text-muted-foreground">
-            No report schedules yet. Click "New Schedule" to get started.
+            {t("reportSchedules.empty")}
           </p>
         </div>
       ) : (
@@ -826,32 +981,33 @@ export default function ReportScheduler() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-muted/50 border-b">
-                <th className="text-left px-4 py-3 font-medium">Report</th>
+                <th className="text-left px-4 py-3 font-medium">{t("reportSchedules.columns.report")}</th>
                 <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">
-                  Schedule
+                  {t("reportSchedules.columns.schedule")}
                 </th>
                 <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                  Next Run
+                  {t("reportSchedules.next")}
                 </th>
                 <th className="text-left px-4 py-3 font-medium hidden md:table-cell">
-                  Last Run
+                  {t("reportSchedules.columns.lastRun")}
                 </th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
+                <th className="text-left px-4 py-3 font-medium">{t("reportSchedules.columns.status")}</th>
                 <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">
-                  Format
+                  {t("reportSchedules.format")}
                 </th>
-                <th className="text-right px-4 py-3 font-medium">Actions</th>
+                <th className="text-right px-4 py-3 font-medium">{t("reportSchedules.columns.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {schedules.map((s) => (
-                <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30">
+                <Fragment key={s.id}>
+                <tr className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium">
-                    {reportTypeLabel(s.report_type)}
+                    {reportTypeLabel(t, s.report_type, s.params)}
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {s.delivery_channels
-                        .map((c) => c.type)
-                        .join(", ") || "No delivery"}
+                        .map((c) => t(`reportSchedules.channelNames.${c.type}`, { defaultValue: c.type }))
+                        .join(", ") || t("reportSchedules.noDelivery")}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell font-mono text-xs">
@@ -864,8 +1020,8 @@ export default function ReportScheduler() {
                     {formatDate(s.last_run_at)}
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => handleToggle(s)} title="Toggle active">
-                      {statusBadge(s.is_active)}
+                    <button onClick={() => handleToggle(s)} title={t("reportSchedules.toggleActive")}>
+                      {statusBadge(t, s.is_active)}
                     </button>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell uppercase text-xs">
@@ -877,27 +1033,71 @@ export default function ReportScheduler() {
                         onClick={() => handleRunNow(s.id)}
                         disabled={actionLoading === s.id}
                         className="px-2.5 py-1 rounded border text-xs hover:bg-muted disabled:opacity-50"
-                        title="Run now"
+                        title={t("reportSchedules.runNow")}
                       >
-                        {actionLoading === s.id ? "..." : "Run"}
+                        {actionLoading === s.id ? "..." : t("reportSchedules.run")}
+                      </button>
+                      <button
+                        onClick={() => void toggleHistory(s.id)}
+                        className="px-2.5 py-1 rounded border text-xs hover:bg-muted"
+                        aria-expanded={historyFor === s.id}
+                        title={t("reportSchedules.runHistory")}
+                      >
+                        {t("reportSchedules.history")}
                       </button>
                       <button
                         onClick={() => startEdit(s)}
                         className="px-2.5 py-1 rounded border text-xs hover:bg-muted"
-                        title="Edit"
+                        title={t("reportSchedules.edit")}
                       >
-                        Edit
+                        {t("reportSchedules.edit")}
                       </button>
                       <button
                         onClick={() => handleDelete(s.id)}
                         className="px-2.5 py-1 rounded border text-xs text-red-600 hover:bg-red-50"
-                        title="Delete"
+                        title={t("reportSchedules.delete")}
                       >
-                        Del
+                        {t("reportSchedules.del")}
                       </button>
                     </div>
                   </td>
                 </tr>
+                {historyFor === s.id && (
+                  <tr className="border-b bg-muted/20" data-testid={`history-${s.id}`}>
+                    <td colSpan={7} className="px-4 py-3">
+                      {history === null ? (
+                        <p className="text-xs text-muted-foreground">{t("reportSchedules.loadingRuns")}</p>
+                      ) : history.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">{t("reportSchedules.noRuns")}</p>
+                      ) : (
+                        <table className="w-full text-xs">
+                          <caption className="sr-only">{t("reportSchedules.runHistory")}</caption>
+                          <thead>
+                            <tr className="text-left text-muted-foreground">
+                              <th className="py-1 pr-3 font-medium">{t("reportSchedules.runColumns.started")}</th>
+                              <th className="py-1 pr-3 font-medium">{t("reportSchedules.runColumns.trigger")}</th>
+                              <th className="py-1 pr-3 font-medium">{t("reportSchedules.runColumns.outcome")}</th>
+                              <th className="py-1 pr-3 font-medium">{t("reportSchedules.runColumns.why")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {history.map((r) => (
+                              <tr key={r.id}>
+                                <td className="py-1 pr-3">{formatDate(r.started_at)}</td>
+                                <td className="py-1 pr-3">{r.trigger === "manual" ? t("reportSchedules.runNow") : t("reportSchedules.triggerScheduled")}</td>
+                                <td className="py-1 pr-3 capitalize">{t(`reportSchedules.runStatuses.${r.status}`, { defaultValue: r.status })}</td>
+                                <td className="py-1 pr-3">
+                                  {r.reason || (r.export_id ? t("reportSchedules.fileOnDownloads") : "")}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

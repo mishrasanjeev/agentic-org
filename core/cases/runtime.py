@@ -12,6 +12,11 @@ that cannot be read counts as off. The provider tool gateway's grant check is su
 ``CaseRuntime.authorizer_factory`` (PRD F-1 wires the run grant in). Outside local and test runtimes a
 runtime without one cannot be built; a missing factory, or one that returns ``None``, refuses the run
 with ``authorization_unavailable`` before the case moves or a provider is built.
+
+With agent identity on (``onboarding_desk_agent_identity_enabled``) each run first checks the case
+agent's identity credential and its Grantex grant (``core.agent_identity.guard``): a stopped or held
+identity refuses the run with ``authorization_unavailable`` before the case moves, and every provider
+call is checked again and carries the agent's identity. Off, nothing changes.
 """
 
 from __future__ import annotations
@@ -131,6 +136,8 @@ class CaseRuntime:
     require_os_isolation: bool | None = None
     #: Ask for immediate delivery of queued case push events once a change has committed.
     push_kick: Callable[[uuid.UUID], None] = field(default=lambda tenant_id: _kick(tenant_id))
+    #: Returns the agent identity guard, or ``None`` while agent identity is off (the default).
+    identity_guard: Callable[[], Any] = field(default=lambda: _default_identity_guard())
 
     def __post_init__(self) -> None:
         # Without a factory no agent run could get its grant check. Outside local and test runtimes
@@ -162,8 +169,29 @@ class CaseRuntime:
             return _default_provider(name, tenant_id=tenant_id)
         return self.provider_factory(name)
 
-    def authorizer_for(self, tenant_id: str, case_ref: str, role: str, purpose: str) -> ToolAuthorizer:
-        """The grant check for one agent run. A missing factory, or ``None`` from one, is refused, never passed on."""
+    async def require_agent_identity(self, tenant_id: uuid.UUID, case_ref: str, role: str) -> Any:
+        """The case agent's identity check, or ``None`` while agent identity is off.
+
+        A stopped or held identity is refused here with ``authorization_unavailable``, before the
+        case moves or a provider is built.
+        """
+        guard = self.identity_guard()
+        if guard is None:
+            return None
+        check = await guard.check(str(tenant_id), role, None)
+        if not check.allowed:
+            logger.warning("governed_case_agent_identity_refused", case_ref=case_ref, role=role, reason=check.reason)
+            raise CaseError(AUTHORIZATION_UNAVAILABLE, check.reason, status=503)
+        return check
+
+    def authorizer_for(
+        self, tenant_id: str, case_ref: str, role: str, purpose: str, *, identity: Any = None
+    ) -> ToolAuthorizer:
+        """The grant check for one agent run. A missing factory, or ``None`` from one, is refused, never passed on.
+
+        With an ``identity`` check (agent identity on) every provider call also needs the agent's
+        identity to be active and the tool's scope in both its attestation and its grant.
+        """
         # Only a local or test runtime can be built without a factory (see ``__post_init__``).
         authorizer: ToolAuthorizer | None = None
         detail = f"no authorizer_factory for {role}"
@@ -175,7 +203,32 @@ class CaseRuntime:
             # the runtime cannot supply its grant check: refuse here, where the mistake can be named.
             logger.error("governed_case_authorizer_missing", case_ref=case_ref, role=role)
             raise CaseError(AUTHORIZATION_UNAVAILABLE, detail, status=503)
+        if identity is not None:
+            from core.agent_identity.guard import IdentityBoundAuthorizer
+
+            guard = self.identity_guard()
+            if guard is None:
+                raise CaseError(AUTHORIZATION_UNAVAILABLE, "agent identity guard unavailable", status=503)
+            return IdentityBoundAuthorizer(inner=authorizer, guard=guard, tenant_id=tenant_id, role=role)
         return authorizer
+
+
+def _default_identity_guard() -> Any:
+    from core.agent_identity.guard import default_guard
+
+    return default_guard()
+
+
+async def _agent_identity(runtime: Any, tenant: uuid.UUID, case_ref: str, role: str) -> Any:
+    """The runtime's identity check; a runtime without one (an older test double) has identity off."""
+    check = getattr(runtime, "require_agent_identity", None)
+    return await check(tenant, case_ref, role) if callable(check) else None
+
+
+def _authorizer(runtime: Any, tenant: str, case_ref: str, role: str, purpose: str, identity: Any) -> ToolAuthorizer:
+    if identity is None:
+        return runtime.authorizer_for(tenant, case_ref, role, purpose)
+    return runtime.authorizer_for(tenant, case_ref, role, purpose, identity=identity)
 
 
 def _kick(tenant_id: uuid.UUID) -> None:
@@ -266,11 +319,13 @@ async def investigate_case(
     """
     tenant = _tenant(tenant_id)
     await runtime.require_enabled(tenant)
+    # Before the case moves and with no row locked: the agent's identity and grant (agent identity on).
+    identity = await _agent_identity(runtime, tenant, case_ref, "business_underwriter")
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         # Before the case moves: a runtime that cannot supply the run's grant check refuses the
         # investigation outright instead of leaving a case that started without one.
-        authorizer = runtime.authorizer_for(str(tenant), case_ref, "business_underwriter", case.purpose)
+        authorizer = _authorizer(runtime, str(tenant), case_ref, "business_underwriter", case.purpose, identity)
         started_state = case.state
         await transition(session, case, CaseState.IN_PROGRESS, actor=actor, reason=reason, now=runtime.clock())
         started_version = case.version
@@ -433,7 +488,8 @@ async def dispose_screening_hits(
         prior_records = list(case.agent_records or [])
 
     # Before the provider is built: no disposition run starts without its grant check.
-    authorizer = runtime.authorizer_for(str(tenant), case_ref, "screening_disposition", purpose)
+    identity = await _agent_identity(runtime, tenant, case_ref, "screening_disposition")
+    authorizer = _authorizer(runtime, str(tenant), case_ref, "screening_disposition", purpose, identity)
     provider = runtime.provider_for(provider_name, tenant)
     proposed: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []

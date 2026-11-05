@@ -2,8 +2,8 @@
  * Regression Suite Configuration
  *
  * This config runs ALL E2E tests as a regression suite against production.
- * Every spec file in e2e/ is included. Every page, every feature, every
- * CxO dashboard is tested.
+ * Every spec file in e2e/ is included. Every page, every feature, and the
+ * redirect of every retired CxO dashboard URL is tested.
  *
  * Usage:
  *   E2E_TOKEN=<token> E2E_EMAIL=<email> E2E_PASSWORD=<password> \
@@ -15,7 +15,7 @@
  *
  * Spec files included (20 files, 438+ tests):
  *   - ca-firms.spec.ts          (58 tests) — CA flow, companies, approvals, credentials
- *   - cxo-dashboards.spec.ts    (45 tests) — CEO/CFO/CHRO/CMO/COO/CBO dashboards
+ *   - cxo-dashboards.spec.ts    — retired CEO/CFO/CHRO/CMO/COO/CBO URLs open Insights / Marketing operations
  *   - production-full.spec.ts   (~80 tests) — All dashboard pages, agent/workflow CRUD
  *   - onboarding-e2e.spec.ts    (~60 tests) — Signup, first login, agent creation
  *   - v4-features.spec.ts       (~50 tests) — A2A, MCP, Grantex, packs, voice, RAG

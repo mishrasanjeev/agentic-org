@@ -5,6 +5,7 @@ import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
 import { ALL_ROLES, AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
 import api from "../lib/api";
+import { INSIGHTS_ROLES } from "../lib/insights/metrics";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
@@ -26,24 +27,15 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 // that status answers enabled, so a disabled deployment never offers a page that cannot work.
 // statusField names a different boolean of that status (default "enabled"); each status is read once.
 const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string; statusField?: string }> = [
-  { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: ["admin", "cfo"], statusPath: "/insights/status" },
+  { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: INSIGHTS_ROLES, statusPath: "/insights/status" },
   // The cross-tenant platform view, for the platform operator only (the API answers 404 to anyone else).
   { path: "/dashboard/platform", labelKey: "nav.platform", label: "Platform", roles: ["admin"], statusPath: "/insights/status", statusField: "platform_operator" },
-  { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/ca-operations", labelKey: "nav.caOperations", label: "CA Operations", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/professional-tax", labelKey: "nav.professionalTax", label: "Professional Tax", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/client-portal", labelKey: "nav.clientPortal", label: "Client Portal", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/ca-billing", labelKey: "nav.caBilling", label: "CA Billing", roles: ["admin", "cfo", "coo", "auditor"] },
-  { path: "/dashboard/ceo", labelKey: "nav.ceo", label: "CEO Dashboard", roles: ["admin"] },
-  { path: "/dashboard/cfo", labelKey: "nav.cfo", label: "Finance Dashboard", roles: ["admin", "cfo"] },
-  { path: "/dashboard/cmo", labelKey: "nav.cmo", label: "Marketing Dashboard", roles: ["admin", "cmo"] },
-  { path: "/dashboard/chro", labelKey: "nav.chro", label: "CHRO Dashboard", roles: ["admin", "chro"] },
-  { path: "/dashboard/coo", labelKey: "nav.coo", label: "COO Dashboard", roles: ["admin", "coo"] },
-  { path: "/dashboard/cbo", labelKey: "nav.cbo", label: "CBO Dashboard", roles: ["admin"] },
-  { path: "/dashboard/abm", labelKey: "nav.abm", label: "ABM", roles: ["admin", "cmo"] },
-  { path: "/dashboard/observatory", labelKey: "nav.observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/marketing-ops", labelKey: "nav.marketingOps", label: "Marketing operations", roles: ["admin", "cmo"] },
   { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: AGENT_CREATOR_ROLES },
   { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: AGENT_CREATOR_ROLES },
   { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
@@ -65,11 +57,10 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/integrations", labelKey: "nav.integrations", label: "A2A / MCP", roles: ["admin"] },
   { path: "/dashboard/sales", labelKey: "nav.sales", label: "Sales Pipeline", roles: ["admin"] },
   { path: "/dashboard/schemas", labelKey: "nav.schemas", label: "Schemas", roles: ["admin"] },
-  { path: "/dashboard/report-schedules", labelKey: "nav.reportSchedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
-  { path: "/dashboard/scopes", labelKey: "nav.scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/report-schedules", labelKey: "nav.reportSchedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo", "chro", "coo"] },
   { path: "/dashboard/enforce-audit", labelKey: "nav.enforceAudit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/audit", labelKey: "nav.audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/observability", labelKey: "nav.observability", label: "Observability", roles: ["admin"] },
+  { path: "/dashboard/monitoring", labelKey: "nav.monitoring", label: "Monitoring", roles: ["admin"] },
   { path: "/dashboard/knowledge", labelKey: "nav.knowledge", label: "Knowledge Base", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/voice-setup", labelKey: "nav.voiceAgents", label: "Voice Agents", roles: ["admin"] },
   { path: "/dashboard/rpa", labelKey: "nav.rpa", label: "RPA Scripts", roles: ["admin"] },

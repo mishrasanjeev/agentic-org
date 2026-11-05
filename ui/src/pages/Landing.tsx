@@ -954,7 +954,7 @@ export default function Landing() {
               <div className="space-y-4">
                 <BrowserFrame
                   src="/screenshots/observatory.webp"
-                  title="app.agenticorg.ai/dashboard/observatory"
+                  title="app.agenticorg.ai/dashboard/insights"
                   alt="Illustrative observatory dashboard mockup for reviewing recent agent audit activity"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Observatory</h3>

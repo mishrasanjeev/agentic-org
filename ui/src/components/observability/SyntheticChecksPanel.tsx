@@ -37,6 +37,7 @@ const EXAMPLES: Record<string, Record<string, unknown>> = {
   knowledge: { query: "leave policy", top_k: 5, min_results: 1 },
   guardrail: { stage: "input", text: "Synthetic card number 4111 1111 1111 1111", expect: "detected" },
   audit_chain: { recent: 1000 },
+  insights_landing: { views: ["executive", "finance", "operations"], max_view_ms: 1500 },
   adversarial: { min_recall: 50, max_false_positives: 0 },
   eval_dataset: {
     dataset_id: "",

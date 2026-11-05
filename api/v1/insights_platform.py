@@ -27,10 +27,11 @@ from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
 from api.route_metadata import route_meta
 from core.database import get_platform_session, get_tenant_session
-from core.insights import platform
+from core.insights import benchmarks, platform
 from core.insights.audit import audit_entry
 from core.insights.platform import PlatformOperator, PlatformRangeError, require_platform_operator
 
@@ -75,17 +76,21 @@ async def _audit(operator: PlatformOperator, event: str, details: dict[str, Any]
 async def platform_summary(
     operator: Operator, from_: FromDay = None, to: ToDay = None
 ) -> dict[str, Any]:
-    """Daily platform totals and the range totals."""
+    """Daily platform totals, the range totals, and the dashboard's own export and rollup figures."""
     start, end = _range(from_, to)
     async with get_platform_session() as session:
         daily = await platform.platform_daily(session, start, end)
         tenants = await platform.platform_tenants(session, start, end)
+        operations = await platform.platform_operations(session, start, end)
+        opted_in = await benchmarks.participation(session)
     period = {"from": start.isoformat(), "to": end.isoformat()}
     await _audit(operator, "platform.insights.summary.read", {"period": period})
     return {
         "period": period,
         "totals": platform.totals(daily, tenants),
         "series": daily,
+        "operations": operations,
+        "benchmarks": {"opted_in": opted_in, "min_tenants": benchmarks.MIN_TENANTS},
         "reconciled_gate_nights": platform.RECONCILED_GATE_NIGHTS,
     }
 
@@ -131,3 +136,57 @@ async def platform_posture(operator: Operator) -> dict[str, Any]:
         result = await platform.posture(session)
     await _audit(operator, "platform.insights.posture.read", {"ok": result["ok"]})
     return result
+
+
+_DATASETS: dict[str, tuple[str, str]] = {
+    "daily": ("Platform runs by day", "Per day: tenants with runs, runs, failed runs, tokens and cost (USD)."),
+    "tenants": ("Platform tenants", "Per live tenant: plan, runs, failures, cost, active agents and the rollup gate."),
+}
+
+
+@router.get("/export")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="platform.insights.read",
+    rate_limit="reporting-export",
+    idempotency="read-only",
+    audit_event="platform.insights.export.read",
+)
+async def platform_export(
+    operator: Operator,
+    dataset: Annotated[str, Query(pattern="^(daily|tenants)$")] = "daily",
+    format: Annotated[str, Query(pattern="^(csv|xlsx|json|parquet)$")] = "csv",  # noqa: A002 - the public query parameter name
+    from_: FromDay = None,
+    to: ToDay = None,
+) -> Response:
+    """The platform view's daily figures or tenant table as CSV, XLSX or JSON (cross-tenant aggregates only)."""
+    import asyncio
+
+    from core.insights import export as exports
+
+    start, end = _range(from_, to)
+    async with get_platform_session() as session:
+        rows = await (platform.platform_daily if dataset == "daily" else platform.platform_tenants)(session, start, end)
+    period = {"from": start.isoformat(), "to": end.isoformat(), "granularity": "day"}
+    title, definition = _DATASETS[dataset]
+    response = {
+        "key": f"platform.{dataset}",
+        "title": title,
+        "definition": definition,
+        "unit": "count",
+        "currency": "USD",
+        "source": "insights_daily+insights_rollup_state+tenants",
+        "data_quality": "measured" if rows else "no_data",
+        "period": period,
+    }
+    filters = {"from": period["from"], "to": period["to"]}
+    content = await asyncio.to_thread(exports.render, format, rows, filters, response)
+    await _audit(operator, "platform.insights.export.read", {"dataset": dataset, "format": format, "period": period,
+                                                         "row_count": len(rows)})
+    name = exports.filename(f"platform-{dataset}", period, format)
+    return Response(
+        content=content,
+        media_type=exports.MEDIA_TYPES[format],
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )

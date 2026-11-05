@@ -62,7 +62,12 @@ _KPI_PAGE_SCOPES = ["kpis:read"]
 # Insights (/insights/*): every non-admin role may call the routes (status
 # and catalog answer what the caller may see); api/v1/insights.py admits each
 # role only to the views it is allowed (finance: cfo; executive: admin).
-_INSIGHTS_SCOPES = ["insights:read"]
+# insights:write reaches the Insights changes a role makes (acknowledging an
+# alert it owns, a budget); each handler still decides who may act. Auditors
+# hold insights:read only: their exports, saved views and evidence-pack
+# signatures are the insights_personal family, which needs insights:read.
+_INSIGHTS_SCOPES = ["insights:read", "insights:write"]
+_INSIGHTS_READ_SCOPES = ["insights:read"]
 
 ROLE_SCOPES: dict[str, list[str]] = {
     "cfo": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],
@@ -76,7 +81,7 @@ ROLE_SCOPES: dict[str, list[str]] = {
     "coo": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],
     "merchant": ["commerce.merchant_config.write", *_INSIGHTS_SCOPES],
     "admin": ["agenticorg:admin"],
-    "auditor": ["audit:read", *_INSIGHTS_SCOPES],
+    "auditor": ["audit:read", *_INSIGHTS_READ_SCOPES],
     "domain_lead": [*_DOMAIN_ROLE_SCOPES, *_INSIGHTS_SCOPES],
     "analyst": [
         "agents:read",

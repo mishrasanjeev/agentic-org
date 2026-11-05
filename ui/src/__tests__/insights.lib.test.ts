@@ -7,6 +7,7 @@ import {
   exportFilename,
   exportPath,
   exportUrl,
+  VIEW_KEYS,
   filterParams,
   readErrorDetail,
   type MetricResponse,
@@ -23,7 +24,14 @@ import {
   tableRows,
 } from "@/lib/insights/chartData";
 import { addDays, fiscalQuarterStart, isIsoDate, presetRange, todayIn } from "@/lib/insights/dates";
-import { chartKindFor, METRIC_PRESENTATION, ROLE_VIEWS, tableFromSeries, VIEW_METRICS } from "@/lib/insights/metrics";
+import {
+  chartKindFor,
+  defaultViewForRole,
+  METRIC_PRESENTATION,
+  ROLE_VIEWS,
+  tableFromSeries,
+  VIEW_METRICS,
+} from "@/lib/insights/metrics";
 import { chartColor, normaliseState } from "@/lib/insights/tokens";
 
 const pageSource = (
@@ -85,16 +93,90 @@ describe("metric keys used by the Insights page", () => {
     }
   });
 
-  it("role views mirror the server rule: admin both, cfo finance only", () => {
-    expect(ROLE_VIEWS.admin).toEqual(["executive", "finance"]);
-    expect(ROLE_VIEWS.cfo).toEqual(["finance"]);
-    expect(ROLE_VIEWS.analyst).toBeUndefined();
+  it("every view a role may open survives the status normaliser (VIEW_KEYS)", () => {
+    for (const views of Object.values(ROLE_VIEWS)) for (const v of views) expect(VIEW_KEYS, v).toContain(v);
+    for (const v of Object.keys(VIEW_METRICS)) expect(VIEW_KEYS, v).toContain(v);
   });
 
-  it("every action target is a route both view roles can open, except executive-only metrics", () => {
-    const financeKeys = new Set(VIEW_METRICS.finance);
-    const cfoRoutes = ["/dashboard/costs", "/dashboard/agents", "/dashboard/approvals"];
-    for (const key of financeKeys) expect(cfoRoutes, key).toContain(METRIC_PRESENTATION[key].action.to);
+  it("role views mirror the server rule (core/insights/registry.py VIEW_ROLES)", () => {
+    expect(ROLE_VIEWS.admin).toEqual([
+      "executive",
+      "finance",
+      "operations",
+      "hr",
+      "marketing",
+      "commerce",
+      "compliance",
+      "engineering",
+      "back_office",
+      "domain",
+      "partner",
+    ]);
+    expect(ROLE_VIEWS.auditor).toEqual(["compliance", "partner"]);
+    expect(ROLE_VIEWS.developer).toEqual(["engineering"]);
+    expect(defaultViewForRole("auditor")).toBe("compliance");
+    expect(defaultViewForRole("developer")).toBe("engineering");
+    expect(ROLE_VIEWS.cfo).toEqual(["finance", "partner"]);
+    expect(ROLE_VIEWS.coo).toEqual(["operations", "partner"]);
+    expect(ROLE_VIEWS.chro).toEqual(["hr"]);
+    expect(ROLE_VIEWS.cmo).toEqual(["marketing"]);
+    expect(ROLE_VIEWS.merchant).toEqual(["commerce"]);
+    expect(ROLE_VIEWS.analyst).toEqual(["domain"]);
+    expect(ROLE_VIEWS.domain_lead).toEqual(["domain"]);
+    expect(defaultViewForRole("analyst")).toBe("domain");
+    expect(ROLE_VIEWS.viewer).toBeUndefined();
+    expect(defaultViewForRole("coo")).toBe("operations");
+    expect(defaultViewForRole("merchant")).toBe("commerce");
+    expect(defaultViewForRole("admin")).toBe("executive");
+  });
+
+  it("every role view's tiles drill to a page that role can open", () => {
+    const explorersFor: Record<string, string[]> = {
+      coo: ["agents", "runs", "workflows", "approvals", "cost", "quality", "connectors"],
+      chro: ["agents", "runs", "approvals", "cost", "quality"],
+      cmo: ["agents", "runs", "approvals", "cost", "quality"],
+      merchant: [],
+      // core/insights/explore_registry.py: auditors read runs, approvals and the audit log; developers their
+      // domain's agents, runs and quality.
+      auditor: ["runs", "approvals", "audit"],
+      developer: ["agents", "runs", "quality", "connectors"],
+    };
+    const pagesFor: Record<string, string[]> = {
+      coo: [],
+      chro: [],
+      cmo: [],
+      merchant: ["/dashboard/orders"],
+      auditor: [],
+      developer: [],
+    };
+    const views: Record<string, "operations" | "hr" | "marketing" | "commerce" | "compliance" | "engineering"> = {
+      coo: "operations",
+      chro: "hr",
+      cmo: "marketing",
+      merchant: "commerce",
+      auditor: "compliance",
+      developer: "engineering",
+    };
+    for (const [role, view] of Object.entries(views)) {
+      for (const key of VIEW_METRICS[view]) {
+        const target = METRIC_PRESENTATION[key].action.to;
+        const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
+        if (explorer) expect(explorersFor[role], `${role} ${key}`).toContain(explorer);
+        else expect(pagesFor[role], `${role} ${key}`).toContain(target);
+      }
+    }
+  });
+
+  it("every finance tile drills to a page or explorer the CFO can open", () => {
+    // The CFO's explorers (core/insights/explore_registry.py): agents, runs, approvals, cost, quality.
+    const cfoExplorers = ["agents", "runs", "approvals", "cost", "quality"];
+    for (const key of VIEW_METRICS.finance) {
+      const target = METRIC_PRESENTATION[key].action.to;
+      const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
+      if (explorer) expect(cfoExplorers, key).toContain(explorer);
+      // The CFO's pages: money saved and budgets (the CFO sets budgets).
+      else expect(["/dashboard/insights/value", "/dashboard/insights/budgets"], key).toContain(target);
+    }
   });
 });
 

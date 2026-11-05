@@ -240,6 +240,7 @@ const DEFAULT_PAGES = [
   ["/status", "Status", "Public service status."],
   ["/privacy", "Privacy", "Privacy notice."],
   ["/terms", "Terms", "Terms of service."],
+  ["/network-terms", "Shopping network terms", "Terms for buyers and shops on the AgenticOrg shopping network."],
   ["/refund", "Refund policy", "Refund and cancellation policy."],
 ].map(([path, name, summary]) => ({ path, name, summary }));
 
