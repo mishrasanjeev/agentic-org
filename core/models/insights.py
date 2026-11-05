@@ -291,9 +291,10 @@ EXPORT_KINDS: tuple[str, ...] = (
     "finance_pack",
     "evidence_pack",
     "partner_pack",
+    "view_pptx",
 )
 EXPORT_STATUSES: tuple[str, ...] = ("queued", "running", "ready", "failed", "expired")
-EXPORT_FORMATS: tuple[str, ...] = ("csv", "xlsx", "json", "pdf", "zip")
+EXPORT_FORMATS: tuple[str, ...] = ("csv", "xlsx", "json", "pdf", "zip", "pptx", "parquet")
 
 
 class ValueBaseline(BaseModel):

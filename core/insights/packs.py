@@ -2,7 +2,9 @@
 """View PDFs, the finance pack and the period evidence pack (built by the export worker).
 
 ``view_pdf``: any view the caller may read, as a PDF (tiles as a table, each
-chart as its data with a bar per row; ``core.insights.pdf``).
+chart as its data with a bar per row; ``core.insights.pdf``). ``view_pptx``:
+the same view as a PowerPoint deck (each chart a native chart with its text
+summary and data table; ``core.insights.slides``).
 
 ``finance_pack`` (administrators and the CFO): a ZIP of ``finance.xlsx``
 (Summary, Spend by day, Spend by agent, Spend by model, Budgets, Tokens, Money
@@ -64,7 +66,7 @@ def validate(kind: str, params: dict[str, Any], caller: Any) -> dict[str, Any]:
     from core.insights import registry
 
     role = (caller.role or "").lower()
-    if kind == "view_pdf":
+    if kind in ("view_pdf", "view_pptx"):
         view = str(params.get("view") or "")
         if view not in registry.VIEWS:
             raise ExportJobError("unknown_view", f"no view {view!r}", 404)
@@ -214,6 +216,30 @@ async def _build_view_pdf(session: Any, job: Any, params: dict[str, Any]) -> Bui
     content, ctx, _resolved = await _view_pdf_bytes(session, job, params, params["view"])
     period = ctx.period.as_dict()
     return Built(content, f"insights-{params['view']}-{period['from']}-{period['to']}.pdf", None, False)
+
+
+@builder("view_pptx")
+async def _build_view_pptx(session: Any, job: Any, params: dict[str, Any]) -> Built:
+    import asyncio
+
+    from core.insights import registry, slides
+
+    view = params["view"]
+    ctx, resolved = await _resolve_view(session, job, params, view)
+    spec = registry.VIEWS[view]
+    content = await asyncio.to_thread(
+        slides.view_pptx,
+        title=f"Insights - {spec.title}",
+        organisation=await _organisation(session, job.tenant_id),
+        period=ctx.period.as_dict(),
+        filters={"company": params.get("company_id"), "compare": params.get("compare")},
+        tiles=[resolved[k] for k in spec.tiles],
+        charts=[resolved[k] for k in spec.charts],
+        currency=ctx.reporting.currency,
+        computed_at=datetime.now(UTC),
+    )
+    period = ctx.period.as_dict()
+    return Built(content, f"insights-{view}-{period['from']}-{period['to']}.pptx", None, False)
 
 
 # ------------------------------------------------------------------ finance pack

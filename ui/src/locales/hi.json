@@ -897,6 +897,7 @@
       "csv": "CSV",
       "xlsx": "Excel (XLSX)",
       "json": "JSON",
+      "parquet": "Parquet फ़ाइल",
       "downloading": "तैयार किया जा रहा है...",
       "failed": "निर्यात नहीं बन सका। फिर से प्रयास करें या तिथि सीमा छोटी करें।",
       "includePii": "असली व्यक्तिगत डेटा शामिल करें (ऑडिट लॉग में दर्ज होगा)",
@@ -984,6 +985,7 @@
     },
     "files": {
       "pdf": "इस व्यू का PDF",
+      "pptx": "पावरपॉइंट",
       "financePack": "वित्त पैक",
       "evidencePack": "साक्ष्य पैक",
       "asking": "माँगा जा रहा है…",
@@ -1446,6 +1448,7 @@
       "explorer": "तालिका",
       "run_bundle": "रन साक्ष्य",
       "view_pdf": "व्यू PDF",
+      "view_pptx": "व्यू पावरपॉइंट",
       "finance_pack": "वित्त पैक",
       "evidence_pack": "साक्ष्य पैक",
       "partner_pack": "पार्टनर क्लाइंट पैक"

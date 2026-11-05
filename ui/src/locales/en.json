@@ -897,6 +897,7 @@
       "csv": "CSV",
       "xlsx": "Excel (XLSX)",
       "json": "JSON",
+      "parquet": "Parquet",
       "downloading": "Preparing...",
       "failed": "The export could not be created. Try again or narrow the date range.",
       "includePii": "Include raw personal data (recorded in the audit log)",
@@ -984,6 +985,7 @@
     },
     "files": {
       "pdf": "PDF of this view",
+      "pptx": "PowerPoint",
       "financePack": "Finance pack",
       "evidencePack": "Evidence pack",
       "asking": "Asking…",
@@ -1446,6 +1448,7 @@
       "explorer": "Table",
       "run_bundle": "Run evidence",
       "view_pdf": "View PDF",
+      "view_pptx": "View PowerPoint",
       "finance_pack": "Finance pack",
       "evidence_pack": "Evidence pack",
       "partner_pack": "Partner client pack"

@@ -35,12 +35,13 @@ logger = structlog.get_logger()
 RETENTION = timedelta(days=7)
 MAX_BACKGROUND_ROWS = 500_000
 PAGE_ROWS = 50_000
-ROW_FORMATS = ("csv", "xlsx", "json")
+ROW_FORMATS = ("csv", "xlsx", "json", "parquet")
 FORMATS_BY_KIND: dict[str, tuple[str, ...]] = {
     "metric": ROW_FORMATS,
     "explorer": ROW_FORMATS,
     "run_bundle": ("json",),
     "view_pdf": ("pdf",),
+    "view_pptx": ("pptx",),
     "finance_pack": ("zip",),
     "evidence_pack": ("zip",),
     "partner_pack": ("zip",),
@@ -49,6 +50,7 @@ MEDIA_TYPES: dict[str, str] = {
     **exports.MEDIA_TYPES,
     "pdf": "application/pdf",
     "zip": "application/zip",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 # A job still queued or running this long after it was made is reported failed (the worker lost it).
 STALE_AFTER = timedelta(hours=2)

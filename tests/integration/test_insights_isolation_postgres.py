@@ -51,6 +51,8 @@ MIGRATIONS = (
     "v6_z110_insights_exports.py",
     # Saved views, last visits and the partner_pack export kind.
     "v6_z113_insights_saved_views.py",
+    # The PowerPoint view export and the pptx and parquet formats.
+    "v6_z116_insights_export_formats.py",
 )
 PASSWORD = "local-test-password"  # noqa: S105 - a throwaway role in a disposable test database
 BASE_TABLES = (

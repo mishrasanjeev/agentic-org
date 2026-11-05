@@ -693,9 +693,12 @@ entity of another tenant or outside the caller's domains is 404.
 | `POST /api/v1/insights/exports/{id}/sign` | An auditor or administrator signs a ready evidence pack once: `{"statement"}` |
 
 Kinds: `metric` (params as the metric route: `key`, `from`, `to`, `granularity`, `group_by` as a list,
-`filter` as an object), `explorer` (`key`, `query`), `run_bundle`, `view_pdf` (`view`), `finance_pack`
+`filter` as an object), `explorer` (`key`, `query`), `run_bundle`, `view_pdf` (`view`), `view_pptx` (`view`,
+format `pptx`: the view as a PowerPoint deck), `finance_pack`
 (administrators and the CFO), `partner_pack` (administrators and the CFO: one PDF per client company and an XLSX rollup) and `evidence_pack` (administrators and auditors, at most 366 days). Files are kept
-7 days; at most 500,000 rows per file. Someone else's file, or another tenant's, is 404.
+7 days; at most 500,000 rows per file. Someone else's file, or another tenant's, is 404. Metric and explorer
+files are `csv`, `xlsx`, `json` or `parquet` (typed columns; the definitions and filters in the file's key-value
+metadata as `insights.*` and `insights.filters`); the inline metric and explorer exports take the same formats.
 
 ### Value, alerts and BI access
 
