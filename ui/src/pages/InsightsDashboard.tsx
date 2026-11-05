@@ -265,6 +265,16 @@ export default function InsightsDashboard() {
               {t("insights.valueLink")}
             </Link>
           ) : null}
+          {/* Spend limits: administrators and the CFO set them, auditors read them. */}
+          {role === "admin" || role === "cfo" || role === "auditor" ? (
+            <Link
+              to="/dashboard/insights/budgets"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-budgets-link"
+            >
+              {t("insightsBudgets.link")}
+            </Link>
+          ) : null}
           {/* Per-tenant BI database access, for administrators while it is on and configured. */}
           {role === "admin" && statusState.status.bi_access ? (
             <Link

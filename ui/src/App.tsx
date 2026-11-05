@@ -88,6 +88,7 @@ const Orders = lazyRetry(() => import("./pages/Orders"));
 /* -- Role-specific dashboards -- */
 const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
 const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
+const InsightsBudgets = lazyRetry(() => import("./pages/InsightsBudgets"));
 const InsightsExplorer = lazyRetry(() => import("./pages/InsightsExplorer"));
 const InsightsRun = lazyRetry(() => import("./pages/InsightsRun"));
 const InsightsEntity = lazyRetry(() => import("./pages/InsightsEntity"));
@@ -312,6 +313,17 @@ export default function App() {
           <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
             <Layout>
               <InsightsDownloads />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/budgets"
+        element={
+          // Administrators and the CFO change budgets; auditors read them (the API decides).
+          <ProtectedRoute allowedRoles={["admin", "cfo", "auditor"]}>
+            <Layout>
+              <InsightsBudgets />
             </Layout>
           </ProtectedRoute>
         }

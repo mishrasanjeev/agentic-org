@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased - Insights budgets you can set, and the forecast alert
+
+- **Budgets page** (`/dashboard/insights/budgets`, linked from the Insights header and the Finance view's budget
+  tile): administrators and the CFO add, change and delete spend limits for the organisation, a company or a cost
+  centre (daily, weekly or monthly, in USD, with a warn-at percent); auditors read them. Each shows this period's
+  spend from the agent cost ledger, the percent used and its state. API: `/api/v1/insights/budgets`. Every change
+  is a signed audit row with the values before and after.
+- **Forecast alert**: `cost.forecast_over_budget` (owner CFO) opens when the month's spend forecast is above a
+  tenant-wide monthly budget: `watch`, or `act` at 120% of it. The forecast is converted to USD with the
+  organisation's recorded rate; without one, no forecast alert is raised.
+- **Budget email**: the budget evaluator no longer posts `slack` or `webhook` alerts to the platform-wide
+  `SLACK_BUDGET_WEBHOOK_URL` and `BUDGET_ALERT_WEBHOOK_URL` (one URL for every tenant) and logs them as
+  unsupported; the email escapes the budget's name. No production budget used those channels.
+
 ## Unreleased - Insights actions work for every role their page serves
 
 - Every Insights action other than reading answered 403 ("Missing scope: agenticorg:admin") to all roles but the

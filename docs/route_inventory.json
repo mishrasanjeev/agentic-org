@@ -8496,6 +8496,78 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.budgets.read",
+    "auth_required": true,
+    "function": "list_budgets",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/budgets api/v1/insights_budgets.py:list_budgets",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.budgets.read",
+    "source_line": 79,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.created",
+    "auth_required": true,
+    "function": "create_budget",
+    "idempotency": "conflict-on-duplicate-name",
+    "key": "POST /api/v1/insights/budgets api/v1/insights_budgets.py:create_budget",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 109,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.deleted",
+    "auth_required": true,
+    "function": "delete_budget",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/insights/budgets/{budget_id} api/v1/insights_budgets.py:delete_budget",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets/{budget_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 159,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.budget.updated",
+    "auth_required": true,
+    "function": "update_budget",
+    "idempotency": "idempotent-partial-update",
+    "key": "PATCH /api/v1/insights/budgets/{budget_id} api/v1/insights_budgets.py:update_budget",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/insights_budgets.py",
+    "path": "/api/v1/insights/budgets/{budget_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.budgets.write",
+    "source_line": 132,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.catalog.read",
     "auth_required": true,
     "function": "insights_catalog",

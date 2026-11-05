@@ -941,7 +941,8 @@
       "exploreAudit": "Explore the audit log",
       "exploreQuality": "Explore quality",
       "openCompanies": "Open companies",
-      "openTransactions": "Open transactions"
+      "openTransactions": "Open transactions",
+      "manageBudgets": "Set budgets"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -1108,6 +1109,87 @@
     "forbidden": {
       "title": "Administrators only",
       "body": "Only an organisation administrator signed in as a person can manage BI database logins."
+    }
+  },
+  "insightsBudgets": {
+    "link": "Budgets",
+    "title": "Budgets",
+    "subtitle": "Spend limits for the organisation, a company or a cost centre, against the cost ledger.",
+    "back": "Back to Finance",
+    "loading": "Loading budgets…",
+    "loadFailed": "Budgets could not be loaded.",
+    "add": "Add a budget",
+    "edit": "Edit",
+    "editLabel": "Edit budget {{name}}",
+    "delete": "Delete",
+    "deleteLabel": "Delete budget {{name}}",
+    "deleting": "Deleting…",
+    "confirmTitle": "Delete this budget?",
+    "confirmBody": "Delete {{name}}? Its alerts stop. The audit log keeps what it was.",
+    "confirmDelete": "Delete budget",
+    "cancel": "Cancel",
+    "save": "Save budget",
+    "saving": "Saving…",
+    "created": "Budget {{name}} added.",
+    "updated": "Budget {{name}} saved.",
+    "deleted": "Budget {{name}} deleted.",
+    "footnote": "Spend is the agent cost ledger in USD for the current day, week (from Monday) or month, in UTC. Alerts are emailed to your organisation's alert address or first administrator, and appear under Needs you. A monthly budget for the whole organisation is also compared with the month's spend forecast.",
+    "forbidden": {
+      "title": "Budgets are for administrators, the CFO and auditors",
+      "body": "Ask an administrator if you need to see or set spend limits."
+    },
+    "disabled": {
+      "title": "Insights is off for this organisation",
+      "body": "An administrator can turn Insights on in Settings."
+    },
+    "empty": {
+      "title": "No budget is set",
+      "editHint": "Add a budget to track spend against a limit and be alerted before it is reached.",
+      "readHint": "An administrator or the CFO can add one."
+    },
+    "columns": {
+      "name": "Budget",
+      "period": "Period",
+      "spend": "Spend so far",
+      "limit": "Limit",
+      "used": "Used",
+      "state": "State",
+      "actions": "Actions"
+    },
+    "periods": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "states": {
+      "ok": "Within limit",
+      "warn": "At {{percent}}% or more",
+      "breached": "Over the limit"
+    },
+    "scope": {
+      "organisation": "Whole organisation",
+      "part": "One company or cost centre",
+      "forecast": "checked against the forecast"
+    },
+    "form": {
+      "newTitle": "New budget",
+      "editTitle": "Edit budget",
+      "name": "Name",
+      "period": "Period",
+      "limit": "Limit (USD)",
+      "warnAt": "Warn at (% of the limit)",
+      "forCompany": "Only the company selected in the header",
+      "channels": "Alerts are emailed and shown in Insights. Slack and webhooks are not offered for budgets."
+    },
+    "errors": {
+      "name": "Give the budget a name of up to 100 characters.",
+      "threshold": "Enter a limit from 0.01 to {{max}}.",
+      "warnAt": "Warn at is a whole number from 1 to 100.",
+      "duplicate": "A budget with this name exists.",
+      "person": "Budgets are changed by a person signed in, not an API key.",
+      "forbidden": "Only an administrator or the CFO can change budgets.",
+      "notFound": "That budget no longer exists.",
+      "saveFailed": "The budget could not be saved."
     }
   },
   "reportSchedules": {
