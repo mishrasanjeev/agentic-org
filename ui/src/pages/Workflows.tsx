@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ type WorkflowsTab = "my-workflows" | "templates";
 const WORKFLOWS_PER_PAGE = 50;
 
 export default function Workflows() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [page, setPage] = useState(1);
@@ -66,7 +68,7 @@ export default function Workflows() {
       setWorkflows([]);
       setTotal(0);
       setPages(1);
-      setListError(extractApiError(e, "Failed to load workflows"));
+      setListError(extractApiError(e, t("workflowsList.loadFailed")));
     } finally {
       setLoading(false);
     }
@@ -94,7 +96,7 @@ export default function Workflows() {
         navigate(`/dashboard/workflows/${wfId}/runs/${data.run_id}`);
       }
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Failed to trigger workflow run");
+      setError(e?.response?.data?.detail || t("workflowsList.runFailed"));
     }
   }
 
@@ -121,8 +123,8 @@ export default function Workflows() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Workflows</h2>
-        <Button onClick={() => navigate("/dashboard/workflows/new")}>Create Workflow</Button>
+        <h2 className="text-2xl font-bold">{t("workflows.title")}</h2>
+        <Button onClick={() => navigate("/dashboard/workflows/new")}>{t("workflows.create")}</Button>
       </div>
 
       {/* Tab switcher */}
@@ -132,14 +134,14 @@ export default function Workflows() {
           onClick={() => setActiveTab("my-workflows")}
           data-testid="tab-my-workflows"
         >
-          My Workflows
+          {t("workflowsList.tabMine")}
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "templates" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => setActiveTab("templates")}
           data-testid="tab-templates"
         >
-          Templates
+          {t("workflowsList.tabTemplates")}
         </button>
       </div>
 
@@ -151,17 +153,17 @@ export default function Workflows() {
       {activeTab === "my-workflows" && (
         <>
           {loading ? (
-            <p className="text-muted-foreground">Loading workflows...</p>
+            <p className="text-muted-foreground">{t("workflowsList.loading")}</p>
           ) : listError ? (
             <div
               className="rounded-lg bg-red-50 text-red-800 border border-red-200 px-4 py-3 text-sm flex items-center justify-between"
               data-testid="workflows-error"
             >
-              <span>Failed to load workflows: {listError}</span>
-              <Button variant="outline" size="sm" onClick={() => fetchWorkflows(page)}>Retry</Button>
+              <span>{t("workflowsList.loadFailedWithError", { error: listError })}</span>
+              <Button variant="outline" size="sm" onClick={() => fetchWorkflows(page)}>{t("workflowsList.retry")}</Button>
             </div>
           ) : workflows.length === 0 ? (
-            <p className="text-muted-foreground">No workflows configured yet.</p>
+            <p className="text-muted-foreground">{t("workflowsList.empty")}</p>
           ) : (
             <div className="space-y-4">
               {workflows.map((wf) => (
@@ -170,7 +172,7 @@ export default function Workflows() {
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-base">{wf.name}</CardTitle>
                       <div className="flex items-center gap-2">
-                        <Badge variant={wf.is_active ? "success" as any : "secondary"}>{wf.is_active ? "Active" : "Inactive"}</Badge>
+                        <Badge variant={wf.is_active ? "success" as any : "secondary"}>{wf.is_active ? t("workflowsList.active") : t("workflowsList.inactive")}</Badge>
                         <span className="text-sm text-muted-foreground">v{wf.version}</span>
                       </div>
                     </div>
@@ -178,12 +180,12 @@ export default function Workflows() {
                   <CardContent>
                     <div className="flex justify-between items-center">
                       <div className="text-sm text-muted-foreground">
-                        Trigger: <span className="font-medium">{wf.trigger_type || "manual"}</span>
-                        {" | "}Created: <span className="font-medium">{new Date(wf.created_at).toLocaleDateString()}</span>
+                        {t("workflowsList.triggerLabel")} <span className="font-medium">{t(`workflowsList.triggerTypes.${wf.trigger_type || "manual"}`, { defaultValue: wf.trigger_type || "manual" })}</span>
+                        {" | "}{t("workflowsList.createdLabel")} <span className="font-medium">{new Date(wf.created_at).toLocaleDateString()}</span>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigate(`/dashboard/workflows/${wf.id}`)}>View</Button>
-                        <Button size="sm" onClick={() => triggerRun(wf.id)}>Run Now</Button>
+                        <Button variant="outline" size="sm" onClick={() => navigate(`/dashboard/workflows/${wf.id}`)}>{t("workflowsList.view")}</Button>
+                        <Button size="sm" onClick={() => triggerRun(wf.id)}>{t("workflowsList.runNow")}</Button>
                       </div>
                     </div>
                   </CardContent>
@@ -193,13 +195,13 @@ export default function Workflows() {
           )}
           {!loading && !listError && pages > 1 && (
             <div className="flex items-center justify-between text-sm text-muted-foreground" data-testid="workflows-pagination">
-              <span>Showing {workflows.length} of {total} on page {page} of {pages}</span>
+              <span>{t("workflowsList.showing", { shown: workflows.length, total, page, pages })}</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                  Previous
+                  {t("workflowsList.previous")}
                 </Button>
                 <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
-                  Next
+                  {t("workflowsList.next")}
                 </Button>
               </div>
             </div>
@@ -210,12 +212,12 @@ export default function Workflows() {
       {/* Templates tab */}
       {activeTab === "templates" && templatesLoading && templates.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="templates-loading">
-          Loading templates…
+          {t("workflowsList.templatesLoading")}
         </p>
       )}
       {activeTab === "templates" && !templatesLoading && templates.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No templates available. Check that /api/v1/workflows/templates is reachable.
+          {t("workflowsList.noTemplates")}
         </p>
       )}
       {activeTab === "templates" && templates.length > 0 && (
@@ -226,7 +228,7 @@ export default function Workflows() {
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-base">{tpl.name}</CardTitle>
                   <span className={`text-xs px-2 py-0.5 rounded font-medium ${domainColors[tpl.domain] || "bg-gray-100 text-gray-800"}`}>
-                    {tpl.domain.charAt(0).toUpperCase() + tpl.domain.slice(1)}
+                    {t(`workflowsList.domains.${tpl.domain}`, { defaultValue: tpl.domain.charAt(0).toUpperCase() + tpl.domain.slice(1) })}
                   </span>
                 </div>
               </CardHeader>
@@ -234,10 +236,10 @@ export default function Workflows() {
                 <p className="text-sm text-muted-foreground mb-3 flex-1">{tpl.description}</p>
                 <div className="flex justify-between items-center">
                   <div className="text-xs text-muted-foreground">
-                    {tpl.steps} steps | {tpl.trigger.replace(/_/g, " ")}
+                    {t("workflowsList.stepsCount", { steps: tpl.steps })} | {t(`workflowsList.templateTriggers.${tpl.trigger}`, { defaultValue: tpl.trigger.replace(/_/g, " ") })}
                   </div>
                   <Button size="sm" onClick={() => applyTemplate(tpl)} data-testid={`use-template-${tpl.id}`}>
-                    Use Template
+                    {t("workflowsList.useTemplate")}
                   </Button>
                 </div>
               </CardContent>
