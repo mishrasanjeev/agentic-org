@@ -68,7 +68,7 @@ export default function SavedViews({ viewKey, keep = [] }: { viewKey: string; ke
       <label className="flex items-center gap-1 text-xs text-muted-foreground">
         {t("insights.saved.label")}
         <select
-          className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+          className="insights-target h-8 rounded-md border bg-background px-2 text-xs text-foreground"
           value=""
           onChange={(e) => open(e.target.value)}
           aria-label={t("insights.saved.label")}
@@ -96,7 +96,7 @@ export default function SavedViews({ viewKey, keep = [] }: { viewKey: string; ke
             maxLength={120}
             placeholder={t("insights.saved.namePlaceholder")}
             aria-label={t("insights.saved.namePlaceholder")}
-            className="h-8 rounded-md border bg-background px-2 text-xs"
+            className="insights-target h-8 rounded-md border bg-background px-2 text-xs"
           />
           <label className="flex items-center gap-1 text-xs">
             <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />

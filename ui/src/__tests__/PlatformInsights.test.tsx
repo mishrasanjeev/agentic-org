@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
- * Platform view: tiles, runs chart without an export menu, the tenant table
+ * Platform view: tiles, runs chart with platform-only exports, the tenant table
  * with its reconciled-nights gate, the posture checklist, the range in the
  * URL and the request, the not-available state on 404, and no NaN or
  * undefined text.

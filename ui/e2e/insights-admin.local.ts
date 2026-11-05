@@ -15,6 +15,7 @@ async function adminFixture(page: Page, baseURL: string) {
   const errors: string[] = [];
   const writes: string[] = [];
   const requests: URL[] = [];
+  const forbiddenExports: string[] = [];
   let created = false, revoked = false;
   const connection = {
     host: "replica.example.test", port: 5432, database: "agenticorg", sslmode: "verify-ca",
@@ -27,6 +28,11 @@ async function adminFixture(page: Page, baseURL: string) {
     if (url.origin !== new URL(baseURL).origin) return route.abort();
     if (!url.pathname.startsWith("/api/")) return route.continue();
     const reply = (json: unknown) => route.fulfill({ status: 200, json });
+    if ((url.pathname.includes("/insights/metrics/") && url.pathname.endsWith("/export"))
+      || url.pathname.endsWith("/insights/exports")) {
+      forbiddenExports.push(url.pathname);
+      return route.abort();
+    }
     if (url.pathname.endsWith("/auth/me")) return reply({
       user_id: "22222222-2222-4222-8222-222222222222", tenant_id: "33333333-3333-4333-8333-333333333333",
       email: "admin@example.test", name: "Local Admin", role: "admin", domain: "all", onboarding_complete: true,
@@ -54,6 +60,11 @@ async function adminFixture(page: Page, baseURL: string) {
       return reply({ role_name: roleName, revoked: true, result: "dropped" });
     }
     if (url.pathname.includes("/platform/insights/")) requests.push(url);
+    if (url.pathname.endsWith("/platform/insights/export")) {
+      expect(route.request().method()).toBe("GET");
+      expect(Object.fromEntries(url.searchParams)).toEqual({ dataset: "daily", format: "csv", ...period });
+      return route.fulfill({ status: 200, contentType: "text/csv", body: "day,runs\n2026-10-30,10\n2026-10-31,4\n" });
+    }
     if (url.pathname.endsWith("/platform/insights/summary")) return reply({
       period, reconciled_gate_nights: 14,
       totals: { tenants_active: 1, tenants_total: 1, runs: 14, failed: 1, failure_rate: 1 / 14, tokens: 1000, cost_usd: 1.75 },
@@ -77,7 +88,7 @@ async function adminFixture(page: Page, baseURL: string) {
     });
     return reply([]);
   });
-  return { errors, writes, requests };
+  return { errors, writes, requests, forbiddenExports };
 }
 
 for (const width of [1440, 390]) {
@@ -102,7 +113,20 @@ for (const width of [1440, 390]) {
           expect(url.searchParams.get("from")).toBe(period.from);
           expect(url.searchParams.get("to")).toBe(period.to);
         }
-        await expect(page.getByTestId("platform-insights").getByRole("button", { name: /Export/ })).toHaveCount(0);
+        const platform = page.getByTestId("platform-insights");
+        await platform.getByRole("button", { name: "Export Runs per day", exact: true }).click();
+        const menu = platform.getByRole("menu");
+        expect(await menu.getByRole("menuitem").evaluateAll((items) => items.map((item) => item.getAttribute("data-format"))))
+          .toEqual(["csv", "xlsx", "json", "parquet", "svg", "png"]);
+        await expect(menu.locator('[data-format="pdf"]')).toHaveCount(0);
+        const downloadReady = page.waitForEvent("download");
+        await menu.locator('[data-format="csv"]').click();
+        const download = await downloadReady;
+        expect(download.suggestedFilename()).toBe(`platform-daily-${period.from}-${period.to}.csv`);
+        expect(await download.failure()).toBeNull();
+        expect(state.requests.filter((request) => request.pathname.endsWith("/platform/insights/export"))).toHaveLength(1);
+        expect(state.forbiddenExports).toEqual([]);
+        expect(state.writes).toEqual([]);
         await verifyInsightsSurface(page, page.getByTestId("platform-insights"), width, info, "platform");
         expect(state.errors).toEqual([]);
       });
