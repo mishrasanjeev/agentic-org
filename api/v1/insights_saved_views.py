@@ -69,7 +69,7 @@ async def list_saved_views(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.saved_views.write",
     rate_limit="reporting-read",
     idempotency="conflict-on-duplicate-name",
     audit_event="insights.saved_view.create",
@@ -92,7 +92,7 @@ async def create_saved_view(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.saved_views.write",
     rate_limit="reporting-read",
     idempotency="idempotent-partial-update",
     audit_event="insights.saved_view.update",
@@ -116,7 +116,7 @@ async def update_saved_view(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.saved_views.write",
     rate_limit="reporting-read",
     idempotency="idempotent-delete",
     audit_event="insights.saved_view.delete",
@@ -158,7 +158,7 @@ async def insights_changes(request: Request, tenant_id: str = Depends(get_curren
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.changes.seen",
     rate_limit="reporting-read",
     idempotency="idempotent-update",
     audit_event="insights.changes.seen",

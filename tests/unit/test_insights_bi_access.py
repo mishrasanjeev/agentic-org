@@ -667,8 +667,8 @@ def test_route_metadata_scopes_and_rate_class(app) -> None:
 
     assert RATE_LIMIT_CLASSES["reporting-admin"] == (20, 60)
     assert required_scopes_for("insights.bi.read", "GET") == ("insights:read",)
-    assert required_scopes_for("insights.bi.write", "POST") == ("agenticorg:admin",)
-    assert required_scopes_for("insights.bi.write", "DELETE") == ("agenticorg:admin",)
+    assert required_scopes_for("insights_admin.bi.write", "POST") == ("agenticorg:admin",)
+    assert required_scopes_for("insights_admin.bi.write", "DELETE") == ("agenticorg:admin",)
     meta = {
         (route.path, tuple(sorted(route.methods))): getattr(route.endpoint, ROUTE_METADATA_ATTR)
         for route in insights_bi.router.routes
@@ -680,7 +680,7 @@ def test_route_metadata_scopes_and_rate_class(app) -> None:
     }
     for (path, methods), m in meta.items():
         assert m["auth_required"] and m["tenant_required"] and m["rate_limit"] == "reporting-admin", path
-        assert m["scope"] == ("insights.bi.read" if methods == ("GET",) else "insights.bi.write"), path
+        assert m["scope"] == ("insights.bi.read" if methods == ("GET",) else "insights_admin.bi.write"), path
         assert m["audit_event"].startswith("insights.bi_access."), path
     paths = set(app.openapi()["paths"])
     assert {"/api/v1/insights/bi-access", "/api/v1/insights/bi-access/{role_name}"} <= paths

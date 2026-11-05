@@ -8437,7 +8437,7 @@
     "path": "/api/v1/insights/alerts/{alert_id}/ack",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights.alerts.ack",
     "source_line": 80,
     "tenant_required": true
   },
@@ -8473,7 +8473,7 @@
     "path": "/api/v1/insights/bi-access",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 91,
     "tenant_required": true
   },
@@ -8491,7 +8491,7 @@
     "path": "/api/v1/insights/bi-access/{role_name}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 134,
     "tenant_required": true
   },
@@ -8545,7 +8545,7 @@
     "path": "/api/v1/insights/changes/seen",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.changes.seen",
     "source_line": 166,
     "tenant_required": true
   },
@@ -8653,7 +8653,7 @@
     "path": "/api/v1/insights/exports",
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
-    "scope": "insights.read",
+    "scope": "insights_personal.exports.create",
     "source_line": 108,
     "tenant_required": true
   },
@@ -8707,7 +8707,7 @@
     "path": "/api/v1/insights/exports/{export_id}/sign",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights_personal.evidence_pack.sign",
     "source_line": 306,
     "tenant_required": true
   },
@@ -8815,7 +8815,7 @@
     "path": "/api/v1/insights/saved-views",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 77,
     "tenant_required": true
   },
@@ -8833,7 +8833,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 124,
     "tenant_required": true
   },
@@ -8851,7 +8851,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 100,
     "tenant_required": true
   },
@@ -8923,7 +8923,7 @@
     "path": "/api/v1/insights/value/baselines",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 209,
     "tenant_required": true
   },
@@ -8941,7 +8941,7 @@
     "path": "/api/v1/insights/value/baselines/{baseline_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 258,
     "tenant_required": true
   },
@@ -8959,7 +8959,7 @@
     "path": "/api/v1/insights/value/confirm",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 395,
     "tenant_required": true
   },
@@ -8977,7 +8977,7 @@
     "path": "/api/v1/insights/value/rates",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 308,
     "tenant_required": true
   },
@@ -8995,7 +8995,7 @@
     "path": "/api/v1/insights/value/rates/{rate_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 350,
     "tenant_required": true
   },
@@ -9013,7 +9013,7 @@
     "path": "/api/v1/insights/value/settings",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 450,
     "tenant_required": true
   },
