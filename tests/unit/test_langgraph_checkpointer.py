@@ -16,6 +16,8 @@ import pytest
 from cryptography.fernet import Fernet
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.store.base import InvalidNamespaceError
+from langgraph.store.memory import InMemoryStore
 
 from core.langgraph import checkpointer as cp
 
@@ -273,7 +275,7 @@ def test_pinned_checkpoint_library_versions() -> None:
     # shipping a revision that applies them.
     from core.langgraph.checkpoint_postgres import VERIFIED_LIBRARY_VERSIONS
 
-    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"}
+    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.1"}
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     requirements = (REPO / "requirements.txt").read_text(encoding="utf-8").splitlines()
     for package, pinned in VERIFIED_LIBRARY_VERSIONS.items():
@@ -285,15 +287,16 @@ def test_pinned_checkpoint_library_versions() -> None:
 
 UNVERIFIED = [
     (
-        {"langgraph-checkpoint-postgres": "3.2.1", "langgraph-checkpoint": "4.3.0"},
+        {"langgraph-checkpoint-postgres": "3.2.1", "langgraph-checkpoint": "4.3.1"},
         "langgraph-checkpoint-postgres is 3.2.1",
     ),
     # The previously verified release is refused once the pin moves on.
     (
-        {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.0"},
+        {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.1"},
         "langgraph-checkpoint-postgres is 3.1.3",
     ),
-    ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.1"}, "langgraph-checkpoint is 4.3.1"),
+    ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.2"}, "langgraph-checkpoint is 4.3.2"),
+    ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"}, "langgraph-checkpoint is 4.3.0"),
     ({"langgraph-checkpoint-postgres": "3.2.0"}, "langgraph-checkpoint is missing"),
     ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.2.0"}, "langgraph-checkpoint is 4.2.0"),
 ]
@@ -323,6 +326,38 @@ async def test_unverified_checkpoint_library_is_refused_before_connecting(
     assert exc_info.value.reason == "checkpoint_library_unverified"
     assert detail in exc_info.value.detail
     pool_cls.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["get", "delete", "search", "prefix", "suffix"])
+def test_checkpoint_store_rejects_nul_namespace_before_batch(operation: str) -> None:
+    store = InMemoryStore()
+    namespace = ("sandbox\x00",)
+    with patch.object(InMemoryStore, "batch") as batch, pytest.raises(InvalidNamespaceError, match="NUL"):
+        if operation in ("prefix", "suffix"):
+            store.list_namespaces(**{operation: namespace})
+        elif operation == "search":
+            store.search(namespace)
+        else:
+            getattr(store, operation)(namespace, "item")
+    batch.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["get", "delete", "search", "prefix", "suffix"])
+async def test_checkpoint_store_rejects_nul_namespace_before_async_batch(operation: str) -> None:
+    store = InMemoryStore()
+    namespace = ("sandbox\x00",)
+    with (
+        patch.object(InMemoryStore, "abatch", new_callable=AsyncMock) as batch,
+        pytest.raises(InvalidNamespaceError, match="NUL"),
+    ):
+        if operation in ("prefix", "suffix"):
+            await store.alist_namespaces(**{operation: namespace})
+        elif operation == "search":
+            await store.asearch(namespace)
+        else:
+            await getattr(store, f"a{operation}")(namespace, "item")
+    batch.assert_not_called()
+    batch.assert_not_awaited()
 
 
 def test_migration_ddl_is_the_library_migration_list() -> None:
