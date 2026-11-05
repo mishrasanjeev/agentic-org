@@ -79,7 +79,7 @@ dependencies = [
     "psycopg-pool>=3.3.3",
     "alembic>=1.20.1",
     "redis[hiredis]>=5.2.0",
-    "pydantic>=2.14.1",
+    "pydantic>=2.14.2",
     "pydantic-settings>=2.16.1",
     "cryptography>=50.0.2",
     # QR codes for authenticator-app MFA enrolment, rendered server-side as SVG.
