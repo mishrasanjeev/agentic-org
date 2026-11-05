@@ -469,12 +469,21 @@ async def delete_domain_mapping(host: str, *, client: Any | None = None) -> bool
 FIREBASE_API = "https://firebasehosting.googleapis.com/v1beta1"
 # Only these paths reach the API through a merchant domain; everything else is
 # Firebase's own 404 (no AgenticOrg page or API route is served on a merchant host).
+# The agent paths, then the network shop's own storefront and feed (api/v1/shop_site.py),
+# which answer only on a listed network shop's host. The config is per Hosting site, so a
+# release (scripts/release_merchant_domain_site.py) applies to every domain already on it.
 FIREBASE_AGENT_PATHS: tuple[str, ...] = (
     "/.well-known/ucp",
     "/.well-known/ucp/**",
     "/ucp/**",
     "/acp/**",
     HOST_CHECK_PATH,
+    "/",
+    "/products/**",
+    "/sitemap.xml",
+    "/robots.txt",
+    "/llms.txt",
+    "/feeds/**",
 )
 
 

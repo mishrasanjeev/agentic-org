@@ -57,6 +57,7 @@ app = Celery(
         "core.tasks.invoice_tasks",
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
+        "core.tasks.merchant_notification_tasks",
         "core.tasks.onboarding_desk_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.network_tasks",
@@ -100,6 +101,7 @@ app.conf.update(
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
         "core.tasks.payment_handoff_tasks.notify_order": {"queue": "delivery"},
+        "core.tasks.merchant_notification_tasks.deliver_merchant_notifications": {"queue": "delivery"},
         "core.tasks.onboarding_desk_tasks.open_case": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
@@ -153,6 +155,21 @@ app.conf.beat_schedule = {
         "task": "core.tasks.payment_handoff_tasks.poll_plural_handoffs",
         "schedule": 60.0,
         "options": {"queue": "delivery", "expires": 60},
+    },
+    "reconcile-plural-refunds": {
+        # Hosted Plural refunds whose outcome is unknown (a timeout, a 5xx, a pending status):
+        # read the order from Plural and record what it says (core/commerce/hosted_refunds.py).
+        # A no-op unless AGENTICORG_UCP_CHECKOUT_ENABLED or AGENTICORG_ACP_CHECKOUT_ENABLED.
+        "task": "core.tasks.payment_handoff_tasks.reconcile_plural_refunds",
+        "schedule": 300.0,
+        "options": {"queue": "maintenance", "expires": 300},
+    },
+    "sweep-merchant-notifications": {
+        # The merchant commerce email outbox (core/commerce/merchant_notifications.py): new-order
+        # and payment-attention emails a lost kick, a crash or a failed SMTP send left unsent.
+        "task": "core.tasks.merchant_notification_tasks.sweep_merchant_notifications",
+        "schedule": 60.0,
+        "options": {"queue": "maintenance", "expires": 60},
     },
     "sweep-ucp-order-webhooks": {
         # UCP order webhook retries and missed kicks, and expired Idempotency-Key

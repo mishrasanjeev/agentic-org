@@ -1,5 +1,150 @@
 # Changelog
 
+## Unreleased - Commerce close-out: hosted refunds, durable merchant emails, held stock, loyalty re-price, 1,000-product reads
+
+- Orders paid on a merchant's Plural hosted page (executor `plural_hosted`) can now be refunded through
+  `POST /commerce/runtime/ucp/orders/{id}/refunds`, with the merchant's own Plural credentials (the vault
+  credential the checkout's link was issued under). Refundable is the order total less refunds already recorded on
+  the order (completed or pending) or journalled for it; no agent payment allowance applies. The arbiter decision,
+  the same-currency check, the journal and the ledger events are as for executed orders. The Plural call is the one
+  the executor already makes (`POST /pay/v1/refunds/{plural order id}`).
+- Refund idempotency: the Plural `merchant_order_reference` is now derived from the order id and the request id.
+  A repeated `request_id` for the same order returns the earlier refund (`replayed: true`) without a second Plural
+  call, and records a missing order adjustment under its fixed id. This also applies to `plural_pine` orders.
+- Payments no order matches are kept in `commerce_unmatched_payments`. Administrators see them on the Orders page
+  under **Payments with no order** (`GET /commerce/runtime/payments/unmatched`) and can refund the full paid amount
+  once (`POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds`, tenant administrators). The unmatched-payment
+  email now says to refund it from AgenticOrg on the Orders page, or in Plural.
+- The Orders page has a **Refund** action with a confirmation step and shows each order's refunds.
+- Merchant emails (new order, payment needing attention) go through a durable outbox,
+  `commerce_merchant_notifications`, written in the transaction of the order or payment. A beat sweep
+  (`sweep-merchant-notifications`, every 60 s, maintenance queue) sends due rows with `FOR UPDATE SKIP LOCKED`
+  leasing and backoff, and marks a row `dead` after eight attempts. A send that no administrator accepted (an SMTP
+  failure for every recipient) is retried. The kick after commit is now a best-effort fast path.
+- Plural links hold stock: a new Plural link is refused with `out_of_stock` when the inventory less the units held
+  by other checkouts' still-payable links (issued, not lapsed) is less than the quantity. The message says when the
+  held stock frees up. Only checkouts updated within the link lifetime are read.
+- Stock at payment: before a Plural payment becomes an order, the catalog is checked again. When stock is short the
+  order is still created (the money is taken), marked `stock_short` with the short lines, and the merchant is
+  emailed with the new reason `out_of_stock_at_payment` to ship what they can or refund.
+- Loyalty on re-price: when Complete re-prices a checkout, the loyalty forecast is recomputed from the new total
+  with the Shopify reads; without them the stored loyalty is kept.
+- Shopify catalog reads take up to 1,000 products (`SHOPIFY_CATALOG_READ_LIMIT`, 50 a page, 20 pages) everywhere:
+  the sync route default, the setup flow, the artifact refresh and the scheduled sync. The sync answer carries
+  `read_limit` and `read_limit_reached`, and the setup page tells the merchant when the store has more.
+- Migration v6z122 adds `commerce_merchant_notifications` and `commerce_unmatched_payments` (forced row-level
+  security).
+- Review fixes: the refund bound counts journalled refunds plus hand-recorded refund adjustments no journalled
+  call accounts for; only an explicit Plural refusal (a 4xx other than 408/409/425/429, or a failed status) marks a
+  refund failed, while 5xx answers, timeouts and unknown statuses stay unknown and counted; a replayed in-flight
+  refund answers `replayed` before the bound check.
+- Refund reconciliation: beat task `reconcile-plural-refunds` (every 5 minutes, maintenance queue) reads the Plural
+  order for refunds unknown for 5 minutes and records refunded or failed; admins can ask again with
+  `POST /commerce/runtime/ucp/orders/{id}/refunds/check` and
+  `POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds/check` (**Check refund again** on the Orders page).
+- A stock-short payment refunded through its order gets a new request id after Plural refuses a refund.
+- Held stock also counts orders made since the catalog was last read, no longer counts canceled checkouts, runs
+  under a per-merchant advisory lock in the transaction that marks the Plural order as being created, and treats
+  stock as unconfirmed when a scan limit is reached. The check at payment subtracts the same orders.
+- The outbox leases one row just before its send. Loyalty is kept when the recomputed lookup gives nothing. A
+  payment Plural reported without its order id still gets its outbox row and email.
+## Unreleased - Onboarding desk: agent identity and the agent-ready merchant offer
+
+- Agent identity for desk and case agents, off by default (`AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED`,
+  `..._PROVIDER`, `..._STATUS_CACHE_SECONDS`). Off, no identity provider is called and every agent acts as before.
+- A vendor-neutral identity provider interface (`connectors/framework/agent_identity_provider.py`): resolve an agent
+  identity credential (identifier, attestation and its SHA-256, trust tier, allowed scopes, status, expiry, key
+  thumbprint), check its status, present it, prove key possession and take an enrolment. Providers register in
+  `connectors/agent_identity/registry.py` or through the `agenticorg.agent_identity_providers` entry-point group. A
+  `mock` provider with `active`, `revoked`, `suspended`, `expired`, `unknown` and `unreachable` fixtures runs in local
+  and test only.
+- Before each outreach send, text reply and case provider call, the agent's identity status and its Grantex grant are
+  checked; the action runs only within both scope sets. Revoked, suspended or expired identities and unbound grants
+  stop the action; unknown or unreachable ones hold it (outreach is rescheduled, a text gets no reply, a case run is
+  refused with `authorization_unavailable` before the case moves). Checks are cached briefly and never past the
+  credential's expiry.
+- `POST /onboarding-desk/agent-identity/{role}/bind` registers the agent's key on its Grantex agent and proves
+  possession (`/v1/agents/{id}/keys`, `/challenge`, `/prove`); grant tokens are checked for `cnf.jkt`.
+  `GET /onboarding-desk/agent-identity` shows each agent's check.
+- Contact attempts, transcript replies, desk agent actions and case tool calls record the agent identity identifier,
+  attestation hash and trust tier. With identity on, the evidence pack gains `agent_identity` and `enrolment` sections.
+- Verification providers can declare `accepts_presented_identity`; the case investigator then presents its identity
+  on `verify_business`. The mock verification provider echoes it in the handle's `accepted_identity`.
+- The agent-ready merchant offer per tenant (`GET`/`PUT /onboarding-desk/agent-ready-settings`), shown after a person
+  approves the case, on the applicant page (English and French) and by text. Accepting records an `agent_enrolment`
+  consent naming the person and requests a Grantex consent grant; the hand-off to the identity provider carries only
+  the verification reference and registry-verified fields, and records the provider's reference and status as
+  received. Verifications older than the configured age are not shared. Withdrawing revokes the grant and blocks any
+  further sharing. The partner report gains `funnel.agent_ready` with identity on.
+- HELP and PERSON text replies never wait on the identity check; only the agent's own reply does. A misbehaving or
+  slow identity provider or grant check holds the action, and one lead or tenant failing never stops an outreach run.
+- An enrolment accepts only a grant issued for it (enrolment purpose and scope, issued after it began, not expired);
+  withdrawal revokes every enrolment grant the person holds and records a revocation that failed. The consent page
+  link is kept while approval is pending.
+- Migration v6z121 adds the identity columns to contact attempts, the `web` consent channel and the encrypted consent
+  subject, and the `onboarding_desk_agent_actions` and `onboarding_desk_enrolments` tables (forced row-level security).
+## Unreleased - Shop owner feedback: catalog check, delivery areas and buyer choice of shops
+
+- The Sell everywhere page shows a catalog check under **Your catalog** (`core.commerce.catalog_health`, in the
+  merchant setup view as `catalog.health`): products and variants counted, problems that keep a variant from being
+  offered (no usable price, stock below zero) and warnings (a SKU shared by several variants, no SKU, stock not
+  tracked, out of stock, no image, no description, no barcode, a very short title), each with examples and a
+  one-line fix. It is for the merchant only; search order stays random.
+- A SKU shared by several variants of one catalog source (`core.commerce.sku_keys`) no longer names an item: the
+  variants stay listed and on sale under their own ids, but a catalog lookup or checkout item addressed by that SKU
+  is not resolved (it used to pick the first variant), and per-SKU price and stock facts in `source_facts` do not
+  apply to them. A variant without a usable price stays unlisted and unsold, as before.
+- Shopify syncs record when a variant's stock is not tracked (`inventory_tracked: false`, read with the details query).
+- Catalog uploads return `warnings` for products with no image, description or barcode; the upload is still stored.
+- Shopify delivery zones that cover only some states or provinces of a country (`includeAllProvinces: false`) are
+  followed: the destination's `address_region` must be one of them (by code or name, accents ignored), and the buyer
+  is asked for the state when it is missing. A zone with the whole country serves any address there, as before.
+- Merchants can set a local delivery area, a list of up to 50 postal code prefixes, in the policies step
+  (`delivery_postal_prefixes`, stored at `provider_policy.ucp.fulfillment.postal_code_prefixes`). Outside it, or without
+  a postal code, the checkout offers no shipping option and says why, so no payment link is issued. Pickup is not
+  affected. A UK district prefix such as `SW1` covers that district only (SW1A, SW1P), not SW10 to SW19.
+- The hosted MCP server's `search_catalog` takes `exclude_shops` and `only_shops` (up to 50 shop slugs each), applied
+  before the random shuffle and echoed as `shops_excluded`, `only_shops` and `unknown_shops`; a one-shop search of an
+  excluded shop is refused with `shop_excluded`, and one outside a given `only_shops` with `shop_not_in_only_shops`.
+- The Telegram shopper keeps a per-chat avoid list: `/avoid <shop>`, `/avoid`, `/avoid clear`, `/allow <shop>`, and
+  `avoid_shop`/`allow_shop` tools when the buyer says so in words. Avoided shops are left out of network searches,
+  no checkout tool (open, read, update, pickup, payment link) acts there, and avoiding the chosen shop unpicks it.
+  The system prompt asks the assistant to offer the shop choice.
+## Unreleased - Network registrations: shop pages, product feeds, program status and directory readiness
+
+- A listed network shop's web address (its platform subdomain or its own domain) now serves a small shop site
+  built from its verified catalog: `/` (the shop and its products), `/products/<handle>` (price, stock, images,
+  description, details, shipping and returns, and schema.org `Product` or `ProductGroup` JSON-LD with `gtin` and
+  `shippingDetails`), `/sitemap.xml`, `/robots.txt` and `/llms.txt`. The products are the newest snapshot of every
+  catalog source with the shop's source precedence, as `/ucp/catalog/search` serves them, and only while Grantex
+  verifies the catalog; otherwise the pages answer 503 with `Retry-After`. Every catalog text is escaped for its
+  context; pages carry a restrictive Content-Security-Policy and `Cache-Control: private`.
+- `/feeds/google.xml` on the same host is the shop's product feed (RSS 2.0, `g:` namespace) for Google Merchant
+  Center and Microsoft Merchant Center: one item per sellable variant with id, title, description, link (the
+  product page), image, availability, price and sale price, brand, gtin or `identifier_exists`, condition,
+  product type, item group and the shop's flat-rate shipping per country. Variants with no price, a zero price,
+  no stock figure or no image are left out. `GET /api/v1/network/feeds` lists every servable shop's website,
+  feed, sitemap and eligible item count.
+- `api/middleware/merchant_host.py` sends those paths to the new `/shop-site` routes only when the request's host
+  is a listed, servable network shop (`core.commerce.network.shop_for_host`). On another merchant host it answers
+  them with 404 itself, and with 503 and `Retry-After` when the lookup fails, so they never reach authentication;
+  the API's own host is unchanged. The `/api/v1/network/feeds` index is built at most once every five minutes. The
+  Firebase Hosting config rewrites the new paths too, and `scripts/release_merchant_domain_site.py --check-host`
+  reports whether each host reaches the shop site after a release.
+- The Sell everywhere page's Google, Microsoft and Perplexity rows, and a new ChatGPT app directory line, read
+  `AGENTICORG_NETWORK_REGISTRATIONS` (`not_started`, `submitted` or `live` per program, optionally per shop) and
+  the shop's own eligibility: listed, web address live, catalog verified and at least one eligible feed item.
+  They show Coming, Submitted, Live or Not eligible yet with the reason, and the shop's feed address.
+- The hosted MCP server in network mode now has a title, website, icons and instructions, every tool declares the
+  no-auth security scheme, and `MCP_OPENAI_APPS_CHALLENGE` serves the ChatGPT domain-verification token.
+  `mcp-server/shopping/server.json` registers the hosted endpoint in the MCP registry as
+  `io.github.mishrasanjeev/agenticorg-shopping`; `mcp-server/shopping/openai-plugin/` is the ChatGPT app
+  directory package.
+- The privacy notice gains a "Shopping network buyers" section (what the MCP server and the Telegram bot handle
+  and keep, and for how long), and a draft `/network-terms` page sets out the network terms for buyers and shops
+  (version 2026-10-25).
+- New runbook `docs/runbooks/network-registrations.md`: the owner's steps for each program, the sources read on
+  2026-11-04, and how to record each program's status.
 ## Unreleased - WhatsApp report delivery through an approved template, and BI tool guides
 
 - Scheduled reports sent on WhatsApp go as the approved template named by `AGENTICORG_WHATSAPP_REPORT_TEMPLATE`

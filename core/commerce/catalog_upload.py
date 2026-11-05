@@ -140,6 +140,36 @@ def parse_catalog_upload(content: str, fmt: str) -> list[dict[str, Any]]:
     return rows
 
 
+# Optional columns whose absence an upload reports as a warning (the upload is still stored).
+_WARNED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("image_url", "no image, so buyers' AI assistants show no photo"),
+    ("description", "no description, so buyers' AI assistants have only the title"),
+    ("gtin", "no barcode (GTIN), so they cannot be matched to the same product at other shops"),
+)
+MAX_WARNING_ROWS = 5
+
+
+def upload_warnings(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """What the stored upload lacks but does not need: ``{column, count, rows, message}`` per column.
+
+    Warnings never refuse an upload; ``rows`` names the first few rows (row 1 is the first product).
+    """
+    warnings: list[dict[str, Any]] = []
+    for column, why in _WARNED_COLUMNS:
+        missing = [index for index, row in enumerate(rows, start=1) if not row.get(column)]
+        if missing:
+            noun = "product has" if len(missing) == 1 else "products have"
+            warnings.append(
+                {
+                    "column": "barcode" if column == "gtin" else column,
+                    "count": len(missing),
+                    "rows": missing[:MAX_WARNING_ROWS],
+                    "message": f"{len(missing)} {noun} {why}.",
+                }
+            )
+    return warnings
+
+
 def detail_labels(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """The product-detail columns buyers' AI assistants will read, in first-seen order."""
     labels: list[str] = []

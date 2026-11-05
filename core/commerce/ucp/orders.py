@@ -186,15 +186,20 @@ def apply_fulfillment_event(
     return entry
 
 
-def apply_adjustment(snapshot: dict[str, Any], adjustment: Mapping[str, Any], *, now: datetime) -> dict[str, Any]:
-    """Append an adjustment (``adjustment.json``); a completed cancellation or return lowers line totals."""
+def apply_adjustment(
+    snapshot: dict[str, Any], adjustment: Mapping[str, Any], *, now: datetime, entry_id: str | None = None
+) -> dict[str, Any]:
+    """Append an adjustment (``adjustment.json``); a completed cancellation or return lowers line totals.
+
+    ``entry_id`` fixes the id (server-side callers, e.g. a refund retried under the same reference).
+    """
     lines = {line["id"]: line for line in snapshot["line_items"]}
     adj_type = str(adjustment.get("type") or "")
     status = str(adjustment.get("status") or "")
     if not adj_type or status not in ("pending", "completed", "failed"):
         raise OrderUpdateError("type and a status of pending, completed or failed are required")
     entry: dict[str, Any] = {
-        "id": f"adj_{uuid.uuid4().hex[:16]}",
+        "id": entry_id or f"adj_{uuid.uuid4().hex[:16]}",
         "type": adj_type,
         "occurred_at": now.isoformat().replace("+00:00", "Z"),
         "status": status,

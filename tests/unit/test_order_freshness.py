@@ -240,30 +240,40 @@ def test_the_unmatched_payment_email_names_the_plural_order_the_reason_and_what_
     assert "Kaveri &lt;Coffee&gt;" in body and "<Coffee>" not in body
     assert "the checkout had been canceled before the payment arrived" in body
     assert "v1-hosted-9" in body and "chk_1" in body and "asha@example.com" in body
-    assert "refund it, or contact the buyer" in body
+    assert "Refund it from AgenticOrg" in body and "/dashboard/orders" in body
+    assert "refund it there, or contact the buyer" in body
 
 
 def test_every_unmatched_result_has_a_plain_reason() -> None:
-    from core.commerce.ucp.handlers import UNMATCHED_RESULTS
+    from core.commerce.ucp.handlers import ATTENTION_RESULTS, STOCK_SHORT_AT_PAYMENT, UNMATCHED_RESULTS
 
-    assert set(UNMATCHED_RESULTS) == set(order_notifications.UNMATCHED_REASONS)
+    assert set(ATTENTION_RESULTS) == set(order_notifications.UNMATCHED_REASONS)
+    assert set(ATTENTION_RESULTS) == {*UNMATCHED_RESULTS, STOCK_SHORT_AT_PAYMENT}
+    assert order_notifications.ORDER_ATTENTION_REASONS == {STOCK_SHORT_AT_PAYMENT}
 
 
-def test_the_unmatched_payment_kick_queues_the_task_with_the_details(monkeypatch) -> None:
-    from core.tasks import payment_handoff_tasks
+def test_the_unmatched_payment_kick_asks_a_worker_to_send_the_tenants_outbox(monkeypatch) -> None:
+    from core.tasks import merchant_notification_tasks
 
     queued: list[tuple[Any, ...]] = []
-    monkeypatch.setattr(payment_handoff_tasks.notify_unmatched_payment, "delay", lambda *a: queued.append(a))
+    task = merchant_notification_tasks.deliver_merchant_notifications
+    monkeypatch.setattr(task, "delay", lambda *a: queued.append(a))
     order_notifications.kick_unmatched_payment_notification(
         "t1", "chk_1", result="amount_mismatch", amount_minor_units=100, currency="INR", provider_order_id="v1-h"
     )
-    assert queued == [
-        (
-            "t1",
-            "chk_1",
-            {"result": "amount_mismatch", "amount_minor_units": 100, "currency": "INR", "provider_order_id": "v1-h"},
-        )
-    ]
+    order_notifications.kick_order_notification("t1", "ord_1")
+    # The email itself is the outbox row written with the payment; the kick only asks for it now.
+    assert queued == [("t1",), ("t1",)]
+
+
+def test_a_lost_kick_never_raises(monkeypatch) -> None:
+    from core.tasks import merchant_notification_tasks
+
+    def broker_down(*_a: Any) -> None:
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(merchant_notification_tasks.deliver_merchant_notifications, "delay", broker_down)
+    order_notifications.kick_order_notification("t1", "ord_1")
 
 
 @pytest.mark.asyncio

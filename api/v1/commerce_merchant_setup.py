@@ -5,13 +5,15 @@ Merchant (``commerce.merchant_config.write`` or tenant admin), under ``/api/v1/c
 
 * ``GET /merchant-configs`` - the tenant's merchants (pick one; no hand-typed id).
 * ``POST /merchant-setup`` - create a merchant from a shop name; the id is generated server-side.
-* ``GET /merchant-configs/{merchant_id}/setup`` - where each step stands: catalog, policies,
-  order limits, and what is still missing before Sell everywhere can be turned on.
+* ``GET /merchant-configs/{merchant_id}/setup`` - where each step stands: catalog (with its health
+  report, ``core.commerce.catalog_health``), policies, order limits, and what is still missing before
+  Sell everywhere can be turned on.
 * ``POST /merchant-configs/{merchant_id}/catalog/upload`` - a CSV or JSON catalog
   (``core.commerce.catalog_upload``) becomes the merchant's connector evidence.
 * ``POST /merchant-configs/{merchant_id}/catalog/sync`` - read the connected Shopify store
   again (or the stored upload).
-* ``PUT /merchant-configs/{merchant_id}/setup/policies`` - returns, shipping and store pickup.
+* ``PUT /merchant-configs/{merchant_id}/setup/policies`` - returns, shipping, store pickup and the
+  local delivery area (postal code prefixes the shop delivers to).
 * ``PUT /merchant-configs/{merchant_id}/setup/shop-details`` - details that hold for the whole shop
   (a food-safety licence, a certification), read by buyers' AI assistants on every product.
 * ``PUT /merchant-configs/{merchant_id}/setup/order-limits`` - the per-order and daily maximums
@@ -46,9 +48,13 @@ from api.v1 import commerce_runtime as runtime
 from api.v1.commerce_runtime import require_merchant_commerce_config_write
 from core.commerce.c6z_runtime_vertical import (
     CATALOG_UPLOAD_SOURCE_SYSTEM,
+    SHOPIFY_CATALOG_MAX_PAGES,
+    SHOPIFY_CATALOG_PAGE_SIZE,
+    SHOPIFY_CATALOG_READ_LIMIT,
     SHOPIFY_SOURCE_SYSTEM,
     contains_private_or_executable_value,
 )
+from core.commerce.catalog_health import catalog_health_report
 from core.commerce.catalog_upload import (
     MAX_ATTRIBUTE_NAME,
     MAX_SHOP_DETAIL_VALUE,
@@ -60,6 +66,7 @@ from core.commerce.catalog_upload import (
     shop_details_from_entries,
     shop_details_of,
     skipped_columns,
+    upload_warnings,
 )
 from core.commerce.ledger import record_commerce_event
 from core.commerce.oacp_merchant_config import (
@@ -68,6 +75,12 @@ from core.commerce.oacp_merchant_config import (
     merchant_config_id,
     merchant_config_readiness,
     normalize_merchant_commerce_config,
+)
+from core.commerce.ucp.delivery_area import (
+    MAX_POSTAL_PREFIXES,
+    DeliveryAreaError,
+    normalize_postal_prefixes,
+    stored_postal_prefixes,
 )
 from core.database import get_tenant_session
 from core.models.commerce_c6z_runtime import (
@@ -127,6 +140,9 @@ class PoliciesRequest(BaseModel):
     shipping_fee: str | None = Field(default=None, max_length=20)
     shipping_currency: str | None = Field(default=None, pattern=r"^[A-Za-z]{3}$")
     shipping_countries: list[str] = Field(default_factory=list, max_length=50)
+    # The local delivery area: postal code prefixes ("5600" for 5600xx PIN codes); empty delivers wherever
+    # the shipping rates reach. Applies to Shopify rates and the flat fee alike; store pickup is unaffected.
+    delivery_postal_prefixes: list[str] = Field(default_factory=list, max_length=MAX_POSTAL_PREFIXES * 2)
 
 
 class ShopDetail(BaseModel):
@@ -330,6 +346,21 @@ def _flat_rates(body: PoliciesRequest) -> list[dict[str, Any]] | None:
     ]
 
 
+def _postal_prefixes(body: PoliciesRequest) -> list[str]:
+    try:
+        return normalize_postal_prefixes(body.delivery_postal_prefixes)
+    except DeliveryAreaError as exc:
+        raise HTTPException(422, {"code": "invalid_setup", "message": str(exc)}) from exc
+
+
+def delivery_area_view(provider_policy: Mapping[str, Any] | None) -> list[str]:
+    """The stored local delivery area (postal code prefixes; empty: no area)."""
+    ucp = (provider_policy or {}).get("ucp")
+    fulfillment = ucp.get("fulfillment") if isinstance(ucp, Mapping) else None
+    raw = fulfillment.get("postal_code_prefixes") if isinstance(fulfillment, Mapping) else None
+    return list(stored_postal_prefixes(raw))
+
+
 def shipping_rate_view(provider_policy: Mapping[str, Any] | None) -> dict[str, Any] | None:
     """The stored flat shipping rate in major units, or None."""
     from core.commerce.ucp.flat_rates import configured_delivery_rates
@@ -354,6 +385,7 @@ def policies_view(provider_policy: Mapping[str, Any] | None) -> dict[str, Any]:
         "shipping": shipping,
         "pickup": str(stored.get("pickup") or ""),
         "shipping_rate": shipping_rate_view(provider_policy),
+        "delivery_postal_prefixes": delivery_area_view(provider_policy),
     }
 
 
@@ -438,6 +470,14 @@ async def setup_view(tenant_id: str, merchant_id: str) -> dict[str, Any]:
         "source": source,
         "shop_domain": connector_config.get("shop_domain") if source == SHOPIFY_SOURCE_SYSTEM else None,
         "product_count": evidence.product_count if evidence_matches and evidence is not None else 0,
+        # One read takes at most this many Shopify products; a store at the limit may have more.
+        "read_limit": SHOPIFY_CATALOG_READ_LIMIT if source == SHOPIFY_SOURCE_SYSTEM else None,
+        "at_read_limit": bool(
+            source == SHOPIFY_SOURCE_SYSTEM
+            and evidence_matches
+            and evidence is not None
+            and int(evidence.product_count or 0) >= SHOPIFY_CATALOG_READ_LIMIT
+        ),
         "last_synced_at": _iso(evidence.synced_at) if evidence_matches and evidence is not None else None,
         "currency": evidence.currency if evidence_matches and evidence is not None else None,
         "last_error": connector.sync_error if connector is not None else None,
@@ -448,6 +488,10 @@ async def setup_view(tenant_id: str, merchant_id: str) -> dict[str, Any]:
         else None,
         "webhook_path": runtime.shopify_webhook_path(tenant_id, merchant_id)
         if source == SHOPIFY_SOURCE_SYSTEM
+        else None,
+        # For the merchant only: what in the stored catalog is not offered, or offered with less to go on.
+        "health": catalog_health_report(list(evidence.products or []), source=source, currency=evidence.currency)
+        if evidence_matches and evidence is not None
         else None,
     }
     policies = policies_view(row.provider_policy)
@@ -681,6 +725,8 @@ async def upload_catalog(
         # What buyers' AI assistants will also read, and what the upload left out on purpose.
         "details": detail_labels(rows),
         "skipped_columns": skipped_columns(body.content, body.format),
+        # Stored all the same: what the products lack that buyers' AI assistants would use.
+        "warnings": upload_warnings(rows),
         "setup": await setup_view(tenant_id, merchant_id),
     }
 
@@ -729,7 +775,11 @@ async def sync_catalog(merchant_id: str, tenant_id: str = Depends(get_current_te
     assert packet is not None
     if source == SHOPIFY_SOURCE_SYSTEM:
         result = await runtime._sync_shopify_packet(
-            tenant_id=tenant_id, packet_id=str(packet["packet_id"]), page_size=50, max_pages=10, currency=None
+            tenant_id=tenant_id,
+            packet_id=str(packet["packet_id"]),
+            page_size=SHOPIFY_CATALOG_PAGE_SIZE,
+            max_pages=SHOPIFY_CATALOG_MAX_PAGES,
+            currency=None,
         )
     elif evidence_id is not None:
         result = await runtime.reread_uploaded_catalog(tenant_id=tenant_id, evidence_id=evidence_id)
@@ -774,6 +824,7 @@ async def put_policies(
     pickup = _policy_text(body.pickup, "pickup") if body.pickup.strip() else ""
     fulfillment = f"Shipping: {shipping}" + (f" Store pickup: {pickup}" if pickup else " No store pickup.")
     flat_rates = _flat_rates(body)
+    prefixes = _postal_prefixes(body)
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         row = await _config_row(session, tenant_id, merchant_id)
         brand = dict(row.public_brand_profile or {})
@@ -783,7 +834,14 @@ async def put_policies(
             row.provider_policy or {},
             {
                 "merchant_policies": {"returns": returns, "shipping": shipping, "pickup": pickup},
-                "ucp": {"fulfillment": {"shipping": True, "pickup": bool(pickup), "flat_rates": flat_rates}},
+                "ucp": {
+                    "fulfillment": {
+                        "shipping": True,
+                        "pickup": bool(pickup),
+                        "flat_rates": flat_rates,
+                        "postal_code_prefixes": prefixes or None,
+                    }
+                },
             },
         )
         await _save_config(
@@ -792,7 +850,11 @@ async def put_policies(
             row=row,
             changes={"public_brand_profile": brand, "provider_policy": policy},
             event="commerce.runtime.merchant_setup.policies",
-            payload={"pickup_offered": bool(pickup), "flat_shipping_rate": flat_rates is not None},
+            payload={
+                "pickup_offered": bool(pickup),
+                "flat_shipping_rate": flat_rates is not None,
+                "delivery_postal_prefix_count": len(prefixes),
+            },
         )
     return await setup_view(tenant_id, merchant_id)
 

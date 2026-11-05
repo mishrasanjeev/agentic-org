@@ -17,7 +17,9 @@ Merchant transaction settings live in the merchant commerce config under
     ``terms_of_service`` links for buyer-facing checkouts.
 ``fulfillment``
     ``{shipping: bool, pickup: bool, multi_destination: [method...],
-    method_combinations: [[method...]...], free_shipping_min_subtotal_minor_units?}``.
+    method_combinations: [[method...]...], free_shipping_min_subtotal_minor_units?,
+    postal_code_prefixes?: [prefix...]}``; with ``postal_code_prefixes`` the shop delivers
+    only to postal codes starting with one of them (``core.commerce.ucp.delivery_area``).
 ``loyalty``
     ``{claim, name, metafield_namespace, reward_currency: {name, code, decimal_places},
     earn_points_per_major_unit?}``; memberships are read from Shopify customer metafields.
@@ -63,6 +65,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, UpiAutopayCapability, parse_upi_autopay_capability
+from core.commerce.ucp.delivery_area import stored_postal_prefixes
 
 DEFAULT_CHECKOUT_TTL_SECONDS = 6 * 60 * 60
 # The longest a checkout session lives, whatever the merchant asks for (the daily cap's scan relies on it).
@@ -89,6 +92,8 @@ class FulfillmentSettings:
     multi_destination: tuple[str, ...] = ()
     method_combinations: tuple[tuple[str, ...], ...] = ()
     free_shipping_min_subtotal_minor_units: int | None = None
+    # The local delivery area (empty: wherever the shipping rates reach).
+    postal_code_prefixes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -225,6 +230,7 @@ def merchant_ucp_from_config(
             if isinstance(combo, Sequence) and not isinstance(combo, str)
         ),
         free_shipping_min_subtotal_minor_units=_int(fulfillment_raw.get("free_shipping_min_subtotal_minor_units")),
+        postal_code_prefixes=stored_postal_prefixes(fulfillment_raw.get("postal_code_prefixes")),
     )
     loyalty_raw = ucp.get("loyalty") if isinstance(ucp.get("loyalty"), Mapping) else None
     loyalty = None

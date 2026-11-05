@@ -44,6 +44,7 @@ const Support = lazyRetry(() => import("./pages/legal/Support"));
 const Privacy = lazyRetry(() => import("./pages/legal/Privacy"));
 const Terms = lazyRetry(() => import("./pages/legal/Terms"));
 const Refund = lazyRetry(() => import("./pages/legal/Refund"));
+const NetworkTerms = lazyRetry(() => import("./pages/legal/NetworkTerms"));
 const Playground = lazyRetry(() => import("./pages/Playground"));
 const Agents = lazyRetry(() => import("./pages/Agents"));
 const AgentCreate = lazyRetry(() => import("./pages/AgentCreate"));
@@ -199,6 +200,7 @@ export default function App() {
       <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
+      <Route path="/network-terms" element={<NetworkTerms />} />
       <Route path="/refund" element={<Refund />} />
       <Route path="/refund-policy" element={<Navigate to="/refund" replace />} />
       <Route path="/cancellation" element={<Navigate to="/refund" replace />} />

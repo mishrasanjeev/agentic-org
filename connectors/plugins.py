@@ -10,6 +10,7 @@ entry points in one of these groups::
 - ``agenticorg.connectors`` - a ``BaseConnector`` subclass
 - ``agenticorg.agents`` - a ``BaseAgent`` subclass
 - ``agenticorg.providers`` - a ``VerificationProvider`` subclass
+- ``agenticorg.agent_identity_providers`` - an ``AgentIdentityProvider`` subclass
 - ``agenticorg.workflows`` - discovered, but rejected until that registry exists
 
 Loading is off unless ``AGENTICORG_PLUGIN_LOADING`` is true, and only
@@ -39,7 +40,8 @@ CONNECTORS_GROUP = "agenticorg.connectors"
 PROVIDERS_GROUP = "agenticorg.providers"
 AGENTS_GROUP = "agenticorg.agents"
 WORKFLOWS_GROUP = "agenticorg.workflows"
-PLUGIN_GROUPS = (CONNECTORS_GROUP, PROVIDERS_GROUP, AGENTS_GROUP, WORKFLOWS_GROUP)
+IDENTITY_PROVIDERS_GROUP = "agenticorg.agent_identity_providers"
+PLUGIN_GROUPS = (CONNECTORS_GROUP, PROVIDERS_GROUP, AGENTS_GROUP, WORKFLOWS_GROUP, IDENTITY_PROVIDERS_GROUP)
 _UNSUPPORTED_GROUPS = frozenset({WORKFLOWS_GROUP})
 
 _plugin_load_total = Counter(
@@ -109,10 +111,24 @@ def _register_provider(obj: Any) -> str:
         raise _PluginRejectedError(exc.reason, exc.detail) from exc
 
 
+def _register_identity_provider(obj: Any) -> str:
+    # Importing the registry registers the native identity providers first.
+    from connectors.agent_identity.registry import (  # noqa: PLC0415
+        AgentIdentityProviderRegistry,
+        AgentIdentityRegistryError,
+    )
+
+    try:
+        return AgentIdentityProviderRegistry.register_plugin(obj)
+    except AgentIdentityRegistryError as exc:
+        raise _PluginRejectedError(exc.reason, exc.detail) from exc
+
+
 _REGISTRARS: dict[str, Callable[[Any], str]] = {
     CONNECTORS_GROUP: _register_connector,
     PROVIDERS_GROUP: _register_provider,
     AGENTS_GROUP: _register_agent,
+    IDENTITY_PROVIDERS_GROUP: _register_identity_provider,
 }
 
 

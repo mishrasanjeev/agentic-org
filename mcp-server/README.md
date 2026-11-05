@@ -227,11 +227,28 @@ part of a word, then the rest). `same_products` also lists one product (the same
 verified) sold by two or more shops, one offer per shop: in the currency most of the offers use, lowest
 price first, then the other offers in the order the shops answered.
 
+The buyer chooses the shop. `search_catalog` takes `exclude_shops` (shop slugs the buyer does not want)
+and `only_shops` (the only shops to ask), up to 50 slugs each. Both apply before the random pick and
+order, so the shops that remain are still asked in a fresh random order. The result echoes them as
+`shops_excluded` and `only_shops`, and lists any slug not in the directory as `unknown_shops`. A
+one-shop search (`shop`) for a shop in `exclude_shops` is refused with `shop_excluded`, and one for a shop
+outside a given `only_shops` with `shop_not_in_only_shops`, before any call.
+The tool description tells the AI app never to open a checkout at a shop the buyer excluded.
+
 | Setting | Meaning |
 |---|---|
 | `MCP_NETWORK_DIRECTORY_URL` | The network directory (https, path ending in `/network/merchants`). The list is cached for a minute and each shop's profile for five; a failed refresh keeps the last good copy. |
 | `AGENTICORG_NETWORK_SERVICE_TOKEN` | The credential the network checkout gateway accepts (at least 32 characters, from a secret). Sent only to the gateway, never to a shop. |
 | `AGENTICORG_UCP_AGENT_PROFILE` | The network platform profile sent as `UCP-Agent` on catalog calls. |
+| `MCP_OPENAI_APPS_CHALLENGE` | Optional. The domain-verification token the ChatGPT app directory shows the owner; served as plain text at `GET /.well-known/openai-apps-challenge`. Unset, that path is 404. |
+
+In network mode the server introduces itself as `AgenticOrg shopping network` with the website
+`https://agenticorg.ai`, two https icons and short instructions for the model (how search, checkout
+and the payment hand-off work, and the privacy and terms pages), and every tool carries
+`_meta.securitySchemes: [{"type": "noauth"}]`. The MCP registry entry for this hosted endpoint is
+`shopping/server.json` (`io.github.mishrasanjeev/agenticorg-shopping`, a `streamable-http` remote at
+`https://mcp.agenticorg.ai/mcp`), separate from this package's `server.json`; the ChatGPT app
+directory package is in `shopping/openai-plugin/`.
 
 `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_API_KEY` are not used in network mode. Catalog calls go
 to each shop's public `/ucp/catalog/*` routes with no credential, five shops at a time with a

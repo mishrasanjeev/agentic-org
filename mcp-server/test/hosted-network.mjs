@@ -138,6 +138,61 @@ async function connect() {
 }
 
 try {
+  await check("introduces itself with a title, website, icons and instructions", async () => {
+    const client = await connect();
+    const info = client.getServerVersion();
+    assert.equal(info.name, "agenticorg-network");
+    assert.equal(info.title, "AgenticOrg shopping network");
+    assert.equal(info.websiteUrl, "https://agenticorg.ai");
+    assert.ok(info.icons.length >= 1 && info.icons.every((icon) => icon.src.startsWith("https://")));
+    assert.ok(info.icons.some((icon) => icon.mimeType === "image/png" && icon.sizes.includes("512x512")));
+    const instructions = client.getInstructions();
+    assert.match(instructions, /never take payment/);
+    assert.match(instructions, /https:\/\/agenticorg\.ai\/privacy/);
+    await client.close();
+  });
+
+  await check("every tool declares the no-auth security scheme and explicit hints", async () => {
+    const client = await connect();
+    for (const tool of (await client.listTools()).tools) {
+      assert.deepEqual(tool._meta?.securitySchemes, [{ type: "noauth" }], tool.name);
+      for (const hint of ["readOnlyHint", "destructiveHint", "openWorldHint"]) {
+        assert.equal(typeof tool.annotations?.[hint], "boolean", `${tool.name} ${hint}`);
+      }
+    }
+    await client.close();
+  });
+
+  await check("serves the ChatGPT domain-verification token only when one is set", async () => {
+    assert.equal((await fetch(`${base}/.well-known/openai-apps-challenge`)).status, 404);
+    const withToken = createHostedHandler({
+      profileUrl: "",
+      apiKey: "",
+      agentProfile: AGENT,
+      network: { directoryUrl: `${apiBase}/api/v1/network/merchants`, serviceToken: SERVICE },
+      allowAnonymous: true,
+      allowedHosts: new Set(["127.0.0.1"]),
+      perClientPerMinute: 10,
+      globalPerMinute: 10,
+      version: "test",
+      openaiAppsChallenge: "synthetic-challenge-token-123",
+      log: () => {},
+    });
+    const server = http.createServer((req, res) => void withToken(req, res));
+    const url = await listen(server);
+    try {
+      const response = await fetch(`${url}/.well-known/openai-apps-challenge`);
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /^text\/plain/);
+      assert.equal(await response.text(), "synthetic-challenge-token-123");
+      assert.equal((await fetch(`${url}/.well-known/openai-apps-challenge`, { method: "POST" })).status, 404);
+    } finally {
+      server.close();
+    }
+    const config = { profileUrl: "", apiKey: "", agentProfile: AGENT, allowAnonymous: true, allowedHosts: new Set(["x"]), perClientPerMinute: 1, globalPerMinute: 1, version: "t" };
+    assert.throws(() => createHostedHandler({ ...config, openaiAppsChallenge: "<script>" }), /MCP_OPENAI_APPS_CHALLENGE/);
+  });
+
   await check("exposes the network tools and nothing that can pay", async () => {
     const client = await connect();
     const tools = (await client.listTools()).tools;
@@ -225,6 +280,81 @@ try {
       firsts.add(result.structuredContent.results[0].shop);
     }
     assert.deepEqual([...firsts].sort(), ["kettle-works", "tea-corner"]);
+    await client.close();
+  });
+
+  await check("exclude_shops and only_shops apply before the shuffle and are echoed in the result", async () => {
+    const client = await connect();
+    let before = calls.length;
+    const excluded = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: ["tea-corner", "gone-shop"] },
+    });
+    assert.notEqual(excluded.isError, true);
+    const body = excluded.structuredContent;
+    assert.deepEqual(body.results.map((r) => r.shop), ["kettle-works"]);
+    assert.deepEqual(body.shops_excluded, ["gone-shop", "tea-corner"]);
+    assert.deepEqual(body.unknown_shops, ["gone-shop"]);
+    assert.equal(body.shops_searched, 2);
+    assert.equal(body.shops_in_network, 3);
+    assert.equal(body.same_products, undefined, "the excluded shop's offer is not grouped in either");
+    const asked = calls.slice(before).filter((c) => c.path === "/ucp/catalog/search").map((c) => c.shop).sort();
+    assert.deepEqual(asked, ["broken-shop", "kettle-works"], "an excluded shop is never asked");
+
+    before = calls.length;
+    const only = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.deepEqual(only.structuredContent.only_shops, ["kettle-works", "tea-corner"]);
+    assert.deepEqual(only.structuredContent.unavailable, []);
+    assert.equal(only.structuredContent.shops_searched, 2);
+    assert.equal(calls.slice(before).filter((c) => c.shop === "broken-shop").length, 0);
+
+    // The shops that remain still come back in a fresh random order.
+    const firsts = new Set();
+    for (let i = 0; i < 24; i += 1) {
+      const again = await client.callTool({
+        name: "search_catalog",
+        arguments: { request: { query: "chai" }, exclude_shops: ["broken-shop"] },
+      });
+      firsts.add(again.structuredContent.results[0].shop);
+    }
+    assert.deepEqual([...firsts].sort(), ["kettle-works", "tea-corner"]);
+
+    before = calls.length;
+    const refused = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, exclude_shops: ["tea-corner"] },
+    });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.error.code, "shop_excluded");
+    assert.equal(calls.length, before, "nothing is asked of a shop the buyer excluded");
+
+    const outside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "broken-shop", request: { query: "chai" }, only_shops: ["tea-corner", "kettle-works"] },
+    });
+    assert.equal(outside.isError, true);
+    assert.equal(outside.structuredContent.error.code, "shop_not_in_only_shops");
+    assert.match(outside.structuredContent.error.content, /kettle-works, tea-corner/);
+    assert.equal(calls.length, before, "nothing is asked of a shop outside only_shops");
+    const inside = await client.callTool({
+      name: "search_catalog",
+      arguments: { shop: "tea-corner", request: { query: "chai" }, only_shops: ["tea-corner"] },
+    });
+    assert.equal(inside.structuredContent.shop, "tea-corner");
+
+    const tooMany = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, exclude_shops: Array.from({ length: 51 }, (_, i) => `shop-${i}0`) },
+    });
+    assert.equal(tooMany.isError, true, "at most 50 shops in exclude_shops");
+    const badSlug = await client.callTool({
+      name: "search_catalog",
+      arguments: { request: { query: "chai" }, only_shops: ["Not A Slug"] },
+    });
+    assert.equal(badSlug.isError, true);
     await client.close();
   });
 

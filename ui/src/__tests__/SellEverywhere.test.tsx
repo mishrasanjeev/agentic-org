@@ -364,6 +364,109 @@ describe("Sell everywhere", () => {
     });
   }, 20000);
 
+  it("shows the catalog check with what is not offered to buyers and a fix for each", async () => {
+    const health = {
+      source: "shopify",
+      product_count: 3,
+      inactive_product_count: 0,
+      variant_count: 5,
+      offered_variant_count: 3,
+      status: "problems",
+      problems: [
+        {
+          code: "no_price",
+          label: "No usable price",
+          count: 2,
+          counts: "variants",
+          examples: ["Masala Chai (250 g)", "Masala Chai (500 g)"],
+          effect: "Not offered to buyers.",
+          fix: "In Shopify, open the product and enter a price for each variant, then read the catalog again.",
+        },
+      ],
+      warnings: [
+        {
+          code: "no_image",
+          label: "No image",
+          count: 1,
+          counts: "products",
+          examples: ["Ginger Tea"],
+          effect: "Buyers' AI assistants show no photo.",
+          fix: "In Shopify, open the product and add a photo under Media.",
+        },
+      ],
+    };
+    setup.list.mockResolvedValue({ data: { merchants: [merchant], count: 1 } });
+    setup.get.mockResolvedValue({
+      data: setupView({
+        catalog: { ...setupView().catalog, source: "shopify", shop_domain: "tea.myshopify.com", health },
+      }),
+    });
+    get.mockResolvedValue({ data: view() });
+    renderPage();
+
+    const panel = await screen.findByRole("region", { name: "Catalog check" });
+    expect(panel).toHaveTextContent("3 of 5 variants in 3 products are offered to buyers.");
+    const blocked = screen.getByRole("list", { name: "Not offered to buyers" });
+    expect(blocked).toHaveTextContent("No usable price: 2 variants");
+    expect(blocked).toHaveTextContent("For example: Masala Chai (250 g), Masala Chai (500 g)");
+    expect(blocked).toHaveTextContent("enter a price for each variant");
+    expect(screen.getByRole("list", { name: "Worth fixing" })).toHaveTextContent("No image: 1 product");
+    expect(panel).toHaveTextContent("never ranks or hides shops");
+  }, 20000);
+
+  it("lists the upload's warnings and saves the delivery area with the policies", async () => {
+    setup.list.mockResolvedValue({ data: { merchants: [merchant], count: 1 } });
+    setup.get.mockResolvedValue({
+      data: setupView({
+        policies: {
+          status: "set",
+          returns: "Returns within 7 days.",
+          shipping: "Ships in 3 to 5 days.",
+          pickup: "",
+          shipping_rate: { fee: "50.00", currency: "INR", countries: ["IN"] },
+          delivery_postal_prefixes: ["5600"],
+        },
+      }),
+    });
+    get.mockResolvedValue({ data: view() });
+    setup.uploadCatalog.mockResolvedValue({
+      data: {
+        upload: { product_count: 7 },
+        details: [],
+        skipped_columns: [],
+        warnings: [
+          {
+            column: "image_url",
+            count: 7,
+            rows: [1, 2, 3, 4, 5],
+            message: "7 products have no image, so buyers' AI assistants show no photo.",
+          },
+        ],
+        setup: setupView(),
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByDisplayValue("5600")).toBeInTheDocument();
+    const input = screen.getByLabelText("Catalog file");
+    const file = new File(["sku\n"], "catalog.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve("sku\n") });
+    fireEvent.change(input, { target: { files: [file] } });
+    const warnings = await screen.findByRole("list", { name: "Warnings about the file" });
+    expect(warnings).toHaveTextContent(
+      "7 products have no image, so buyers' AI assistants show no photo. Rows 1, 2, 3, 4, 5 and more.",
+    );
+    expect(await screen.findByText("7 products uploaded.")).toBeInTheDocument();
+
+    setup.savePolicies.mockResolvedValue({ data: setupView() });
+    fireEvent.change(screen.getByLabelText("Delivers only to postal codes starting with (empty for anywhere)"), {
+      target: { value: "5600, 5601 ,560-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save policies" }));
+    await waitFor(() => expect(setup.savePolicies).toHaveBeenCalled());
+    expect(setup.savePolicies.mock.calls[0][1].delivery_postal_prefixes).toEqual(["5600", "5601", "5601"]);
+  }, 20000);
+
   it("saves shop details once for the whole shop and names the row of a refused one", async () => {
     setup.list.mockResolvedValue({ data: { merchants: [merchant], count: 1 } });
     setup.get.mockResolvedValue({
@@ -435,6 +538,35 @@ describe("Sell everywhere", () => {
     await waitFor(() => expect(publish).toHaveBeenCalledWith("tea-corner-1a2b3c"));
     expect(
       await screen.findByText("Your web address cannot carry your shop profile. Contact support."),
+    ).toBeInTheDocument();
+  }, 20000);
+
+  it("tells the merchant when the Shopify store has more products than one read takes", async () => {
+    const atLimit = {
+      status: "ready",
+      source: "shopify",
+      shop_domain: "tea-corner.myshopify.com",
+      product_count: 1000,
+      read_limit: 1000,
+      at_read_limit: true,
+      last_synced_at: "2026-10-29T08:00:00Z",
+      currency: "INR",
+      last_error: null,
+      webhook_status: "configured",
+      webhook_path: "/api/v1/webhooks/shopify/t/0123456789abcdef0123456789abcdef",
+    };
+    setup.list.mockResolvedValue({ data: { merchants: [{ ...merchant, catalog_source: "shopify" }], count: 1 } });
+    setup.get.mockResolvedValue({ data: setupView({ catalog: atLimit }) });
+    get.mockResolvedValue({ data: view() });
+    setup.syncCatalog.mockResolvedValue({
+      data: { sync: { product_count: 1000, read_limit: 1000, read_limit_reached: true }, setup: setupView({ catalog: atLimit }) },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/One read takes at most 1000 Shopify products/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Read catalog again" }));
+    expect(
+      await screen.findByText("1000 products read. Your store has more than 1000 products; only the first 1000 were read."),
     ).toBeInTheDocument();
   }, 20000);
 });

@@ -8,7 +8,10 @@ A pack has three parts:
   conversation transcript, each document's SHA-256, the requests for a person,
   the governed case with its policy result, memo recommendation and decision,
   and, when the Grantex evidence service is on, that service's signed export
-  of the case's agent runs;
+  of the case's agent runs. With agent identity on, two more: ``agent_identity``
+  (every agent action with the agent's identity identifier, attestation hash
+  and trust tier) and ``enrolment`` (the agent-ready consent grant, what was
+  shared, when, and the identity provider's reference);
 - ``manifest``: the pack's schema, tenant, application, time, and the SHA-256
   of each section's canonical JSON;
 - ``signature``: Ed25519 over the manifest's canonical JSON with the platform's
@@ -49,6 +52,8 @@ SECTIONS: tuple[str, ...] = (
     "case",
     "case_evidence",
 )
+#: Added to a pack only while agent identity is on, so a pack built with it off is unchanged.
+IDENTITY_SECTIONS: tuple[str, ...] = ("agent_identity", "enrolment")
 
 
 def canonical(value: Any) -> bytes:
@@ -209,6 +214,68 @@ async def _case_export(case_ref: str) -> dict[str, Any]:
     }
 
 
+def _identity_on() -> bool:
+    from core.agent_identity.guard import enabled
+
+    return enabled()
+
+
+async def _agent_identity_section(
+    tenant_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    attempts: list[dict[str, Any]],
+    transcript: list[dict[str, Any]],
+    case_ref_holder: Any,
+) -> dict[str, Any]:
+    """Every agent action that carries the agent's identity: desk actions, attempts, replies, case calls."""
+    from core.onboarding_desk import cases
+
+    tool_calls: list[dict[str, Any]] = []
+    case = await cases.get_case(tenant_id, case_ref_holder["case_ref"]) if case_ref_holder else None
+    for record in (getattr(case, "agent_records", None) or []) if case is not None else []:
+        for call in (record or {}).get("tool_calls") or []:
+            if isinstance(call, dict) and call.get("agent_identity"):
+                tool_calls.append(
+                    {
+                        "agent": record.get("agent"),
+                        "run_id": record.get("run_id"),
+                        "sequence": call.get("sequence"),
+                        "tool": call.get("tool"),
+                        "outcome": call.get("outcome"),
+                        "reason": call.get("reason"),
+                        "grant_id": call.get("grant_id"),
+                        "identity_presented": bool(call.get("identity_presented")),
+                        **call["agent_identity"],
+                    }
+                )
+    return {
+        "actions": [store.agent_action_view(a) for a in await store.list_agent_actions(tenant_id, lead_id)],
+        "contact_attempts": [
+            {
+                "id": a["id"],
+                "channel": a["channel"],
+                "status": a["status"],
+                "at": a["created_at"],
+                **a["agent_identity"],
+            }
+            for a in attempts
+            if a.get("agent_identity")
+        ],
+        "replies": [
+            {"at": t.get("at"), "channel": t.get("channel"), **t["agent_identity"]}
+            for t in transcript
+            if isinstance(t.get("agent_identity"), dict)
+        ],
+        "case_tool_calls": tool_calls,
+    }
+
+
+async def _enrolment_section(tenant_id: uuid.UUID, application_id: uuid.UUID) -> list[dict[str, Any]]:
+    from core.onboarding_desk import agent_ready
+
+    return [agent_ready.enrolment_view(e) for e in await agent_ready.list_enrolments(tenant_id, application_id)]
+
+
 async def build_pack(tenant_id: uuid.UUID, application_id: uuid.UUID, *, now: datetime | None = None) -> dict[str, Any]:
     moment = now or datetime.now(UTC)
     row = await applications.get_application(tenant_id, application_id)
@@ -277,12 +344,19 @@ async def build_pack(tenant_id: uuid.UUID, application_id: uuid.UUID, *, now: da
         "case": case,
         "case_evidence": case_evidence,
     }
+    names = SECTIONS
+    if _identity_on():
+        sections["agent_identity"] = await _agent_identity_section(
+            tenant_id, row.lead_id, sections["contact_attempts"], sections["transcript"], case
+        )
+        sections["enrolment"] = await _enrolment_section(tenant_id, row.id)
+        names = (*SECTIONS, *IDENTITY_SECTIONS)
     manifest = {
         "schema": SCHEMA,
         "tenant_id": str(tenant_id),
         "application_id": str(row.id),
         "generated_at": moment.isoformat(),
-        "sections": {name: digest(sections[name]) for name in SECTIONS},
+        "sections": {name: digest(sections[name]) for name in names},
     }
     logger.info("onboarding_evidence_built", signed=bool(_private_key()), case=bool(row.case_ref))
     return {"manifest": manifest, "signature": sign(manifest), "sections": sections}

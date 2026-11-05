@@ -836,7 +836,18 @@ async def _applicant(request: Request) -> tuple[uuid.UUID, Any]:
 async def _applicant_state(tenant_id: uuid.UUID, application_id: uuid.UUID) -> dict[str, Any]:
     from core.onboarding_desk import applications
 
-    return await applications.state(tenant_id, await applications.get_application(tenant_id, application_id))
+    row = await applications.get_application(tenant_id, application_id)
+    return await _with_offer(tenant_id, row, await applications.state(tenant_id, row))
+
+
+async def _with_offer(tenant_id: uuid.UUID, row: Any, state: dict[str, Any]) -> dict[str, Any]:
+    """The applicant's state, with the agent-ready offer only once a person approved the case (offer on)."""
+    from core.onboarding_desk import agent_ready
+
+    offer = await agent_ready.offer_view(tenant_id, row)
+    if offer is not None:
+        state["agent_ready"] = offer
+    return state
 
 
 @router.post("/apply/session")
@@ -863,7 +874,7 @@ async def applicant_session(body: SessionIn) -> dict[str, Any]:
     try:
         row = await applications.open_for_lead(claims.tenant_id, claims.lead_id)
         branding = await store.get_branding(claims.tenant_id)
-        state = await applications.state(claims.tenant_id, row)
+        state = await _with_offer(claims.tenant_id, row, await applications.state(claims.tenant_id, row))
     except DeskError as exc:
         raise _refused(exc) from exc
     now = datetime.now(UTC)
@@ -890,7 +901,81 @@ async def applicant_application(request: Request) -> dict[str, Any]:
     from core.onboarding_desk import applications
 
     tenant_id, row = await _applicant(request)
-    return await applications.state(tenant_id, row)
+    return await _with_offer(tenant_id, row, await applications.state(tenant_id, row))
+
+
+class AgentReadyAcceptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(..., min_length=1, max_length=120)
+    role: str = Field(..., min_length=1, max_length=80)
+    contact: str = Field(..., min_length=3, max_length=254)
+    accept: bool
+
+
+@router.post("/apply/agent-ready/accept")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-one-live-enrolment-per-application",
+    audit_event="onboarding_desk.apply.agent_ready_accept",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_agent_ready_accept(body: AgentReadyAcceptIn, request: Request) -> dict[str, Any]:
+    """Accept the agent-ready offer: record the person's consent and ask Grantex for the consent grant."""
+    from core.onboarding_desk import agent_ready
+
+    tenant_id, row = await _applicant(request)
+    if body.accept is not True:
+        raise HTTPException(422, detail={"error": "acceptance_required", "message": "Tick the box to accept."})
+    try:
+        return await agent_ready.accept(tenant_id, row, name=body.name, role=body.role, contact=body.contact)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/apply/agent-ready/continue")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-a-shared-enrolment-is-never-sent-again",
+    audit_event="onboarding_desk.apply.agent_ready_continue",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_agent_ready_continue(request: Request) -> dict[str, Any]:
+    """After approving the consent grant at Grantex: hand the verified business to the identity provider."""
+    from core.onboarding_desk import agent_ready
+
+    tenant_id, row = await _applicant(request)
+    try:
+        return await agent_ready.continue_enrolment(tenant_id, row)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/apply/agent-ready/withdraw")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-a-withdrawn-consent-stays-withdrawn",
+    audit_event="onboarding_desk.apply.agent_ready_withdraw",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_agent_ready_withdraw(request: Request) -> dict[str, Any]:
+    """Withdraw the agent-enrolment consent and revoke its Grantex grant."""
+    from core.onboarding_desk import agent_ready
+
+    tenant_id, row = await _applicant(request)
+    try:
+        return await agent_ready.withdraw(tenant_id, row)
+    except DeskError as exc:
+        raise _refused(exc) from exc
 
 
 @router.put("/apply/answers")
@@ -1355,6 +1440,119 @@ async def report_summary(
         return await reports.summary(uuid.UUID(tenant_id), period)
     except DeskError as exc:
         raise _refused(exc) from exc
+
+
+# ── Agent identity and the agent-ready offer ─────────────────────────────────
+
+
+def _require_identity() -> None:
+    from core.agent_identity.guard import enabled
+
+    _require_on()
+    if not enabled():
+        raise HTTPException(
+            404,
+            detail={
+                "error": "agent_identity_disabled",
+                "message": "Agent identity is off (AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED).",
+            },
+        )
+
+
+@router.get("/agent-ready-settings")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.agent_ready.read", rate_limit="standard")
+async def get_agent_ready_settings(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """The agent-ready offer: whether it is on, its wording, and the oldest verification it may share."""
+    from core.onboarding_desk import agent_ready
+
+    _require_on()
+    current = await agent_ready.get_settings(uuid.UUID(tenant_id))
+    return {**current.to_dict(), "available": agent_ready.available()}
+
+
+@router.put("/agent-ready-settings", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.agent_ready.write",
+    rate_limit="standard",
+    idempotency="idempotent-replaces-the-agent-ready-settings",
+    audit_event="onboarding_desk.agent_ready_settings.update",
+)
+async def put_agent_ready_settings(
+    body: dict[str, Any], tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Turn the agent-ready offer on or off and set its English and French wording."""
+    from core.onboarding_desk import agent_ready
+
+    _require_on()
+    try:
+        saved = await agent_ready.put_settings(uuid.UUID(tenant_id), body, actor=_actor(user))
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return {**saved.to_dict(), "available": agent_ready.available()}
+
+
+@router.get("/agent-identity")
+@route_meta(
+    auth_required=True, tenant_required=True, scope="onboarding_desk.agent_identity.read", rate_limit="standard"
+)
+async def agent_identity_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Each desk and case agent's identity check now: allowed, held or stopped, and why."""
+    from core.agent_identity import guard, scopes
+
+    _require_identity()
+    checker = guard.default_guard()
+    agents = []
+    for role in scopes.ALL_ROLES:
+        check = await checker.check(tenant_id, role, None) if checker is not None else guard.OFF
+        agents.append(
+            {
+                "role": role,
+                "outcome": check.outcome,
+                "reason": check.reason,
+                "agent_identity": check.stamp_dict(),
+                "grant_id": check.grant_id or None,
+                "scopes": sorted(check.scopes),
+            }
+        )
+    return {"agents": agents}
+
+
+@router.post("/agent-identity/{role}/bind", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.agent_identity.write",
+    rate_limit="standard",
+    idempotency="idempotent-an-active-key-is-left-alone",
+    audit_event="onboarding_desk.agent_identity.bind",
+)
+async def bind_agent_identity(role: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Register the agent's identity key on its Grantex agent and prove possession, so its grants bind to it."""
+    from connectors.framework.agent_identity_provider import AgentRef
+    from core.agent_identity import grantex, guard, scopes
+    from core.cases.grant_authorizer import _active_agent
+
+    _require_identity()
+    if role not in scopes.ALL_ROLES:
+        raise HTTPException(404, detail={"error": "role_not_found"})
+    service = grantex.grantex_identity_service()
+    if service is None:
+        raise HTTPException(503, detail={"error": "grantex_not_configured"})
+    agent = await _active_agent(tenant_id, role)
+    grantex_agent_id = str((agent[1] or {}).get("grantex_agent_id") or "") if agent else ""
+    if not grantex_agent_id:
+        raise HTTPException(409, detail={"error": "desk_agent_not_configured"})
+    try:
+        provider = guard._configured_provider()
+        result = await grantex.bind_agent_key(service, provider, AgentRef(tenant_id, role), grantex_agent_id)
+    except guard.GrantUnavailableError as exc:
+        raise HTTPException(503, detail={"error": exc.reason}) from exc
+    except grantex.GrantexIdentityError as exc:
+        raise HTTPException(exc.status, detail={"error": exc.reason}) from exc
+    guard.clear_cache()
+    return {"role": role, **result}
 
 
 # ── CRM intake ───────────────────────────────────────────────────────────────

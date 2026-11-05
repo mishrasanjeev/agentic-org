@@ -160,12 +160,40 @@ class DeclaredBusiness(DomainModel):
     identifiers: tuple[Identifier, ...] = ()
 
 
+class PresentedIdentity(DomainModel):
+    """The agent identity a caller presents to a provider that accepts one (``accepts_presented_identity``).
+
+    ``attestation`` is the accredited issuer's attestation as the identity provider holds it;
+    ``attestation_sha256`` binds it. Absent unless agent identity is on for the deployment.
+    """
+
+    identifier: Annotated[str, StringConstraints(min_length=1, max_length=256)]
+    attestation: Annotated[str, StringConstraints(min_length=1, max_length=16_384)]
+    attestation_sha256: Sha256Digest
+    trust_tier: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+
+
+def _drop_unset(data: Any, *names: str) -> Any:
+    """Leave optional agent-identity fields out when unset, so every existing request hashes as before."""
+    if isinstance(data, dict):
+        for name in names:
+            if data.get(name) is None:
+                data.pop(name, None)
+    return data
+
+
 class VerifyOptions(DomainModel):
     """``idempotency_key`` makes a repeated start return the same handle instead of starting another."""
 
     idempotency_key: IdempotencyKey
     checks: frozenset[VerificationCheck] = frozenset(VerificationCheck)
     declared: DeclaredBusiness | None = None
+    #: Filled by the tool gateway only when the provider accepts a presented identity.
+    presented_identity: PresentedIdentity | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialise(self, handler: SerializerFunctionWrapHandler) -> Any:
+        return _drop_unset(handler(self), "presented_identity")
 
 
 class VerificationHandle(DomainModel):
@@ -173,6 +201,12 @@ class VerificationHandle(DomainModel):
     verification_id: IdentifierToken
     ref: BusinessRef
     requested_at: AwareDatetime
+    #: The presented identity the provider accepted, echoed back; absent when none was presented.
+    accepted_identity: Annotated[str, StringConstraints(min_length=1, max_length=256)] | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialise(self, handler: SerializerFunctionWrapHandler) -> Any:
+        return _drop_unset(handler(self), "accepted_identity")
 
 
 class Pending(DomainModel):

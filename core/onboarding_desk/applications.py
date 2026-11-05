@@ -494,14 +494,20 @@ async def append_transcript(
         row = await _locked(session, tenant_id, application_id)
         transcript = await _transcript(row)
         for entry in entries:
-            transcript.append(
-                {
-                    "at": moment.isoformat(),
-                    "channel": str(entry.get("channel") or "web")[:16],
-                    "from": "applicant" if entry.get("from") == "applicant" else "desk",
-                    "text": str(entry.get("text") or "")[:MAX_TRANSCRIPT_TEXT],
+            kept = {
+                "at": moment.isoformat(),
+                "channel": str(entry.get("channel") or "web")[:16],
+                "from": "applicant" if entry.get("from") == "applicant" else "desk",
+                "text": str(entry.get("text") or "")[:MAX_TRANSCRIPT_TEXT],
+            }
+            identity = entry.get("agent_identity")
+            if isinstance(identity, dict) and kept["from"] == "desk":
+                # The acting agent's identity, recorded only when agent identity is on.
+                kept["agent_identity"] = {
+                    k: str(identity.get(k) or "")[:256]
+                    for k in ("agent_identity_id", "attestation_sha256", "trust_tier")
                 }
-            )
+            transcript.append(kept)
         row.transcript_ciphertext = await _seal(kek, json.dumps(transcript[-MAX_TRANSCRIPT:], separators=(",", ":")))
 
 

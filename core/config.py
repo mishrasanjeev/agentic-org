@@ -548,6 +548,12 @@ class Settings(BaseSettings):
     # Version of the network terms a merchant accepts when it turns the network on.
     # Env: AGENTICORG_NETWORK_TERMS_VERSION.
     network_terms_version: str = "2026-10-25"
+    # Where the network stands with each outside program (core/commerce/network_registrations.py),
+    # set by the operator as programs approve it: a JSON object mapping chatgpt, google, microsoft
+    # and perplexity to not_started, submitted or live, or to {"status": ..., "shops": {slug: status}}
+    # where a program approves shops one by one (a Google Merchant Center sub-account per shop).
+    # Empty or invalid: every program is not_started. Env: AGENTICORG_NETWORK_REGISTRATIONS.
+    network_registrations: str = ""
     # The public network Telegram bot's username (without @), for deep links
     # t.me/<bot>?start=<slug>. Empty: no Telegram link is shown.
     # Env: AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME.
@@ -811,6 +817,19 @@ class Settings(BaseSettings):
     # published at GET /onboarding-desk/evidence-key. Empty: packs are built unsigned.
     # Env: AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY.
     onboarding_desk_evidence_signing_key: str = ""
+    # Agent identity for desk and case agents (core/agent_identity/, docs/onboarding-desk/agent-identity.md):
+    # before each agent action the desk checks the agent's identity credential with the identity
+    # provider and its Grantex grant, and acts only within both. Off by default: off, no identity
+    # provider is called and every agent acts exactly as before.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_ENABLED.
+    onboarding_desk_agent_identity_enabled: bool = False
+    # The registered identity provider (connectors/agent_identity/registry.py), for example ``mock``
+    # in local runs. Empty while identity is on: every agent action is held.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_PROVIDER.
+    onboarding_desk_agent_identity_provider: str = ""
+    # How long an identity status and grant check is reused, never past the credential's own expiry.
+    # Env: AGENTICORG_ONBOARDING_DESK_AGENT_IDENTITY_STATUS_CACHE_SECONDS.
+    onboarding_desk_agent_identity_status_cache_seconds: int = Field(default=60, ge=0, le=3600)
     # Insights (core/insights/): run facts, daily rollups and the Executive and
     # Finance views. Off by default, the kill switch for the whole deployment:
     # off, no run fact is written, the rollup tasks skip, GET /insights/status

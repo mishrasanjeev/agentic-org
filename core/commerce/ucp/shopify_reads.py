@@ -13,7 +13,9 @@ rarely and checkout updates are frequent).
 
 from __future__ import annotations
 
+import re
 import time
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -55,7 +57,7 @@ query UcpDeliveryProfiles {
             zone {
               id
               name
-              countries { code { countryCode restOfWorld } provinces { code } }
+              countries { code { countryCode restOfWorld } includeAllProvinces provinces { code name } }
             }
             methodDefinitions(first: 20) {
               nodes {
@@ -77,9 +79,25 @@ query UcpDeliveryProfiles {
 """
 
 
+def _region_key(value: Any) -> str:
+    """A state or province name or code compared without case, accents, spaces or punctuation.
+
+    NFKD first and the combining marks dropped, so "Québec" and "Quebec" are the same key.
+    """
+    decomposed = unicodedata.normalize("NFKD", str(value or ""))
+    plain = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return re.sub(r"[^0-9a-z]+", "", plain.casefold())
+
+
 @dataclass(frozen=True)
 class DeliveryRate:
-    """One flat-rate shipping method of a delivery zone."""
+    """One flat-rate shipping method of a delivery zone.
+
+    ``provinces`` lists ``(country, code, name)`` for a zone that covers only some states or
+    provinces of a country (Shopify ``includeAllProvinces: false``): a destination in that country
+    is served only when its ``address_region`` is one of them, by code (``KA``, ``IN-KA``) or name.
+    A zone that covers the whole country records no provinces, so any address there is served.
+    """
 
     id: str
     title: str
@@ -88,9 +106,30 @@ class DeliveryRate:
     currency: str
     countries: tuple[str, ...]
     rest_of_world: bool
+    provinces: tuple[tuple[str, str, str], ...] = ()
 
-    def serves(self, country: str | None) -> bool:
-        return self.rest_of_world or (country is not None and country.upper() in self.countries)
+    def needs_region(self, country: str | None) -> bool:
+        """True when the zone names the states of ``country`` it covers (the region decides)."""
+        wanted = (country or "").upper()
+        return bool(wanted) and any(entry[0] == wanted for entry in self.provinces)
+
+    def serves(self, country: str | None, region: str | None = None) -> bool:
+        if self.rest_of_world:
+            return True
+        if country is None or country.upper() not in self.countries:
+            return False
+        if not self.needs_region(country):
+            return True
+        wanted = _region_key(region)
+        if not wanted:
+            return False
+        code_only = _region_key(str(region).split("-", 1)[1]) if "-" in str(region) else wanted
+        for entry_country, code, name in self.provinces:
+            if entry_country != country.upper():
+                continue
+            if wanted in (_region_key(code), _region_key(name)) or code_only == _region_key(code):
+                return True
+        return False
 
 
 class ShopifyReads(Protocol):
@@ -184,13 +223,24 @@ def normalize_delivery_profiles(data: Mapping[str, Any]) -> list[DeliveryRate]:
             for zone_entry in zones:
                 zone = zone_entry.get("zone") or {}
                 countries: list[str] = []
+                provinces: list[tuple[str, str, str]] = []
                 rest_of_world = False
                 for country in zone.get("countries") or []:
                     code = (country or {}).get("code") or {}
                     if code.get("restOfWorld"):
                         rest_of_world = True
                     elif code.get("countryCode"):
-                        countries.append(str(code["countryCode"]).upper())
+                        country_code = str(code["countryCode"]).upper()
+                        countries.append(country_code)
+                        # Shopify lists every province when the whole country is in the zone
+                        # (includeAllProvinces: true); only a partial selection restricts by state.
+                        if (country or {}).get("includeAllProvinces") is not False:
+                            continue
+                        for province in (country or {}).get("provinces") or []:
+                            if isinstance(province, Mapping) and province.get("code"):
+                                entry = (country_code, str(province["code"]).upper(), str(province.get("name") or ""))
+                                if entry not in provinces:
+                                    provinces.append(entry)
                 for method in ((zone_entry.get("methodDefinitions") or {}).get("nodes")) or []:
                     if not method or method.get("active") is False:
                         continue
@@ -210,6 +260,7 @@ def normalize_delivery_profiles(data: Mapping[str, Any]) -> list[DeliveryRate]:
                             currency=currency,
                             countries=tuple(sorted(set(countries))),
                             rest_of_world=rest_of_world,
+                            provinces=tuple(provinces),
                         )
                     )
     return rates

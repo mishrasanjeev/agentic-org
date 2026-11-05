@@ -771,7 +771,12 @@ class OrderRefundRequest(BaseModel):
 async def refund_order(
     order_id: str, body: OrderRefundRequest, tenant_id: str = Depends(get_current_tenant)
 ) -> dict[str, Any]:
-    """Refund part or all of a captured order: a fresh ``refund`` arbiter decision, then the Plural executor."""
+    """Refund part or all of a captured order: a fresh ``refund`` arbiter decision, then Plural.
+
+    Orders executed by the Plural executor refund through it; orders paid on the merchant's Plural
+    hosted page (``plural_hosted``) refund with the merchant's own Plural credentials. A repeated
+    ``request_id`` for the same order answers with the earlier refund (``replayed``).
+    """
     from core.commerce.order_refunds import RefundRequestError
     from core.commerce.order_refunds import refund_order as orchestrate
 
@@ -806,7 +811,133 @@ async def refund_order(
         "decision": outcome.decision,
         "adjustment_id": outcome.adjustment_id,
         "order_revision": outcome.order_revision,
+        "replayed": bool(outcome.extra.get("replayed")),
     }
+
+
+class UnmatchedRefundRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@runtime_router.post("/payments/unmatched/{payment_id}/refunds")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="unmatched-payment-refunded-once",
+    audit_event="commerce.ucp.payment.unmatched_refund",
+)
+async def refund_unmatched_payment(
+    payment_id: str, body: UnmatchedRefundRequest, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """Refund, once, the full amount of a Plural payment no order matches (tenant administrators only).
+
+    The refund uses the merchant's own Plural credentials under a ``refund`` arbiter decision. A
+    payment whose order was made while stock was short is refunded through that order.
+    """
+    from core.commerce.hosted_refunds import UNMATCHED_REFUND_EVENT, UnmatchedRefundError
+    from core.commerce.hosted_refunds import refund_unmatched_payment as orchestrate
+
+    tenant = _tenant_uuid(tenant_id)
+    try:
+        outcome = await orchestrate(tenant_id=str(tenant), payment_id=payment_id, reason=body.reason)
+    except UnmatchedRefundError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event=UNMATCHED_REFUND_EVENT,
+            outcome="blocked",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload={"payment_id": payment_id, "reason": exc.code},
+            resource_id=payment_id,
+            details={"reason": exc.code},
+        )
+        raise HTTPException(status_code=exc.status, detail=exc.code) from exc
+    kick_dispatch(tenant)
+    return {
+        "status": outcome.status,
+        "reason": outcome.reason,
+        "decision": outcome.decision,
+        "payment": outcome.payment,
+    }
+
+
+@runtime_router.post("/orders/{order_id}/refunds/check")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="reads-plural-and-records-a-known-outcome-once",
+    audit_event="commerce.ucp.order.refund_check",
+)
+async def check_order_refunds(order_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Ask Plural again about the order's refunds whose outcome is unknown (requested at least 5 minutes ago)."""
+    from core.commerce.hosted_refunds import REFUND_CHECK_EVENT, check_refunds
+
+    tenant = _tenant_uuid(tenant_id)
+    counts = await check_refunds(tenant, order_id=order_id)
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event=REFUND_CHECK_EVENT,
+        outcome="success",
+        merchant_id=None,
+        seller_agent_id=None,
+        buyer_agent_id=None,
+        payload={"order_id": order_id, "results": counts},
+        resource_id=order_id,
+        details={"results": counts},
+    )
+    if counts:
+        kick_dispatch(tenant)
+    return {"order_id": order_id, "results": counts, "checked": sum(counts.values())}
+
+
+@runtime_router.post("/payments/unmatched/{payment_id}/refunds/check")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="reads-plural-and-records-a-known-outcome-once",
+    audit_event="commerce.ucp.payment.unmatched_refund_check",
+)
+async def check_unmatched_refund(payment_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Ask Plural again about an unmatched payment's refund whose outcome is unknown."""
+    from core.commerce.hosted_refunds import UNMATCHED_REFUND_CHECK_EVENT, UnmatchedRefundError
+    from core.commerce.hosted_refunds import check_unmatched_refund as check
+
+    try:
+        result, view = await check(tenant_id, payment_id)
+    except UnmatchedRefundError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event=UNMATCHED_REFUND_CHECK_EVENT,
+            outcome="blocked",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload={"payment_id": payment_id, "reason": exc.code},
+            resource_id=payment_id,
+            details={"reason": exc.code},
+        )
+        raise HTTPException(status_code=exc.status, detail=exc.code) from exc
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event=UNMATCHED_REFUND_CHECK_EVENT,
+        outcome="success",
+        merchant_id=view.get("merchant_id"),
+        seller_agent_id=view.pop("seller_agent_id", None),
+        buyer_agent_id=None,
+        payload={"payment_id": payment_id, "result": result},
+        resource_id=payment_id,
+        details={"result": result},
+    )
+    return {"result": result, "payment": view}
 
 
 class ShopifyFulfillmentRequest(BaseModel):

@@ -20,10 +20,18 @@ interface Surfaces {
   web: { status: string; host: string | null };
   mcp: { status: string; server_url: string };
   telegram: { status: string; link: string | null };
-  google: { status: string };
-  microsoft: { status: string };
-  perplexity: { status: string };
+  chatgpt?: Registration;
+  google: Registration;
+  microsoft: Registration;
+  perplexity: Registration;
   payments: { status: string; mode?: string | null };
+}
+
+// An outside program (core/commerce/network_registrations.py): reason is set while not_eligible.
+interface Registration {
+  status: string;
+  reason?: string | null;
+  feed_url?: string | null;
 }
 
 interface NetworkView {
@@ -52,11 +60,14 @@ interface Setup {
     source: string | null;
     shop_domain: string | null;
     product_count: number;
+    read_limit?: number | null;
+    at_read_limit?: boolean;
     last_synced_at: string | null;
     currency: string | null;
     last_error: string | null;
     webhook_status: string | null;
     webhook_path: string | null;
+    health?: CatalogHealth | null;
   };
   policies: {
     status: string;
@@ -64,6 +75,7 @@ interface Setup {
     shipping: string;
     pickup: string;
     shipping_rate?: { fee: string; currency: string; countries: string[] } | null;
+    delivery_postal_prefixes?: string[];
   };
   shop_details?: ShopDetail[];
   order_limits: {
@@ -78,6 +90,27 @@ interface Setup {
 }
 
 type UploadProblem = { row: number | null; column: string | null; message: string };
+type UploadWarning = { column: string; count: number; rows: number[]; message: string };
+
+interface HealthItem {
+  code: string;
+  label: string;
+  count: number;
+  counts: "products" | "variants";
+  examples: string[];
+  effect: string;
+  fix: string;
+}
+
+/** core/commerce/catalog_health.py: for the merchant only, never used to rank shops. */
+interface CatalogHealth {
+  product_count: number;
+  variant_count: number;
+  offered_variant_count: number;
+  status: "ok" | "warnings" | "problems";
+  problems: HealthItem[];
+  warnings: HealthItem[];
+}
 type ShopDetail = { label: string; value: string };
 
 // Matches MAX_SHOP_DETAILS, MAX_SHOP_DETAIL_VALUE and MAX_ATTRIBUTE_NAME in core/commerce/catalog_upload.py.
@@ -94,7 +127,9 @@ const STATUS: Record<string, { label: string; variant: "success" | "warning" | "
   waiting_for_publication: { label: "Waiting for publication", variant: "warning" },
   waiting_for_web_address: { label: "Waiting for your web address", variant: "warning" },
   coming_soon: { label: "Coming soon", variant: "secondary" },
-  registration_pending: { label: "Coming: registration in progress", variant: "secondary" },
+  registration_pending: { label: "Coming: AgenticOrg has not registered yet", variant: "secondary" },
+  submitted: { label: "Submitted, waiting for approval", variant: "warning" },
+  not_eligible: { label: "Not eligible yet", variant: "warning" },
   not_started: { label: "Not started", variant: "secondary" },
   off: { label: "Off", variant: "secondary" },
   ready: { label: "Done", variant: "success" },
@@ -121,12 +156,69 @@ const REFUSALS: Record<string, string> = {
   vendor_entry_outside_namespace: "An integration claims your web address outside your shop. Contact support.",
 };
 
+const REGISTRATION_REASON: Record<string, string> = {
+  not_listed: "Turn on Sell everywhere first.",
+  web_address_not_live: "Waiting for your web address to go live.",
+  catalog_not_verified: "Waiting for Grantex to verify your catalog.",
+  no_eligible_products: "No product has a price, a stock figure and an image yet.",
+};
+
+function RegistrationDetail({ registration, label }: { registration?: Registration; label: string }) {
+  if (!registration) return null;
+  if (registration.reason) return <span>{REGISTRATION_REASON[registration.reason] ?? registration.reason}</span>;
+  if (!registration.feed_url) return null;
+  return (
+    <span className="flex items-center gap-2">
+      <span>Your product feed:</span>
+      <code className="break-all">{registration.feed_url}</code>
+      <CopyButton value={registration.feed_url} label={`${label} product feed address`} />
+    </span>
+  );
+}
+
 const MISSING_LABEL: Record<string, string> = {
   catalog: "your catalog",
   policies: "your policies",
   order_limits: "your order limits",
   shipping_rate: "your shipping fee",
 };
+
+function HealthList({ items, tone, label }: { items: HealthItem[]; tone: string; label: string }) {
+  if (!items.length) return null;
+  return (
+    <ul className="space-y-2" aria-label={label}>
+      {items.map((item) => (
+        <li key={item.code} className="rounded-md border p-3">
+          <p className={`font-medium ${tone}`}>
+            {item.label}: {item.count} {item.count === 1 ? item.counts.replace(/s$/, "") : item.counts}
+          </p>
+          <p className="text-muted-foreground">{item.effect}</p>
+          {item.examples.length ? <p className="text-muted-foreground">For example: {item.examples.join(", ")}</p> : null}
+          <p>{item.fix}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The catalog check: what is not offered to buyers, and what buyers' AI assistants get less of. */
+function CatalogHealthPanel({ health }: { health: CatalogHealth }) {
+  return (
+    <section className="space-y-2 border-t pt-3 text-sm" aria-label="Catalog check">
+      <p className="font-medium">Catalog check</p>
+      <p>
+        {health.offered_variant_count} of {health.variant_count} variants in {health.product_count} products are offered
+        to buyers.
+      </p>
+      {health.status === "ok" ? <p className="text-muted-foreground">No problems found.</p> : null}
+      <HealthList items={health.problems} tone="text-destructive" label="Not offered to buyers" />
+      <HealthList items={health.warnings} tone="" label="Worth fixing" />
+      <p className="text-xs text-muted-foreground">
+        Only you see this check. The network never ranks or hides shops by it.
+      </p>
+    </section>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const known = STATUS[status] ?? { label: status.replace(/_/g, " "), variant: "secondary" as const };
@@ -198,6 +290,12 @@ const inputClass = "h-11 rounded-md border bg-background px-3 sm:h-10";
 const areaClass = "min-h-[5rem] rounded-md border bg-background px-3 py-2";
 
 /** The one setup page: a shop, its catalog, policies and order limits, then every AI surface at once. */
+/** A sentence for a Shopify read that stopped at its limit with more products in the store, else "". */
+function readLimitNote(sync: { read_limit?: number; read_limit_reached?: boolean } | null | undefined): string {
+  if (!sync?.read_limit_reached || !sync.read_limit) return "";
+  return ` Your store has more than ${sync.read_limit} products; only the first ${sync.read_limit} were read.`;
+}
+
 export default function SellEverywhere() {
   const [merchants, setMerchants] = useState<MerchantSummary[]>([]);
   const [merchantId, setMerchantId] = useState("");
@@ -216,6 +314,7 @@ export default function SellEverywhere() {
   const [shopToken, setShopToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [uploadProblems, setUploadProblems] = useState<UploadProblem[]>([]);
+  const [uploadWarnings, setUploadWarnings] = useState<UploadWarning[]>([]);
 
   const [returnsPolicy, setReturnsPolicy] = useState("");
   const [shippingPolicy, setShippingPolicy] = useState("");
@@ -223,6 +322,7 @@ export default function SellEverywhere() {
   const [shippingFee, setShippingFee] = useState("");
   const [shippingCurrency, setShippingCurrency] = useState("");
   const [shippingCountries, setShippingCountries] = useState("");
+  const [deliveryPrefixes, setDeliveryPrefixes] = useState("");
   const [shopDetails, setShopDetails] = useState<ShopDetail[]>([]);
   const [shopDetailProblems, setShopDetailProblems] = useState<UploadProblem[]>([]);
 
@@ -242,6 +342,7 @@ export default function SellEverywhere() {
     setShippingFee(data.policies.shipping_rate?.fee ?? "");
     setShippingCurrency(data.policies.shipping_rate?.currency ?? data.catalog.currency ?? "");
     setShippingCountries((data.policies.shipping_rate?.countries ?? []).join(", "));
+    setDeliveryPrefixes((data.policies.delivery_postal_prefixes ?? []).join(", "));
     setShopDetails(data.shop_details ?? []);
     setCurrency(data.order_limits.currency ?? data.catalog.currency ?? "");
     setMaxOrder(data.order_limits.max_order_amount ?? "");
@@ -356,7 +457,10 @@ export default function SellEverywhere() {
           const detail = data.sync_error;
           setError(typeof detail === "object" && detail?.message ? detail.message : "Reading the catalog failed. Try again.");
         } else {
-          setNotice(`Connected. ${data.setup.catalog.product_count} products read from ${data.setup.catalog.shop_domain}.`);
+          setNotice(
+            `Connected. ${data.setup.catalog.product_count} products read from ${data.setup.catalog.shop_domain}.` +
+              readLimitNote(data.sync),
+          );
         }
       } finally {
         setShopToken("");
@@ -367,6 +471,7 @@ export default function SellEverywhere() {
   const uploadFile = (file: File) =>
     run("upload", async () => {
       setUploadProblems([]);
+      setUploadWarnings([]);
       const content = await file.text();
       const format = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
       try {
@@ -374,6 +479,7 @@ export default function SellEverywhere() {
         applySetup(data.setup);
         const details: string[] = Array.isArray(data.details) ? data.details : [];
         const skipped: string[] = Array.isArray(data.skipped_columns) ? data.skipped_columns : [];
+        setUploadWarnings(Array.isArray(data.warnings) ? data.warnings : []);
         setNotice(
           `${data.upload.product_count} products uploaded.` +
             (details.length ? ` Buyers' AI assistants will also read: ${details.join(", ")}.` : "") +
@@ -390,7 +496,7 @@ export default function SellEverywhere() {
     run("sync", async () => {
       const { data } = await merchantSetupApi.syncCatalog(merchantId);
       applySetup(data.setup);
-      setNotice(`${data.setup.catalog.product_count} products read.`);
+      setNotice(`${data.setup.catalog.product_count} products read.${readLimitNote(data.sync)}`);
     });
 
   const savePolicies = () =>
@@ -404,6 +510,10 @@ export default function SellEverywhere() {
         shipping_countries: shippingCountries
           .split(",")
           .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
+        delivery_postal_prefixes: deliveryPrefixes
+          .split(",")
+          .map((p) => p.trim().toUpperCase())
           .filter(Boolean),
       });
       applySetup(data);
@@ -668,6 +778,16 @@ export default function SellEverywhere() {
                     ))}
                   </ul>
                 ) : null}
+                {uploadWarnings.length ? (
+                  <ul className="list-disc space-y-1 pl-5" aria-label="Warnings about the file">
+                    {uploadWarnings.map((warning) => (
+                      <li key={warning.column}>
+                        {warning.message} Rows {warning.rows.join(", ")}
+                        {warning.count > warning.rows.length ? " and more" : ""}.
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             )}
 
@@ -680,8 +800,15 @@ export default function SellEverywhere() {
                 <Button variant="outline" disabled={busy !== null} onClick={() => void syncCatalog()}>
                   Read catalog again
                 </Button>
+                {setup.catalog.at_read_limit && setup.catalog.read_limit ? (
+                  <span className="w-full" role="note">
+                    One read takes at most {setup.catalog.read_limit} Shopify products. If your store has more, only the first{" "}
+                    {setup.catalog.read_limit} are listed for buyers.
+                  </span>
+                ) : null}
               </div>
             ) : null}
+            {setup.catalog.health ? <CatalogHealthPanel health={setup.catalog.health} /> : null}
           </Step>
 
           <Step number={3} title="Your policies" status={setup.policies.status}>
@@ -739,7 +866,20 @@ export default function SellEverywhere() {
                   onChange={(e) => setShippingCountries(e.target.value)}
                 />
               </label>
+              <label className="flex flex-col gap-1">
+                Delivers only to postal codes starting with (empty for anywhere)
+                <input
+                  className={`${inputClass} w-72 uppercase`}
+                  placeholder="5600, 5601"
+                  value={deliveryPrefixes}
+                  onChange={(e) => setDeliveryPrefixes(e.target.value.replace(/[^0-9A-Za-z, ]/g, ""))}
+                />
+              </label>
             </div>
+            <p className="text-xs text-muted-foreground">
+              With a delivery area, a buyer whose postal code is outside it is told so before any payment link, for
+              Shopify rates and your own fee alike. Store pickup is not affected.
+            </p>
             {setup.catalog.source !== "shopify" ? (
               <p className="text-xs text-muted-foreground">
                 Buyers are offered this fee at checkout. Enter 0 to ship free. Shopify shops use their Shopify shipping
@@ -971,6 +1111,13 @@ export default function SellEverywhere() {
                     <CopyButton value={surfaces.mcp.server_url} label="AI app server address" />
                   </span>
                   <span>Buyers add this once as a custom MCP server and can then shop every network shop.</span>
+                  {surfaces.chatgpt ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>ChatGPT app directory:</span>
+                      <StatusBadge status={surfaces.chatgpt.status} />
+                      <RegistrationDetail registration={{ status: surfaces.chatgpt.status, reason: surfaces.chatgpt.reason }} label="ChatGPT" />
+                    </span>
+                  ) : null}
                 </SurfaceRow>
                 <SurfaceRow title="Telegram" status={surfaces.telegram.status}>
                   {surfaces.telegram.link ? (
@@ -984,9 +1131,15 @@ export default function SellEverywhere() {
                     <span>Your link to the AgenticOrg shopping bot appears here once it is on.</span>
                   )}
                 </SurfaceRow>
-                <SurfaceRow title="Google Gemini and AI Mode" status={surfaces.google.status} />
-                <SurfaceRow title="Microsoft Copilot" status={surfaces.microsoft.status} />
-                <SurfaceRow title="Perplexity" status={surfaces.perplexity.status} />
+                <SurfaceRow title="Google Gemini and AI Mode" status={surfaces.google.status}>
+                  <RegistrationDetail registration={surfaces.google} label="Google" />
+                </SurfaceRow>
+                <SurfaceRow title="Microsoft Copilot" status={surfaces.microsoft.status}>
+                  <RegistrationDetail registration={surfaces.microsoft} label="Microsoft" />
+                </SurfaceRow>
+                <SurfaceRow title="Perplexity" status={surfaces.perplexity.status}>
+                  <RegistrationDetail registration={surfaces.perplexity} label="Perplexity" />
+                </SurfaceRow>
                 <SurfaceRow title="Payments" status={surfaces.payments.status}>
                   <span>
                     {surfaces.payments.mode === "shopify_cart"

@@ -75,7 +75,9 @@ from core.models.commerce_c6z_runtime import (
 )
 from core.models.commerce_network import CommerceNetworkListingRow as CommerceNetworkListingRow
 from core.models.commerce_payments import CommerceAfaEvidenceRow as CommerceAfaEvidenceRow
+from core.models.commerce_payments import CommerceMerchantNotificationRow as CommerceMerchantNotificationRow
 from core.models.commerce_payments import CommercePaymentOperationRow as CommercePaymentOperationRow
+from core.models.commerce_payments import CommerceUnmatchedPaymentRow as CommerceUnmatchedPaymentRow
 from core.models.commerce_ucp import CommerceCartRow as CommerceCartRow
 from core.models.commerce_ucp import CommerceCheckoutSessionRow as CommerceCheckoutSessionRow
 from core.models.commerce_ucp import CommerceOrderRow as CommerceOrderRow
@@ -151,10 +153,12 @@ from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as 
 from core.models.oacp_retention_disposition_decision import (
     OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
 )
+from core.models.onboarding_desk import OnboardingAgentAction as OnboardingAgentAction
 from core.models.onboarding_desk import OnboardingApplication as OnboardingApplication
 from core.models.onboarding_desk import OnboardingConsent as OnboardingConsent
 from core.models.onboarding_desk import OnboardingContactAttempt as OnboardingContactAttempt
 from core.models.onboarding_desk import OnboardingDocument as OnboardingDocument
+from core.models.onboarding_desk import OnboardingEnrolment as OnboardingEnrolment
 from core.models.onboarding_desk import OnboardingHandoff as OnboardingHandoff
 from core.models.onboarding_desk import OnboardingLead as OnboardingLead
 from core.models.onboarding_desk import OnboardingLeadSource as OnboardingLeadSource

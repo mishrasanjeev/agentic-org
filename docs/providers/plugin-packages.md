@@ -28,6 +28,7 @@ acme_kyb = "acme_kyb_agenticorg.provider:AcmeKybProvider"
 | `agenticorg.agents` | a `BaseAgent` subclass with a non-empty `agent_type` | `AgentRegistry` |
 | `agenticorg.providers` | a `VerificationProvider` subclass with a valid `name` and a `frozenset` of `Capability` as `capabilities` | `ProviderRegistry` (`connectors/providers/registry.py`) |
 | `agenticorg.workflows` | — | discovered and rejected (`unsupported_group`) until a workflow registry exists |
+| `agenticorg.agent_identity_providers` | an `AgentIdentityProvider` subclass with a valid `name` | `AgentIdentityProviderRegistry` (`connectors/agent_identity/registry.py`); see [agent identity](../onboarding-desk/agent-identity.md) |
 
 Install the package into the same environment as AgenticOrg (the API image and
 the worker image).

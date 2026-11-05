@@ -60,9 +60,11 @@ Open **Orders** (`/dashboard/orders`) to see every order buyers paid for through
 
 The delivery column shows how the buyer chose to receive the order: shipping with the delivery option they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line, with the recipient's name and phone when the buyer gave them. The shipping fee is shown once for the whole order, even when it ships to more than one place. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
 
-AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural. A payment that is only authorised, not captured, stays pending.
+AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created; the payment is listed under **Payments with no order** on the Orders page, and you can refund it there or in Plural. A payment that is only authorised, not captured, stays pending.
 
-Orders paid in your Shopify checkout appear in your Shopify admin, not on the Orders page.
+To refund an order paid through a Plural link, choose **Refund** on the order, enter the amount and confirm. The refund goes through your own Plural account. See [Refunds](/docs/oacp-sell-everywhere#refunds).
+
+Orders paid in your Shopify checkout appear in your Shopify admin, not on the Orders page. Refund them in your Shopify admin.
 
 ## If something goes wrong
 

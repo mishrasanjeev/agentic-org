@@ -27,7 +27,12 @@
  * Network mode (MCP_NETWORK_DIRECTORY_URL set): instead of one shop, every shop the AgenticOrg
  * network directory lists (src/network.ts). Catalog calls go to each shop's public routes;
  * checkouts go through the network checkout gateway with AGENTICORG_NETWORK_SERVICE_TOKEN, and
- * AGENTICORG_UCP_PROFILE_URL / AGENTICORG_API_KEY are not used.
+ * AGENTICORG_UCP_PROFILE_URL / AGENTICORG_API_KEY are not used. The network server introduces
+ * itself with a title, website, icons and instructions (NETWORK_SERVER_INFO), and every tool
+ * declares the no-auth security scheme the ChatGPT app directory reads (NOAUTH_META).
+ *
+ * MCP_OPENAI_APPS_CHALLENGE (optional): the domain-verification token the ChatGPT app directory
+ * gives the owner, served as plain text at GET /.well-known/openai-apps-challenge; 404 while unset.
  */
 
 import http from "node:http";
@@ -47,6 +52,37 @@ export const HOSTED_TOOLS: ReadonlySet<string> = new Set([
   "get_checkout",
   "update_checkout",
 ]);
+
+// The shopping network as MCP clients and app directories show it (MCP 2025-11-25 Implementation).
+export const NETWORK_SERVER_INFO = {
+  name: "agenticorg-network",
+  title: "AgenticOrg shopping network",
+  websiteUrl: "https://agenticorg.ai",
+  icons: [
+    { src: "https://agenticorg.ai/favicon-512x512.png", mimeType: "image/png", sizes: ["512x512"] },
+    { src: "https://agenticorg.ai/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+  ],
+  description:
+    "Shops on the AgenticOrg network: list them, search their catalogs and open a checkout at one. " +
+    "It stops before payment; no tool here can pay.",
+} as const;
+
+export const NETWORK_INSTRUCTIONS = [
+  "Find products at independent shops on the AgenticOrg network and open a checkout at one shop.",
+  "Search with search_catalog (all shops, or one shop by its slug from list_shops); every result names its shop.",
+  "Shops are asked in a random order on every search; do not present the first shop as the best one.",
+  "Copy titles, prices and stock exactly as returned. Prices are integer minor units of the currency.",
+  "To buy, call create_checkout with the item id from search, update_checkout for the delivery address, then",
+  "complete_checkout, which returns the shop's own payment link. The buyer pays the shop on that page;",
+  "these tools never take payment. The shop is the seller; privacy: https://agenticorg.ai/privacy,",
+  "terms: https://agenticorg.ai/network-terms.",
+].join(" ");
+
+// Every network tool is public: no account, no OAuth (OpenAI Apps SDK, per-tool securitySchemes).
+export const NOAUTH_META = { securitySchemes: [{ type: "noauth" }] } as const;
+
+const CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+const CHALLENGE_TOKEN = /^[A-Za-z0-9._~+/=-]{8,512}$/;
 
 const MAX_BODY_BYTES = 64 * 1024;
 const BINDING_TTL_MS = 5 * 60 * 1000;
@@ -69,6 +105,8 @@ export interface HostedConfig {
   globalPerMinute: number;
   trustedProxyHops?: number;
   version: string;
+  /** The ChatGPT app directory's domain-verification token (MCP_OPENAI_APPS_CHALLENGE), if any. */
+  openaiAppsChallenge?: string;
   log?: (entry: Record<string, unknown>) => void;
   now?: () => number;
 }
@@ -99,6 +137,14 @@ function hostName(header: string | undefined): string {
   const host = (header ?? "").trim().toLowerCase();
   if (host.startsWith("[")) return host.slice(0, host.indexOf("]") + 1);
   return host.split(":")[0];
+}
+
+/** Give every tool registered on ``server`` the no-auth security scheme in its ``_meta``. */
+export function withNoAuthTools(server: McpServer): McpServer {
+  const register = server.registerTool.bind(server) as (name: string, config: Record<string, unknown>, cb: unknown) => unknown;
+  (server as unknown as { registerTool: unknown }).registerTool = (name: string, config: Record<string, unknown>, cb: unknown) =>
+    register(name, { ...config, _meta: { ...NOAUTH_META, ...((config._meta as Record<string, unknown>) ?? {}) } }, cb);
+  return server;
 }
 
 function positiveInteger(value: number, name: string): number {
@@ -161,6 +207,10 @@ export function createHostedHandler(config: HostedConfig) {
       "MCP_ACCESS_TOKEN must be a separate caller credential of at least 32 characters (or set MCP_ALLOW_ANONYMOUS=true)",
     );
   }
+  const challenge = (config.openaiAppsChallenge ?? "").trim();
+  if (challenge && !CHALLENGE_TOKEN.test(challenge)) {
+    throw new Error("MCP_OPENAI_APPS_CHALLENGE must be the plain token the ChatGPT app directory shows");
+  }
   const tokenHash = anonymous ? null : createHash("sha256").update(config.accessToken as string).digest();
   const trustedProxyHops = proxyHops(config.trustedProxyHops ?? 0);
   const log = config.log ?? ((entry) => console.log(JSON.stringify(entry)));
@@ -195,6 +245,11 @@ export function createHostedHandler(config: HostedConfig) {
     if (!config.allowedHosts.has(hostName(req.headers.host))) {
       return rpcError(res, 403, -32000, "Host not allowed.");
     }
+    if (path === CHALLENGE_PATH && req.method === "GET") {
+      if (!challenge) return send(res, 404, { error: "not_found" });
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+      return void res.end(challenge);
+    }
     if (path !== "/mcp") return send(res, 404, { error: "not_found" });
     if (req.method !== "POST") {
       return rpcError(res, 405, -32000, "Method not allowed: this stateless server takes POST /mcp only.", { Allow: "POST" });
@@ -217,14 +272,11 @@ export function createHostedHandler(config: HostedConfig) {
     }
     let server: McpServer;
     if (network) {
-      server = new McpServer({
-        name: "agenticorg-network",
-        version: config.version,
-        description:
-          "Shops on the AgenticOrg network: list them, search their catalogs and open a checkout at one. " +
-          "It stops before payment; no tool here can pay.",
-      });
-      registerNetworkTools(server, network);
+      server = new McpServer(
+        { ...NETWORK_SERVER_INFO, icons: NETWORK_SERVER_INFO.icons.map((icon) => ({ ...icon, sizes: [...icon.sizes] })), version: config.version },
+        { instructions: NETWORK_INSTRUCTIONS },
+      );
+      registerNetworkTools(withNoAuthTools(server), network);
     } else {
       let current: UcpBinding;
       try {
@@ -308,6 +360,7 @@ export function configFromEnv(): HostedConfig {
     globalPerMinute: positiveInteger(Number(process.env.MCP_RATE_GLOBAL_PER_MINUTE ?? "300"), "MCP_RATE_GLOBAL_PER_MINUTE"),
     trustedProxyHops: proxyHops(Number(process.env.MCP_TRUSTED_PROXY_HOPS ?? "0")),
     version: pkg.version,
+    openaiAppsChallenge: (process.env.MCP_OPENAI_APPS_CHALLENGE ?? "").trim() || undefined,
   };
 }
 
