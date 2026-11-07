@@ -177,16 +177,16 @@ describe("InsightsDownloads", () => {
       calls += 1;
       return Promise.resolve({ data: { exports: [job({ status: calls === 1 ? "running" : "ready" })], storage: true } });
     });
-    renderPage();
-    expect(await screen.findByText("Preparing")).toBeInTheDocument();
+    // Flush the first response and the effect that schedules the polling interval.
+    await act(async () => { renderPage(); });
+    expect(screen.getByText("Preparing")).toBeInTheDocument();
     expect(screen.getByText(/still being prepared/)).toBeInTheDocument();
-    await act(async () => {
-      vi.advanceTimersByTime(POLL_MS);
-    });
-    expect(await screen.findByText("Ready", {}, { timeout: 5000 })).toBeInTheDocument();
-    await act(async () => {
-      vi.advanceTimersByTime(POLL_MS * 3);
-    });
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS - 1));
+    expect(calls).toBe(1);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(calls).toBe(2);
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS * 3));
     expect(calls).toBe(2);
   });
 
