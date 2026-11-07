@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
@@ -202,6 +203,19 @@ def test_legacy_private_tags_cannot_be_matched_in_public_search(label: str) -> N
     product = _upload_product()
     product["tags"] = [label]
     assert not search_catalog([product], query=label, categories=None, price_min=None, price_max=None)
+
+
+def test_legacy_credential_values_in_tags_are_hidden_and_not_searchable() -> None:
+    product = _upload_product()
+    encoded = b64encode(b"synthetic:catalog-fixture").decode("ascii")
+    product["tags"] = [f"Basic {encoded}", "organic"]
+    original = deepcopy(product)
+    served = ucp_product(product)
+    assert served is not None and served["tags"] == ["organic"]
+    search = {"categories": None, "price_min": None, "price_max": None}
+    assert not search_catalog([product], query=encoded, **search)
+    assert search_catalog([product], query="organic", **search)
+    assert product == original
 
 
 def test_merchant_config_keeps_shop_details_with_links() -> None:

@@ -238,8 +238,11 @@ MAX_SERVED_SHOP_DETAILS = 10
 
 def _product_tags(product: Mapping[str, Any]) -> list[str]:
     return [
-        tag for tag in (_plain(value, 50) for value in product.get("tags") or ())
-        if tag and not reads_private_or_reserved(tag)
+        tag for value in product.get("tags") or ()
+        if (tag := _plain(value, 50))
+        and not reads_private_or_reserved(tag)
+        and not contains_private_or_executable_value(value)
+        and not contains_private_or_executable_value(tag)
     ][:20]
 
 

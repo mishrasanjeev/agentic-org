@@ -39,9 +39,15 @@
 - Refuse credential and action names in public shop and product details even
   when written as API keys, camel-case names, or compatibility Unicode. Apply
   the same check to stored details, catalog uploads, Shopify fields and tags.
-- Filter legacy product snapshots and cached shopper details at read time too.
-  Refused attributes and tags cannot affect public catalog search or Telegram
-  summaries; stored products and audit history are not rewritten.
+- **Breaking security change for published catalogs:** legacy attributes and
+  tags that read as credentials, actions, or private business data are no longer
+  served or used for public matching, ranking, or Telegram summaries. Stored
+  products and audit history are unchanged. Rename and republish any legitimate
+  public detail rejected by the rule. To opt out of serving the affected catalog
+  or previews, pause Sell everywhere or disable the affected publishing channel;
+  operators can turn off `AGENTICORG_UCP_PROFILE_ENABLED`,
+  `AGENTICORG_NETWORK_ENABLED`, or `AGENTICORG_NETWORK_TELEGRAM_ENABLED` for the
+  corresponding surface. There is no switch to publish refused private data.
 
 - Reuse bounded token windows and salt-scoped digest calculations in the vendor
   check without caching policy membership or changing matching, decoding or
