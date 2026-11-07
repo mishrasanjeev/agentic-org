@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test, type Page } from "@playwright/test";
-import { verifyInsightsSurface } from "./insights-visuals";
+import { initializeInsightsTheme, verifyInsightsSurface } from "./insights-visuals";
 
 test.setTimeout(120_000);
 
@@ -85,6 +85,7 @@ for (const width of [1440, 390]) {
     test.describe(`${width}px ${scheme}`, () => {
       test.use({ viewport: { width, height: 1000 }, isMobile: width === 390, hasTouch: width === 390 });
       test("delayed company selection scopes views and exports", async ({ page, baseURL }, info) => {
+        await initializeInsightsTheme(page, scheme);
         const state = await fixture(page, baseURL!, { delayedCompany: true });
         await page.goto(path);
         await expect(page.getByTestId("insights-tiles")).toBeVisible({ timeout: 60_000 });
@@ -93,7 +94,6 @@ for (const width of [1440, 390]) {
         await expect(page.getByText("Acme Example", { exact: true })).toBeVisible();
         await expect.poll(() => state.views.at(-1)?.searchParams.get("company_id")).toBe(COMPANY);
         await expect(page.getByTestId("insights-company-scope")).toBeVisible();
-        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
         await page.getByRole("combobox", { name: "Compare with", exact: true }).selectOption("none");
         await expect.poll(() => state.views.at(-1)?.searchParams.get("compare")).toBe("none");
         const chart = page.getByTestId("chart-card");
@@ -125,9 +125,8 @@ for (const width of [1440, 390]) {
         }
         await expect(page.getByTestId("insights-tiles")).toBeVisible();
         await page.getByTestId("chart-card").getByRole("button", { name: "View data", exact: true }).click();
-        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
-        await verifyInsightsSurface(page, page.getByRole("button", { name: "Acme Example", exact: true }), width, info, "company-scope", 0);
-        await verifyInsightsSurface(page, page.getByTestId("insights-dashboard"), width, info, "insights");
+        await verifyInsightsSurface(page, page.getByRole("button", { name: "Acme Example", exact: true }), width, info, "company-scope", scheme, 0);
+        await verifyInsightsSurface(page, page.getByTestId("insights-dashboard"), width, info, "insights", scheme);
         expect(state.errors).toEqual([]);
       });
     });

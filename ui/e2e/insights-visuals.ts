@@ -1,7 +1,27 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 
-export async function verifyInsightsSurface(page: Page, root: Locator, width: number, info: TestInfo, name: string, minText = 20) {
+type Theme = "light" | "dark";
+
+export async function initializeInsightsTheme(page: Page, theme: Theme) {
+  // Set the theme before the styles render, including on a company-switch reload.
+  await page.addInitScript((dark) => {
+    const apply = () => document.documentElement.classList.toggle("dark", dark);
+    if (document.documentElement) {
+      apply();
+    } else {
+      const observer = new MutationObserver(() => {
+        if (!document.documentElement) return;
+        apply();
+        observer.disconnect();
+      });
+      observer.observe(document, { childList: true });
+    }
+  }, theme === "dark");
+}
+
+export async function verifyInsightsSurface(page: Page, root: Locator, width: number, info: TestInfo, name: string, theme: Theme, minText = 20) {
+  expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(theme === "dark");
   const geometry = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     document: document.documentElement.scrollWidth,

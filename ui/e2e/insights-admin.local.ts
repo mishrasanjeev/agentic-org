@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test, type Page } from "@playwright/test";
-import { verifyInsightsSurface } from "./insights-visuals";
+import { initializeInsightsTheme, verifyInsightsSurface } from "./insights-visuals";
 
 test.setTimeout(120_000);
 
@@ -96,6 +96,7 @@ for (const width of [1440, 390]) {
     test.describe(`admin ${width}px ${scheme}`, () => {
       test.use({ viewport: { width, height: 1000 }, isMobile: width === 390, hasTouch: width === 390 });
       test("platform aggregate and posture views", async ({ page, baseURL }, info) => {
+        await initializeInsightsTheme(page, scheme);
         await page.clock.setFixedTime(new Date("2026-11-01T06:00:00Z"));
         const state = await adminFixture(page, baseURL!);
         await page.goto("/dashboard/platform?range=7d");
@@ -106,7 +107,6 @@ for (const width of [1440, 390]) {
         }
         await expect(page.getByTestId("platform-tenant-row")).toContainText("Synthetic Traders");
         await expect(page.getByTestId("posture-check")).toHaveCount(4);
-        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
         const rangedRequests = state.requests.filter((request) => !request.pathname.endsWith("/posture"));
         expect(rangedRequests).toHaveLength(2);
         for (const url of rangedRequests) {
@@ -127,17 +127,17 @@ for (const width of [1440, 390]) {
         expect(state.requests.filter((request) => request.pathname.endsWith("/platform/insights/export"))).toHaveLength(1);
         expect(state.forbiddenExports).toEqual([]);
         expect(state.writes).toEqual([]);
-        await verifyInsightsSurface(page, page.getByTestId("platform-insights"), width, info, "platform");
+        await verifyInsightsSurface(page, page.getByTestId("platform-insights"), width, info, "platform", scheme);
         expect(state.errors).toEqual([]);
       });
       test("BI password dismissal and confirmed revocation", async ({ page, baseURL }, info) => {
+        await initializeInsightsTheme(page, scheme);
         const state = await adminFixture(page, baseURL!);
         await page.goto("/dashboard/insights/bi-access");
         await page.getByRole("button", { name: "Create login", exact: true }).click();
         await expect(page.getByTestId("bi-password")).toHaveText(password);
         await expect(page.getByRole("button", { name: "Create login", exact: true })).toBeDisabled();
-        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
-        await verifyInsightsSurface(page, page.getByTestId("insights-bi-access"), width, info, "bi-secret");
+        await verifyInsightsSurface(page, page.getByTestId("insights-bi-access"), width, info, "bi-secret", scheme);
         await page.getByRole("button", { name: "I have saved it", exact: true }).click();
         await expect(page.getByTestId("bi-secret")).toHaveCount(0);
         expect(await page.content()).not.toContain(password);
@@ -149,8 +149,7 @@ for (const width of [1440, 390]) {
         await page.getByRole("alertdialog").getByRole("button", { name: "Yes, revoke", exact: true }).click();
         await expect(page.getByRole("status").filter({ hasText: "was revoked" })).toBeVisible();
         expect(state.writes).toEqual(["create", "revoke"]);
-        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
-        await verifyInsightsSurface(page, page.getByTestId("insights-bi-access"), width, info, "bi-access");
+        await verifyInsightsSurface(page, page.getByTestId("insights-bi-access"), width, info, "bi-access", scheme);
         expect(state.errors).toEqual([]);
       });
     });
