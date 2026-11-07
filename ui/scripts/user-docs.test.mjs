@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { matchPath } from "react-router";
 import { loadUserGuides, plainGuideMarkdown, renderGuide, videoFiles } from "./generate-user-docs.mjs";
 import {
   loadRouteDescriptors,
@@ -359,6 +360,9 @@ test("both nginx targets declare one text MIME type instead of appending duplica
 
 test("hosted screen shortcuts point to implemented application routes", () => {
   const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const routes = [...app.matchAll(/\bpath="(\/dashboard(?:\/[^"\r\n]*)?)"/g)]
+    .map((match) => match[1])
+    .filter((path) => !path.includes("*"));
   const guide = loadUserGuides().articles.find(
     (article) => article.slug === "start-here",
   );
@@ -366,9 +370,12 @@ test("hosted screen shortcuts point to implemented application routes", () => {
     ...guide.markdown.matchAll(
       /https:\/\/app\.agenticorg\.ai(\/dashboard[^)\s]*)/g,
     ),
-  ].map((match) => match[1]);
+  ].map((match) => new URL(match[0]).pathname);
   assert.ok(paths.length >= 16);
-  for (const path of paths) assert.ok(app.includes(`path="${path}"`), path);
+  assert.ok(paths.includes("/dashboard/insights/explore/runs"));
+  for (const path of paths) {
+    assert.ok(routes.some((route) => matchPath({ path: route, end: true, caseSensitive: true }, path)), path);
+  }
 });
 
 test("public A2A guide links to a hosted page, not a source Markdown soft 404", () => {
