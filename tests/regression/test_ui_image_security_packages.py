@@ -29,6 +29,7 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
     [
         ("apt", "3.0.4"),
         ("libapt-pkg7.0", "3.0.4"),
+        ("zlib1g", "1:1.3.dfsg+really1.3.1-1+deb13u1"),
         ("libpcre2-8-0", "10.46-1~deb13u3"),
         ("libssl3t64", "3.5.7-1~deb13u3"),
         ("openssl", "3.5.7-1~deb13u3"),
@@ -48,13 +49,21 @@ def test_api_runtime_rejects_cached_vulnerable_packages(package: str, minimum: s
     assert check in install, f"API runtime: missing security floor for {package}"
 
 
-@pytest.mark.parametrize("package", ["apt", "libapt-pkg7.0"])
-def test_mcp_runtime_requires_fixed_apt_packages(package: str) -> None:
+@pytest.mark.parametrize(
+    ("package", "minimum"),
+    [
+        ("apt", "3.0.4"),
+        ("libapt-pkg7.0", "3.0.4"),
+        ("zlib1g", "1:1.3.dfsg+really1.3.1-1+deb13u1"),
+    ],
+)
+def test_mcp_runtime_requires_fixed_security_packages(package: str, minimum: str) -> None:
     root = Path(__file__).resolve().parents[2]
     runtime = (root / "mcp-server/Dockerfile.hosted").read_text(encoding="utf-8").rsplit("FROM ", 1)[1]
     assert "apt-get -o Acquire::Retries=0 update" in runtime
-    assert "--only-upgrade apt libapt-pkg7.0" in runtime
-    check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'3.0.4\''
+    upgrade = next(line for line in runtime.splitlines() if "--only-upgrade" in line)
+    assert package in upgrade.split("--only-upgrade", 1)[1].split()
+    check = f'dpkg --compare-versions "$(dpkg-query -W -f=\'${{Version}}\' {package})" ge \'{minimum}\''
     assert check in runtime
     assert runtime.index(check) < runtime.index("USER node")
 
@@ -67,3 +76,5 @@ def test_debian_builders_bootstrap_without_vulnerable_apt_retries(filename: str)
     update, packages = install.split("apt-get install", 1)
     assert "Acquire::Retries=0" in update
     assert "Acquire::Retries=0" in packages
+    assert "dpkg-query -W -f='${Version}' zlib1g" in packages
+    assert "ge '1:1.3.dfsg+really1.3.1-1+deb13u1'" in packages

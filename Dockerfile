@@ -8,6 +8,7 @@ WORKDIR /app
 # commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
 RUN apt-get update -o Acquire::Retries=0 && apt-get install -y --no-install-recommends \
     -o Acquire::Retries=0 gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml README.md requirements.txt ./
 COPY core/ core/
@@ -47,6 +48,7 @@ RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retri
     fonts-dejavu-core \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" ge '10.46-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
