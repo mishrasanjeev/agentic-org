@@ -408,10 +408,9 @@ Install the platform and development extras:
 
     python -m venv .venv
     python -m pip install -e ".[v4,dev]"
-    python -m pip install --no-deps --require-hashes -r requirements-fastembed.txt
+    python -m pip check
 
-The second command installs fastembed, the local embedding runtime, without its
-dependency metadata; `requirements-fastembed.txt` explains why.
+Fastembed, the local embedding runtime, is resolved with the other dependencies.
 
 Start local dependencies:
 

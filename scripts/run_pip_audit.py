@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Dependency vulnerability audit with dated, reviewed exceptions.
 
-Runs ``pip-audit`` over the project metadata, both requirements files (the
-targets CI has always audited) and ``requirements-fastembed.txt``, and fails on
+Runs ``pip-audit`` over the project metadata (including fastembed) and both
+requirements files, and fails on
 any known vulnerability that is not covered by an exception in
 ``config/pip-audit-exceptions.toml``.
 
@@ -36,14 +36,11 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_EXCEPTIONS = Path("config/pip-audit-exceptions.toml")
-# requirements-fastembed.txt is installed with --no-deps (its Pillow ceiling is
-# overridden by pyproject.toml), so it is audited the same way: the pinned
-# package only, its dependencies being covered by the project target.
+# The project target resolves fastembed and all its dependencies normally.
 DEFAULT_TARGETS: tuple[tuple[str, ...], ...] = (
     (".",),
     ("-r", "requirements.txt"),
     ("-r", "requirements-v4.txt"),
-    ("--disable-pip", "--no-deps", "-r", "requirements-fastembed.txt"),
 )
 MAX_EXCEPTION_DAYS = 90
 TEXT_FIELDS = {"exception": ("id", "package", "reason", "owner"), "skip": ("package", "reason", "owner")}

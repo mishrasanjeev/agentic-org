@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import api from "../lib/api";
+import { setSelectedCompanyId, useSelectedCompanyId } from "../lib/companyScope";
 
 interface Company {
   id: string;
@@ -11,9 +12,7 @@ interface Company {
 
 export default function CompanySwitcher() {
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [current, setCurrent] = useState<string>(
-    localStorage.getItem("company_id") || "",
-  );
+  const current = useSelectedCompanyId();
   const [loading, setLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -38,11 +37,9 @@ export default function CompanySwitcher() {
         if (!storedIsValid) {
           if (list.length > 0) {
             const first = list[0].id;
-            setCurrent(first);
-            localStorage.setItem("company_id", first);
+            setSelectedCompanyId(first);
           } else if (current) {
-            setCurrent("");
-            localStorage.removeItem("company_id");
+            setSelectedCompanyId("");
           }
         }
       } catch {
@@ -57,8 +54,7 @@ export default function CompanySwitcher() {
   }, [current]);
 
   const handleSelect = (id: string) => {
-    setCurrent(id);
-    localStorage.setItem("company_id", id);
+    setSelectedCompanyId(id);
     setDropdownOpen(false);
     // Reload the page so all data refreshes for the new company context
     window.location.reload();
@@ -75,7 +71,7 @@ export default function CompanySwitcher() {
   // Single company — no switcher needed
   if (companies.length <= 1) {
     return (
-      <span className="text-sm text-slate-300 font-medium truncate max-w-[160px]">
+      <span className="text-sm text-foreground font-medium truncate max-w-[160px]">
         {currentCompany?.name || "No Company"}
       </span>
     );
@@ -86,7 +82,7 @@ export default function CompanySwitcher() {
       <button
         type="button"
         onClick={() => setDropdownOpen((o) => !o)}
-        className="flex items-center gap-1.5 h-8 rounded-lg border border-slate-700 bg-slate-800/50 px-3 text-sm text-slate-200 hover:bg-slate-700/50 transition-colors"
+        className="flex items-center gap-1.5 h-8 rounded-lg border bg-background px-3 text-sm text-foreground hover:bg-muted transition-colors"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -98,7 +94,7 @@ export default function CompanySwitcher() {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-slate-400"
+          className="text-muted-foreground"
         >
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
           <polyline points="9 22 9 12 15 12 15 22" />
@@ -116,7 +112,7 @@ export default function CompanySwitcher() {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-slate-400"
+          className="text-muted-foreground"
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -129,7 +125,7 @@ export default function CompanySwitcher() {
             className="fixed inset-0 z-40"
             onClick={() => setDropdownOpen(false)}
           />
-          <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-slate-700 bg-slate-800 shadow-xl z-50 py-1">
+          <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border bg-background shadow-xl z-50 py-1">
             {companies.map((c) => (
               <button
                 key={c.id}
@@ -138,11 +134,11 @@ export default function CompanySwitcher() {
                 className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                   c.id === current
                     ? "bg-primary/10 text-primary"
-                    : "text-slate-300 hover:bg-slate-700/50"
+                    : "text-foreground hover:bg-muted"
                 }`}
               >
                 <span className="block truncate">{c.name}</span>
-                <span className="block text-[10px] text-slate-500 mt-0.5">
+                <span className="block text-[10px] text-muted-foreground mt-0.5">
                   {c.gstin ? `GSTIN: ${c.gstin}` : ""}
                   {c.gstin && c.industry ? " · " : ""}
                   {c.industry || ""}
@@ -152,7 +148,7 @@ export default function CompanySwitcher() {
             <Link
               to="/dashboard/companies"
               onClick={() => setDropdownOpen(false)}
-              className="block w-full text-left px-3 py-2 text-xs text-blue-400 hover:text-blue-300 border-t border-slate-700 mt-1 pt-2 transition-colors"
+              className="block w-full text-left px-3 py-2 text-xs text-primary hover:underline border-t mt-1 pt-2 transition-colors"
             >
               Manage Companies
             </Link>

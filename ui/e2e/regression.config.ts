@@ -49,6 +49,7 @@ export default defineConfig({
   testIgnore: [
     "dev-stack.spec.ts",
     "governed-cases*.spec.ts",
+    "insights*.local.ts",
     "decision-grants.spec.ts",
     "onboarding-desk.spec.ts",
   ],

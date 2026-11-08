@@ -8,6 +8,7 @@ for shape.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import random
 import re
 import subprocess
@@ -78,6 +79,72 @@ def _scan(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], *extr
 
 
 # ── Matching ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("salt", [b"a" * 16, b"b" * 32, b"c" * 64, b"d" * 65])
+@pytest.mark.parametrize("key", ["", "acmeverify", "\u00e9cole", "x" * 128, "x" * 129])
+def test_digest_preserves_the_exact_salted_hash(salt: bytes, key: str) -> None:
+    expected = hashlib.sha256(salt + b"\x00" + key.encode("utf-8")).hexdigest()
+    assert dl.digest(salt, key) == expected
+    assert dl.digest(salt, key) == expected
+
+
+def test_digest_cache_is_bounded_and_does_not_retain_large_inputs(denylist: dl.Denylist) -> None:
+    dl._cached_digest.cache_clear()
+    try:
+        denylist.matches("acmeverify")
+        denylist.matches("acmeverify")
+        info = dl._cached_digest.cache_info()
+        assert info.hits > 0 and info.currsize > 0
+        assert info.maxsize == 65_536
+        assert denylist.matches("x" * 513 + " acmeverify")
+        assert denylist.matches("\ufb03" * 50 + " acmeverify")
+        dataclasses.replace(denylist, salt=b"x" * 65).matches("acmeverify")
+        assert dl._cached_digest.cache_info() == info
+    finally:
+        dl._cached_digest.cache_clear()
+
+
+def test_cached_hashes_do_not_cache_policy_membership(denylist: dl.Denylist) -> None:
+    assert denylist.matches("acme verify")
+    changed = dataclasses.replace(denylist, hashes=frozenset({dl.digest(TEST_SALT, "distinct")}))
+    assert changed.matches("acme verify") == []
+    assert changed.matches("distinct") == [0]
+    other_salt = dataclasses.replace(denylist, salt=b"other-salt-value!")
+    assert other_salt.matches("acme verify") == []
+    narrow = dataclasses.replace(denylist, max_tokens=1)
+    assert narrow.matches("ac me ve rify") == []
+    assert dataclasses.replace(narrow, max_tokens=2).matches("ac me ve rify") == [0]
+    assert denylist.matches("myacmeverify") == [0]
+    assert denylist.matches("myacmeverify", min_chars=12) == []
+    result = denylist.matches("acme verify")
+    result.clear()
+    assert denylist.matches("acme verify") == [0]
+
+
+@pytest.mark.parametrize("max_tokens", [1, 2, 8])
+@pytest.mark.parametrize("text", ["", "acme verify", "ac me ve rify", "\u00e9cole", "x" * 128])
+def test_cached_token_windows_preserve_every_candidate(text: str, max_tokens: int) -> None:
+    words = dl.tokens(text)
+    expected = tuple(dl._joined(words, max_tokens))
+    assert dl._cached_joined(tuple(words), max_tokens) == expected
+    assert dl._cached_joined(tuple(words), max_tokens) == expected
+
+
+def test_token_window_cache_is_bounded_and_bypassed_for_large_inputs(denylist: dl.Denylist) -> None:
+    dl._cached_joined.cache_clear()
+    try:
+        assert denylist.matches("acmeverify") == [0]
+        assert denylist.matches("acmeverify") == [0]
+        info = dl._cached_joined.cache_info()
+        assert info.hits == 1 and info.currsize == 1
+        assert info.maxsize == 1_024
+        assert denylist.matches("x" * 129 + " acmeverify")
+        assert denylist.matches("\ufb03" * 50 + " acmeverify")
+        assert dataclasses.replace(denylist, max_tokens=9).matches("acmeverify") == [0]
+        assert dl._cached_joined.cache_info() == info
+    finally:
+        dl._cached_joined.cache_clear()
 
 
 @pytest.mark.parametrize(

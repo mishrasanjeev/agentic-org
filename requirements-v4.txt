@@ -22,11 +22,8 @@
 # ─── Microsoft Presidio: Pre-LLM PII Redaction (MIT) ────────────────────────
 # Enables: Aadhaar, PAN, GSTIN, UPI, email, phone scrubbed BEFORE reaching LLM
 # Without: PII masking in logs only (post-LLM)
-# Python 3.14 is the production Docker runtime. presidio-analyzer
-# 2.2.360+ currently requires Python<3.14, so pin the newest
-# compatible release for production and keep the newer line for
-# Python 3.12/3.13 environments.
-presidio-analyzer==2.2.359; python_version >= "3.14"
+# 2.2.366 supports Python 3.14 and retains the compatible preshed ceiling.
+presidio-analyzer==2.2.366; python_version >= "3.14"
 presidio-analyzer==2.2.366; python_version < "3.14"
 # preshed 3.0.14 rejects spaCy's high unsigned token hashes on Python 3.14.
 preshed==3.0.13; python_version == "3.14"

@@ -31,6 +31,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 import i18n from "@/i18n";
 import InsightsDashboard from "@/pages/InsightsDashboard";
+import { setSelectedCompanyId } from "@/lib/companyScope";
 import type { InsightsViewResponse, MetricResponse } from "@/lib/insights/api";
 
 const SETTINGS = { timezone: "Asia/Kolkata", fiscal_year_start_month: 4, currency: "INR" };
@@ -387,6 +388,23 @@ describe("InsightsDashboard", () => {
     renderPage("/dashboard/insights?range=qtd");
     await screen.findByTestId("insights-tiles");
     expect(viewCalls()[0][1]).toEqual({ params: { from: "2026-10-01", to: "2026-11-01", compare: "previous" } });
+  });
+
+  it("refreshes scope when the header selects or clears a company after the page loads", async () => {
+    routeGet({ executive: executiveView() });
+    renderPage("/dashboard/insights?range=custom&from=2026-10-01&to=2026-10-31");
+    await screen.findByTestId("insights-tiles");
+    const company = "11111111-2222-3333-4444-555555555555";
+    act(() => setSelectedCompanyId(company));
+    await waitFor(() => expect(viewCalls()[viewCalls().length - 1]?.[1]).toEqual({
+      params: { from: "2026-10-01", to: "2026-10-31", compare: "previous", company_id: company },
+    }));
+    expect(screen.getByTestId("insights-company-scope")).toBeInTheDocument();
+    act(() => setSelectedCompanyId(""));
+    await waitFor(() => expect(viewCalls()[viewCalls().length - 1]?.[1]).toEqual({
+      params: { from: "2026-10-01", to: "2026-10-31", compare: "previous" },
+    }));
+    expect(screen.queryByTestId("insights-company-scope")).not.toBeInTheDocument();
   });
 
   it("a custom range from the URL is used; an invalid one falls back to 30 days", async () => {

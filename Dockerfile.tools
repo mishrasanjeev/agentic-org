@@ -11,8 +11,9 @@ ARG GITLEAKS_VERSION=8.30.1
 ARG GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc g++ libjpeg-dev zlib1g-dev libffi-dev git curl ca-certificates make \
+RUN apt-get update -o Acquire::Retries=0 && apt-get install -y --no-install-recommends \
+        -o Acquire::Retries=0 gcc g++ libjpeg-dev zlib1g-dev libffi-dev git curl ca-certificates make \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eu; \
@@ -29,16 +30,14 @@ RUN set -eu; \
     gitleaks version
 
 WORKDIR /opt/agenticorg-deps
-COPY pyproject.toml requirements-dev.txt requirements-fastembed.txt scripts/pip_check.py ./
+COPY pyproject.toml requirements.txt requirements-dev.txt ./
 # Install what `pip install -e ".[dev]"` would, without the package itself
-# (the source is mounted at /src and imported from there), then fastembed without
-# its dependency metadata (requirements-fastembed.txt explains why). pip_check.py
-# is pip check accepting only fastembed's Pillow ceiling.
+# (the source is mounted at /src and imported from there). Dependency checks
+# are strict, including fastembed and patched Pillow.
 RUN python -c "import tomllib; p = tomllib.load(open('pyproject.toml', 'rb'))['project']; \
 print('\n'.join(p['dependencies'] + p['optional-dependencies']['dev']))" > requirements-project.txt \
-    && pip install --no-cache-dir -r requirements-project.txt -r requirements-dev.txt \
-    && pip install --no-cache-dir --no-deps --require-hashes -r requirements-fastembed.txt \
-    && python pip_check.py
+    && pip install --no-cache-dir -r requirements.txt -r requirements-project.txt -r requirements-dev.txt \
+    && python -m pip check
 
 # The mounted checkout is owned by the host user, which git would otherwise
 # refuse as a "dubious ownership" repository.

@@ -509,6 +509,8 @@ def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
     _assert_hot_query_plans()
 
 
+# Bootstrap and full ORM drift comparison need the same budget as the bare-upgrade cases.
+@pytest.mark.timeout(300)
 def test_legacy_db_gets_stamped_at_baseline():
     """A legacy-shaped DB (no alembic_version) must be stamped at the
     baseline and then upgraded to the current head.
@@ -1725,6 +1727,8 @@ _BEFORE_EXACT_MATCH = datetime(2026, 9, 1, tzinfo=UTC)
 _AFTER_EXACT_MATCH = datetime(2026, 9, 26, tzinfo=UTC)
 
 
+# Both complete downgrade/upgrade replays include every later migration.
+@pytest.mark.timeout(300)
 def test_admin_scope_compat_migration_restores_only_old_admin_owned_sub_scope_keys():
     """``v6z29_admin_scope_compat`` gives the exact admin scope only to keys that held
     ``agenticorg:admin:<sub>``, predate the exact-match fix and whose owner is an admin.

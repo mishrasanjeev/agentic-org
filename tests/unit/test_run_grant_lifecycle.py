@@ -335,12 +335,16 @@ def test_every_graph_builder_requires_run_grant_as_a_keyword(name, builder):
     assert parameter.default is inspect.Parameter.empty, name
 
 
+# This parses every production module; it is not a runtime latency assertion.
+@pytest.mark.timeout(120)
 def test_production_code_never_passes_the_test_sentinel_or_none():
     offenders: list[str] = []
+    candidate_types = (ast.Name, ast.alias, ast.keyword)
     for top in ("api", "auth", "core", "workflows", "connectors"):
         for path in (REPO / top).rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            for node in ast.walk(ast.parse(text)):
+            nodes = (node for node in ast.walk(ast.parse(text)) if isinstance(node, candidate_types))
+            for node in nodes:
                 uses_sentinel = (isinstance(node, ast.Name) and node.id == "NO_RUN_GRANT_FOR_TESTS") or (
                     isinstance(node, ast.alias) and node.name == "NO_RUN_GRANT_FOR_TESTS"
                 )
@@ -374,12 +378,19 @@ def test_trace_redaction_replaces_grant_tokens_everywhere():
 
 
 def test_trace_redaction_installs_a_redacting_client_only_when_tracing_is_on(monkeypatch):
+    import langsmith
+
     from observability import trace_redaction
+
+    real_client = langsmith.Client
+
+    def local_client(**kwargs):
+        return real_client(api_url="http://127.0.0.1:1", auto_batch_tracing=False, **kwargs)
 
     monkeypatch.setattr(trace_redaction, "_installed", False)
     for name in ("LANGSMITH_TRACING", "LANGCHAIN_TRACING_V2", "LANGCHAIN_TRACING"):
         monkeypatch.delenv(name, raising=False)
-    with patch("langsmith.configure") as configure:
+    with patch("langsmith.configure") as configure, patch("langsmith.Client", side_effect=local_client):
         assert trace_redaction.install_trace_redaction() is False
         configure.assert_not_called()
 
@@ -387,8 +398,11 @@ def test_trace_redaction_installs_a_redacting_client_only_when_tracing_is_on(mon
         monkeypatch.setenv("LANGSMITH_API_KEY", "placeholder-key")
         assert trace_redaction.install_trace_redaction() is True
     client = configure.call_args.kwargs["client"]
-    hidden = client._hide_run_inputs({"grant_token": "placeholder-grant", "task": "x"})
-    assert hidden == {"grant_token": "[redacted]", "task": "x"}
+    try:
+        hidden = client._hide_run_inputs({"grant_token": "placeholder-grant", "task": "x"})
+        assert hidden == {"grant_token": "[redacted]", "task": "x"}
+    finally:
+        client.close()
     monkeypatch.setattr(trace_redaction, "_installed", False)
 
 

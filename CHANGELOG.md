@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased - Release integration fixes
+
+- Require patched APT 3.0.4 packages in the hosted MCP and API runtimes and disable
+  download retries while bootstrapping Debian builds. Keep the container scan
+  severity policy and the runtime's unprivileged user unchanged.
+- Validate representative email contacts with linear string checks instead
+  of an ambiguous regular expression. Preserve phone formats and the existing
+  254-character contact limit; enrolment consent and authorization are unchanged.
+- Install the reviewed production requirements together with project and test
+  dependencies in one strict resolver run, so image builds cannot silently
+  select a different direct dependency release than the reviewed pins.
+- Rank products using the same filtered public tags served to shoppers;
+  refused legacy tags cannot boost a product while public tags still can.
+- Explicitly disable SDK tracing under existing deployment residency
+  enforcement, including cached tracing flags, global context and an already
+  installed redaction hook. Keep residency and tracing defaults unchanged.
+- Bound the complete production-source grant-sentinel AST scan at 120 seconds
+  without narrowing its directories, parsed files or security assertions.
+  Keep runtime latency limits and the global test timeout unchanged.
+- Pass transaction insert rows as bounded Core parameter batches to avoid
+  repeated multi-row ORM compilation, preserving conflict order, tenant RLS,
+  first-payload retention, returned-row accounting and provenance hooks.
+- Give the legacy bootstrap's complete ORM drift comparison and repeated
+  admin-scope upgrade replay the existing 300-second full-schema test budget,
+  retaining every drift, authorization and idempotency check.
+- Resolve spend test-query operands once per execution while preserving tenant
+  predicates, mutable row reads and the complete 450-row import audit replay.
+- Keep local-only Insights browser fixtures out of the hosted regression suite.
+  Give connector integration fixtures synthetic DNS answers while retaining
+  private, link-local, mixed-answer and unresolved-host refusal checks. Timestamp
+  rollup fixtures independently of the database wall clock.
+- Raise the MCP adapter's existing Hono and query-string patch floors. Pin the
+  UI's development-only glob matcher to minimatch 11.0.3 after checking the
+  ESLint and TypeScript matching consumers against its changed API. Keep the
+  dependency audit policy unchanged.
+
+- Refuse credential and action names in public shop and product details even
+  when written as API keys, camel-case names, or compatibility Unicode. Apply
+  the same check to stored details, catalog uploads, Shopify fields and tags.
+- **Breaking security change for published catalogs:** legacy attributes and
+  tags that read as credentials, actions, or private business data are no longer
+  served or used for public matching, ranking, or Telegram summaries. Stored
+  products and audit history are unchanged. Rename and republish any legitimate
+  public detail rejected by the rule. To opt out of serving the affected catalog
+  or previews, pause Sell everywhere or disable the affected publishing channel;
+  operators can turn off `AGENTICORG_UCP_PROFILE_ENABLED`,
+  `AGENTICORG_NETWORK_ENABLED`, or `AGENTICORG_NETWORK_TELEGRAM_ENABLED` for the
+  corresponding surface. There is no switch to publish refused private data.
+
+- Reuse bounded token windows and salt-scoped digest calculations in the vendor
+  check without caching policy membership or changing matching, decoding or
+  exception rules. Select caches once per normalized short line; larger inputs
+  remain uncached.
+
+- Resolve fastembed 0.9.1 normally with patched Pillow 13. Remove the old
+  no-dependency install and Pillow conflict waiver; container and CI installs
+  now require strict dependency checks. Keep the compatible Hugging Face Hub
+  and preshed constraints, and align Presidio's Python 3.14 requirements.
+
+- Refresh the Insights company filter when the header validates or changes
+  its selection, including a delayed first company load and cross-tab changes.
+  Server-side company ownership checks remain authoritative.
+- Keep the header company label subscribed to the same selection, including
+  native cross-tab storage updates, and use theme tokens for its controls.
+- Apply the console's background and foreground theme tokens at its shared
+  root, so inherited control and table text remains readable in dark mode.
+- Keep the BI login table's visually hidden labels inside its horizontal
+  scroll container at mobile widths.
+
 ## Unreleased - Commerce close-out: hosted refunds, durable merchant emails, held stock, loyalty re-price, 1,000-product reads
 
 - Orders paid on a merchant's Plural hosted page (executor `plural_hosted`) can now be refunded through

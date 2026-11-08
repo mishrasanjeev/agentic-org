@@ -35,3 +35,20 @@ def test_exact_observability_pins_move_as_one_release_family() -> None:
     core_pin = next(iter(requirements["langchain-core"].specifier))
     assert core_pin.operator == "=="
     assert Version(core_pin.version) >= Version("1.6.9")
+
+
+def test_images_install_reviewed_requirements_in_the_project_resolver() -> None:
+    for filename, project_input in (
+        ("Dockerfile", '".[v4]"'),
+        ("Dockerfile.tools", "-r requirements-project.txt"),
+    ):
+        source = (ROOT / filename).read_text(encoding="utf-8")
+        assert any(
+            line.startswith("COPY ") and "requirements.txt" in line.split()
+            for line in source.splitlines()
+        ), filename
+        install = next(
+            line for line in source.splitlines()
+            if "pip install --no-cache-dir" in line and project_input in line
+        )
+        assert "-r requirements.txt " in install, filename

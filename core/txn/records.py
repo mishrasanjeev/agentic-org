@@ -180,15 +180,16 @@ async def ingest(tenant_id: uuid.UUID, raw_records: list[Any], *, source: str | 
     by_ref: dict[str, dict[str, Any]] = {}
     for item in checked:
         by_ref.setdefault(item["record_ref"], item)
+    table = TxnRecord.__table__
     async with get_tenant_session(tenant_id) as session:
         inserted_refs = set(
             (
                 await session.execute(
-                    insert(TxnRecord)
-                    # A consistent conflict-lock order also protects overlapping batches.
-                    .values([dict(tenant_id=tenant_id, **by_ref[ref]) for ref in sorted(by_ref)])
-                    .on_conflict_do_nothing(index_elements=[TxnRecord.tenant_id, TxnRecord.record_ref])
-                    .returning(TxnRecord.record_ref)
+                    insert(table)
+                    .on_conflict_do_nothing(index_elements=[table.c.tenant_id, table.c.record_ref])
+                    .returning(table.c.record_ref),
+                    # Preserve conflict-lock order while the dialect batches parameter rows.
+                    [dict(tenant_id=tenant_id, **by_ref[ref]) for ref in sorted(by_ref)],
                 )
             )
             .scalars()

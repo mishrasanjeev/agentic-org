@@ -56,7 +56,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install uv && uv pip install --system -e ".[dev]" && uv pip install --system --no-deps --require-hashes -r requirements-fastembed.txt
+        run: pip install uv && uv pip install --system -e ".[dev]" && uv pip check --system
       - name: Create the dedicated test databases
         env:
           PGPASSWORD: mfa-test-only

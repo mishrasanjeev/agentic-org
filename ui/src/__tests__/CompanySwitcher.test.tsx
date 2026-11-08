@@ -254,6 +254,18 @@ describe("CompanySwitcher", () => {
     expect(window.location.reload).toHaveBeenCalled();
   });
 
+  it("updates the header when another tab changes the selected company", async () => {
+    mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
+    localStorage.setItem("company_id", "comp-001");
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
+    await screen.findByText("AgenticOrg");
+    act(() => {
+      localStorage.setItem("company_id", "comp-002");
+      window.dispatchEvent(new StorageEvent("storage", { key: "company_id" }));
+    });
+    await screen.findByText("Acme Corp");
+  });
+
   // ── Auto-select First Company ──────────────────────────────────────────
 
   it("auto-selects first company when none is stored", async () => {

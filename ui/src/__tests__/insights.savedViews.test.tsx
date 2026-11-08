@@ -65,6 +65,7 @@ describe("SavedViews", () => {
     renderAt("/dashboard/insights?view=finance&range=7d");
     expect(mockGet).toHaveBeenCalledWith("/insights/saved-views", { params: { view_key: "finance" } });
     const select = await screen.findByRole("combobox", { name: "Saved views" });
+    expect(select).toHaveClass("insights-target");
     await screen.findByRole("option", { name: "Q3 close · shared" });
     fireEvent.change(select, { target: { value: "v1" } });
     await waitFor(() =>
@@ -77,6 +78,7 @@ describe("SavedViews", () => {
     mockPost.mockResolvedValue({ data: { saved_view: VIEWS[1] } });
     renderAt("/dashboard/insights?view=finance&range=mtd&company_id=c1");
     fireEvent.click(await screen.findByTestId("saved-views-save"));
+    expect(screen.getByPlaceholderText("Name this view")).toHaveClass("insights-target");
     fireEvent.change(screen.getByPlaceholderText("Name this view"), { target: { value: "My month" } });
     fireEvent.click(screen.getByLabelText("Share with everyone who can open it"));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

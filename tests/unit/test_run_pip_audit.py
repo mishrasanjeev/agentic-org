@@ -131,7 +131,6 @@ def test_default_targets_cover_the_project_and_every_requirements_file(tmp_path:
         ["."],
         ["-r", "requirements.txt"],
         ["-r", "requirements-v4.txt"],
-        ["--disable-pip", "--no-deps", "-r", "requirements-fastembed.txt"],
     ]
 
 

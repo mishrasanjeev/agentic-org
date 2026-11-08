@@ -13,6 +13,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSelectedCompanyId } from "@/lib/companyScope";
 import ChartCard from "@/components/insights/ChartCard";
 import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
@@ -51,14 +52,6 @@ type ViewState =
   | { kind: "disabled" }
   | { kind: "forbidden" }
   | { kind: "error"; message: string | null };
-
-function readCompanyId(): string {
-  try {
-    return localStorage.getItem("company_id") || "";
-  } catch {
-    return "";
-  }
-}
 
 /** Landing tiles refresh this often while the page is visible (PRD: every 60 s). */
 export const REFRESH_MS = 60_000;
@@ -142,7 +135,7 @@ export default function InsightsDashboard() {
         ? { from: urlFrom as string, to: urlTo as string }
         : presetRange("30d", today)
       : presetRange(preset, today, settings?.fiscal_year_start_month ?? 1);
-  const companyId = readCompanyId();
+  const companyId = useSelectedCompanyId();
 
   const filters: InsightsFilters = useMemo(
     () => ({ from: range.from, to: range.to, compare, company_id: companyId || undefined }),

@@ -73,7 +73,18 @@ TEXT = {
     },
 }
 
-_CONTACT = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$|^\+?[0-9 ().-]{7,24}$")
+_PHONE_CONTACT = re.compile(r"\+?[0-9 ().-]{7,24}")
+
+
+def _valid_contact(value: str) -> bool:
+    if "@" not in value:
+        return _PHONE_CONTACT.fullmatch(value) is not None
+    # Split once so repeated dots cannot make the email check backtrack.
+    local, _, domain = value.partition("@")
+    return bool(
+        local and "@" not in domain and "." in domain[1:-1]
+        and not any(char.isspace() for char in value)
+    )
 
 
 # ── Settings ─────────────────────────────────────────────────────────────────
@@ -439,7 +450,7 @@ async def accept(
         "role": _text(role, "role", 80),
         "contact": _text(contact, "contact", 254),
     }
-    if not _CONTACT.match(person["contact"]):
+    if not _valid_contact(person["contact"]):
         raise DeskError(422, "representative_invalid", "contact must be an email address or a phone number")
     service = _service()
     grantex_agent_id = await _grantex_agent(tenant_id)

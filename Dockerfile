@@ -6,10 +6,11 @@ FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6
 WORKDIR /app
 # Build deps for patched Pillow and other C extensions; git for the
 # commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
+RUN apt-get update -o Acquire::Retries=0 && apt-get install -y --no-install-recommends \
+    -o Acquire::Retries=0 gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && rm -rf /var/lib/apt/lists/*
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.txt ./
 COPY core/ core/
 COPY api/ api/
 COPY auth/ auth/
@@ -22,12 +23,7 @@ COPY schemas/ schemas/
 # pyproject.toml force-includes the provider conformance suite into the wheel.
 COPY testing/ testing/
 COPY migrations/ migrations/
-RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
-# fastembed (the default local embedding runtime) goes in without its dependency
-# metadata: its latest release caps pillow<13, and pyproject.toml declares its
-# other runtime requirements (requirements-fastembed.txt explains why).
-COPY requirements-fastembed.txt ./
-RUN pip install --no-cache-dir --no-deps --require-hashes -r requirements-fastembed.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt ".[v4]"
 
 # Browser RPA executes with Playwright's version-matched Chromium. Download it
 # in the builder and copy the immutable browser bundle into the runtime image.
@@ -41,7 +37,8 @@ RUN python -m playwright install chromium
 RUN python -m spacy download en_core_web_sm
 
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retries=0 \
+    && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd \
     tesseract-ocr-hin tesseract-ocr-ben tesseract-ocr-guj tesseract-ocr-kan \
@@ -49,6 +46,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tesseract-ocr-tel tesseract-ocr-urd poppler-utils \
     libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
     fonts-dejavu-core \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' apt)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libapt-pkg7.0)" ge '3.0.4' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" ge '10.46-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
@@ -72,10 +72,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 # in pip/_vendor/bom.cdx.json as installed runtime dependencies. Remove the
 # paths explicitly because copying site-packages over the runtime base can
 # overlay two pip versions that a normal uninstall does not fully clean up.
-# scripts/pip_check.py is pip check accepting only fastembed's Pillow ceiling.
-COPY scripts/pip_check.py /tmp/pip_check.py
-RUN python /tmp/pip_check.py \
-    && rm -f /tmp/pip_check.py \
+RUN python -m pip check \
     && rm -rf /usr/local/lib/python3.14/site-packages/pip \
         /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
         /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14

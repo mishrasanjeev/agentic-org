@@ -52,6 +52,21 @@ def enforce_on(monkeypatch):
     monkeypatch.setattr(res.settings, "env", "test")
 
 
+@pytest.fixture
+def isolated_sdk_tracing(monkeypatch):
+    import langsmith
+    from langsmith._internal import _context
+
+    token = _context._TRACING_ENABLED.set(None)
+    monkeypatch.setattr(_context, "_GLOBAL_TRACING_ENABLED", None)
+    langsmith.utils.get_env_var.cache_clear()
+    try:
+        yield
+    finally:
+        _context._TRACING_ENABLED.reset(token)
+        langsmith.utils.get_env_var.cache_clear()
+
+
 def _with(attestations: list[Attestation], region: str = "IN"):
     return (
         patch.object(res, "active_attestations", AsyncMock(return_value=attestations)),
@@ -347,13 +362,40 @@ class TestEnforcementPoints:
         assert res.enforcement_known(TENANT) is True and res.enforcement_known(other) is False
         assert res.enforcement_known(uuid.uuid4()) is None and res.any_tenant_enforcing() is True
 
-    def test_tracing_export_stays_off_under_deployment_enforcement(self, enforce_on, monkeypatch):
+    def test_tracing_export_stays_off_under_deployment_enforcement(self, enforce_on, monkeypatch, isolated_sdk_tracing):
         from observability import trace_redaction
 
         monkeypatch.setattr(trace_redaction, "_installed", False)
         monkeypatch.setenv("LANGSMITH_TRACING", "true")
         assert trace_redaction.install_trace_redaction() is False
         assert "LANGSMITH_TRACING" not in __import__("os").environ
+
+    @pytest.mark.parametrize("already_installed", [False, True])
+    @pytest.mark.parametrize("tracing_source", ["environment_cache", "global_context"])
+    def test_deployment_enforcement_disables_warm_sdk_tracing(
+        self, enforce_on, monkeypatch, already_installed, tracing_source, isolated_sdk_tracing
+    ):
+        from concurrent.futures import ThreadPoolExecutor
+
+        import langsmith
+
+        from observability import trace_redaction
+
+        monkeypatch.setattr(trace_redaction, "_installed", already_installed)
+        for name in trace_redaction._TRACING_ENV_VARS:
+            monkeypatch.delenv(name, raising=False)
+        if tracing_source == "environment_cache":
+            monkeypatch.setenv("LANGSMITH_TRACING", "true")
+        else:
+            langsmith.configure(enabled=True)
+        assert langsmith.utils.tracing_is_enabled() is True
+        with patch("langsmith.Client", side_effect=AssertionError("Residency must not create an exporter")):
+            assert trace_redaction.install_trace_redaction() is False
+        assert langsmith.utils.tracing_is_enabled() is False
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            assert executor.submit(langsmith.utils.tracing_is_enabled).result(timeout=5) is False
+        assert trace_redaction.tracing_enabled() is False
+        assert trace_redaction._installed is False
 
     def test_compliance_package_carries_the_section(self):
         src = (ROOT / "api" / "v1" / "compliance.py").read_text(encoding="utf-8")

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
@@ -16,6 +18,7 @@ from core.commerce.catalog_upload import (
     CatalogUploadError,
     declared_detail,
     gtin_or_none,
+    parse_catalog_upload,
     public_tags,
     shop_details_from_entries,
     shop_details_of,
@@ -27,6 +30,10 @@ from core.commerce.ucp.catalog import lookup_catalog, search_catalog, ucp_produc
 
 LICENCE = {"label": "FSSAI licence number", "value": "10019022008571"}
 CERTIFIED = {"label": "Certified organic", "value": "India Organic, certificate ORG-2026-114"}
+_CREDENTIAL_DETAIL_NAMES = (
+    "API key", "APIKey", "api.key", "API-key", "Access key", "AccessKey", "ClientSecret", "PrivateKey",
+    "CheckoutCreate", "paymentCreate", "\uff21\uff30\uff29 \uff4b\uff45\uff59", "Client Secret",
+)
 
 
 def _upload_product() -> dict[str, Any]:
@@ -84,6 +91,36 @@ def test_shop_details_refuse_what_should_not_be_published(entry: dict[str, str],
     assert message in caught.value.errors[0]["message"]
 
 
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_credential_detail_names_are_refused_and_hidden_when_already_stored(label: str) -> None:
+    entry = {"label": label, "value": "synthetic-placeholder"}
+    with pytest.raises(CatalogUploadError) as caught:
+        shop_details_from_entries([entry])
+    assert caught.value.errors[0]["row"] == 1
+    assert "reserved for credentials" in caught.value.errors[0]["message"]
+    assert shop_details_of({"shop_details": [entry]}) == []
+    assert public_tags([label]) == []
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+@pytest.mark.parametrize("fmt", ["csv", "json"])
+def test_uploaded_product_details_refuse_the_same_credential_names(label: str, fmt: str) -> None:
+    product = {"sku": "SYNTHETIC-1", "title": "Synthetic item", "price": "1.00", "currency": "INR", "quantity": 1}
+    if fmt == "json":
+        content = json.dumps([{**product, "attributes": {label: "synthetic-placeholder"}}])
+    else:
+        content = "sku,title,price,currency,quantity," + label + "\n"
+        content += "SYNTHETIC-1,Synthetic item,1.00,INR,1,synthetic-placeholder\n"
+    with pytest.raises(CatalogUploadError):
+        parse_catalog_upload(content, fmt)
+
+
+@pytest.mark.parametrize("label", ["Key features", "Key ingredients", "Product access instructions"])
+def test_public_details_without_a_credential_or_action_name_remain_available(label: str) -> None:
+    details = shop_details_from_entries([{"label": label, "value": "Synthetic public statement"}])
+    assert details[0]["label"] == label
+
+
 def test_shop_details_refuse_repeats_and_more_than_the_limit() -> None:
     with pytest.raises(CatalogUploadError, match="1 problem"):
         shop_details_from_entries([LICENCE, {"label": "FSSAI licence-number", "value": "x"}])
@@ -133,6 +170,52 @@ def test_served_shop_details_skip_stored_values_that_became_unsafe() -> None:
     ]
     served = ucp_product(_upload_product(), stored)
     assert served is not None and served["metadata"]["shop_details"] == [{"name": "Plain", "value": "yes"}]
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+@pytest.mark.parametrize("field", ["name", "label"])
+def test_legacy_product_details_are_hidden_from_lookup_search_and_tags_without_rewriting_history(
+    label: str, field: str
+) -> None:
+    product = _upload_product()
+    unsafe = {"name": "old_detail", "label": "Old detail", "value": "legacy-only-credential-value"}
+    unsafe[field] = label
+    product["attributes"] = [unsafe, *product["attributes"]]
+    product["tags"] = [label, "organic"]
+    original = deepcopy(product)
+    served = ucp_product(product)
+    assert served is not None
+    assert served["metadata"]["attributes"] == [{"name": "Ingredients", "value": "Cow milk fat"}]
+    assert served["tags"] == ["organic"]
+    looked_up, missing = lookup_catalog([product], [served["id"]])
+    assert not missing and looked_up[0]["metadata"] == served["metadata"]
+    assert looked_up[0]["tags"] == ["organic"]
+    assert "legacy-only-credential-value" not in json.dumps(looked_up)
+    assert not search_catalog(
+        [product], query="legacy-only-credential-value", categories=None, price_min=None, price_max=None
+    )
+    assert search_catalog([product], query="milk", categories=None, price_min=None, price_max=None)
+    assert product == original
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_legacy_private_tags_cannot_be_matched_in_public_search(label: str) -> None:
+    product = _upload_product()
+    product["tags"] = [label]
+    assert not search_catalog([product], query=label, categories=None, price_min=None, price_max=None)
+
+
+def test_legacy_credential_values_in_tags_are_hidden_and_not_searchable() -> None:
+    product = _upload_product()
+    encoded = b64encode(b"synthetic:catalog-fixture").decode("ascii")
+    product["tags"] = [f"Basic {encoded}", "organic"]
+    original = deepcopy(product)
+    served = ucp_product(product)
+    assert served is not None and served["tags"] == ["organic"]
+    search = {"categories": None, "price_min": None, "price_max": None}
+    assert not search_catalog([product], query=encoded, **search)
+    assert search_catalog([product], query="organic", **search)
+    assert product == original
 
 
 def test_merchant_config_keeps_shop_details_with_links() -> None:
@@ -543,6 +626,17 @@ def test_a_metafield_name_that_reads_as_a_credential_is_left_out_not_the_sync() 
     assert product["attributes"] == ({"name": "shelf_life", "label": "Shelf life", "value": "9 months"},)
 
 
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_shopify_details_skip_credential_names_in_keys_labels_and_namespaces(label: str) -> None:
+    for field in ("key", "namespace", "name"):
+        node = _metafield("public_detail", "single_line_text_field", "synthetic-placeholder", name="Public detail")
+        if field == "name":
+            node["definition"]["name"] = label
+        else:
+            node[field] = label
+        assert metafield_details([node]) == []
+
+
 def test_shop_details_saved_without_the_setup_page_are_checked_when_read() -> None:
     stored = {
         "shop_details": [
@@ -568,6 +662,19 @@ def test_store_links_with_a_user_name_and_unusable_numbers_are_left_out() -> Non
 # --- the Telegram shopper -------------------------------------------------------------------------
 
 
+def test_private_tags_do_not_change_public_ranking() -> None:
+    alpha = _upload_product()
+    alpha.update(id="alpha", title="Alpha", description="An organic product", tags=[])
+    zeta = deepcopy(alpha)
+    zeta.update(id="zeta", title="Zeta", tags=["api_key_organic"])
+    original = deepcopy(zeta)
+    arguments = {"query": "organic", "categories": None, "price_min": None, "price_max": None}
+    assert [item["title"] for item in search_catalog([zeta, alpha], **arguments)] == ["Alpha", "Zeta"]
+    assert zeta == original
+    zeta["tags"] = ["organic"]
+    assert [item["title"] for item in search_catalog([zeta, alpha], **arguments)] == ["Zeta", "Alpha"]
+
+
 def test_telegram_shows_the_shop_details_once_per_shop() -> None:
     shop = shop_details_from_entries([LICENCE, CERTIFIED])
     served = ucp_product(_upload_product(), shop)
@@ -582,3 +689,18 @@ def test_telegram_shows_the_shop_details_once_per_shop() -> None:
     )
     carried = [item["shop"] for item in body["products"] if "shop_details_declared_by_shop" in item]
     assert carried == ["kaveri", "nilgiri"]
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_telegram_hides_legacy_credential_details_without_rewriting_the_product(label: str) -> None:
+    product = ucp_product(_upload_product())
+    assert product is not None
+    unsafe = {"name": label, "value": "legacy-only-credential-value"}
+    safe = {"name": "Ingredients", "value": "Cow milk fat"}
+    product["metadata"]["attributes"] = [unsafe, safe]
+    product["metadata"]["shop_details"] = [unsafe, {"name": "Certification", "value": "Synthetic statement"}]
+    original = deepcopy(product)
+    summary = _product_summary("synthetic-shop", product)
+    assert summary["details_declared_by_shop"] == ["Ingredients: Cow milk fat"]
+    assert summary["shop_details_declared_by_shop"] == ["Certification: Synthetic statement"]
+    assert product == original

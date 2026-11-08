@@ -173,10 +173,13 @@ class TestPersist:
         assert run.run_span_id == root.run_id and run.span_id == root.run_id
         assert all(row.run_span_id == root.run_id for row in stored)
         assert run.agent_id == "a1" and run.correlation_id == "corr-1" and run.kind == "internal"
+        event = root.span.events[0]
+        assert root.span.start_time is not None and event.timestamp is not None
+        event_offset_ms = (event.timestamp - root.span.start_time) // 1_000_000
         assert run.events == [
             {
                 "name": "model_gateway.decision",
-                "offset_ms": 0,
+                "offset_ms": event_offset_ms,
                 "attributes": {"provider": "openai", "model": "gpt-4o", "reason": "policy"},
             }
         ]
@@ -220,6 +223,18 @@ class TestPersist:
         src = (Path(__file__).resolve().parents[3] / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
         assert src.count("await timeline.persist(run_span.span, tenant_id)") == 2
         assert src.count("root=True") == 2
+
+
+@pytest.mark.parametrize(
+    ("timestamp", "expected_ms"),
+    [(None, 0), (0, 0), (999_999_999, 0), (1_000_000_000, 0),
+     (1_000_999_999, 0), (1_001_000_000, 1), (1_001_500_000, 1), (1_010_500_000, 10)],
+)
+def test_event_offset_uses_recorded_time_and_clamps_before_the_span(timestamp, expected_ms):
+    event = SimpleNamespace(name="guardrail.outcome", timestamp=timestamp, attributes={"stage": "input"})
+    assert timeline._event(event, 1_000_000_000) == {
+        "name": "guardrail.outcome", "offset_ms": expected_ms, "attributes": {"stage": "input"},
+    }
 
 
 def _row(**over):
