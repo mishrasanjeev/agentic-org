@@ -114,7 +114,7 @@ dependencies = [
     "langgraph>=1.2.19",
     "langchain>=1.4.7",
     "langchain-google-genai>=4.4.2",
-    "langchain-anthropic>=1.7.7",
+    "langchain-anthropic>=1.7.10",
     "langchain-openai>=1.7.2",
     # Exact pins: core/langgraph/checkpoint_postgres.py overrides saver internals
     # of these versions and refuses to start the Postgres store with any other.

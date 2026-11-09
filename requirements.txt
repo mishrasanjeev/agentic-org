@@ -79,7 +79,7 @@ langchain==1.4.7
 # The provider integrations below require core >=1.6.10.
 langchain-core==1.7.0
 langchain-google-genai==4.4.2
-langchain-anthropic==1.7.7
+langchain-anthropic==1.7.10
 langchain-openai==1.7.2
 # Exact pins, kept in step with pyproject: the sealed checkpoint saver
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
