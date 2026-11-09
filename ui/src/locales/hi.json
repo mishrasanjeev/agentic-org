@@ -3,6 +3,10 @@
     "name": "AgenticOrg",
     "tagline": "AI-संचालित एंटरप्राइज़ ऑटोमेशन"
   },
+  "licence": {
+    "notice": "Orchestrum Personal Use License 1.0 के अंतर्गत लाइसेंस: किसी संगठन द्वारा या उसके लिए उपयोग के लिए Orchestrum Technologies LLP के साथ हस्ताक्षरित अनुबंध आवश्यक है।",
+    "link": "लाइसेंस की शर्तें"
+  },
   "nav": {
     "dashboard": "डैशबोर्ड",
     "insights": "इनसाइट्स",

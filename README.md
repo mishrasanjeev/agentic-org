@@ -1,3 +1,15 @@
+> [!IMPORTANT]
+> **Commercial agreement required.** Any organisation (a company, firm, partnership, LLP,
+> charity, school, university, research body or government body) must sign a commercial
+> agreement with **Orchestrum Technologies LLP** before it uses, evaluates, tests, pilots, hosts
+> or deploys the AgenticOrg platform. Use without a signed agreement is not licensed and
+> infringes Orchestrum Technologies LLP's copyright; under section 5 of the [LICENSE](LICENSE),
+> rights under the licence terminate automatically. To request an agreement, write to
+> [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) and see
+> [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md). An individual's own personal use of the
+> platform is free. The SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`) are open
+> source under the Apache License 2.0.
+
 # AgenticOrg
 
 AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. The platform is source-available under the Orchestrum Personal Use License 1.0: only individuals' personal use is free, and any organisation needs a signed agreement with Orchestrum Technologies LLP; the SDKs and MCP server are Apache-2.0 open source (see [Licence](#licence)).

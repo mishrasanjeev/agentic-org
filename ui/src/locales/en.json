@@ -3,6 +3,10 @@
     "name": "AgenticOrg",
     "tagline": "AI-Powered Enterprise Automation"
   },
+  "licence": {
+    "notice": "Licensed under the Orchestrum Personal Use License 1.0: use by or for an organisation needs a signed agreement with Orchestrum Technologies LLP.",
+    "link": "Licence terms"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "insights": "Insights",

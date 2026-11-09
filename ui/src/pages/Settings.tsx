@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import LicenceNotice from "@/components/LicenceNotice";
 
 // Codex 2026-04-22 release-signoff residual: UI used
 // ``max_replicas_per_type`` and a 5-domain default, but the backend
@@ -579,6 +580,8 @@ npx agenticorg-mcp-server`}</code></pre>
         {saved && <span className="text-sm text-green-600">Settings saved successfully.</span>}
         {saveError && <span className="text-sm text-red-600">{saveError}</span>}
       </div>
+
+      <LicenceNotice className="border-t border-border pt-4" />
     </div>
   );
 }

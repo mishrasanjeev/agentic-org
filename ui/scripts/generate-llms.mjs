@@ -568,7 +568,7 @@ function full(data) {
       "",
       "## Verified repository guide",
       "",
-      absoluteReadme().replace(/^# AgenticOrg\s*/, ""),
+      absoluteReadme().replace(/^# AgenticOrg\s*/m, ""),
       "",
       ...appendix,
       "",
