@@ -157,6 +157,14 @@ from core.logging_config import configure_logging
 # Must run before the app (and any logger) is created in this process.
 configure_logging()
 
+# Logged once at every API start. A fixed string: no tenant, user or environment data.
+LICENCE_NOTICE = (
+    "AgenticOrg platform is licensed under the Orchestrum Personal Use License 1.0. "
+    "Use by or for an organisation needs a signed agreement with Orchestrum Technologies LLP; "
+    "see LICENSE and COMMERCIAL-LICENSE.md in the source repository, or "
+    "https://agenticorg.ai/docs/licensing."
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -164,6 +172,8 @@ async def lifespan(app: FastAPI):
     from core.crypto.credential_vault import assert_vault_key_configured
     from core.database import init_db
     from core.langgraph.checkpointer import close_checkpointer, open_checkpointer
+
+    _logging.getLogger(__name__).warning(LICENCE_NOTICE)
 
     # No credential-vault key outside local and test runtimes stops startup
     # here instead of sealing credentials under a key published in this repo.

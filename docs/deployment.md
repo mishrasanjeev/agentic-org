@@ -1,5 +1,12 @@
 # Deployment Guide
 
+> **Commercial agreement required.** An organisation may evaluate, test, pilot, host or deploy
+> the AgenticOrg platform only under a commercial agreement signed with Orchestrum Technologies
+> LLP. Use without one is not licensed and infringes Orchestrum Technologies LLP's copyright;
+> under section 5 of the [LICENSE](../LICENSE), rights under the licence terminate automatically.
+> Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) and see
+> [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).
+
 Current product and release boundary: [Current Product Status](PRODUCT_STATUS.md).
 Post-deploy verification: [Production Smoke Readiness Runbook](runbooks/production_smoke.md).
 

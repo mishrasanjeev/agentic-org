@@ -1,5 +1,12 @@
 # Commercial licence
 
+> [!IMPORTANT]
+> **Commercial agreement required.** An organisation may use, evaluate, test, pilot, host or
+> deploy the AgenticOrg platform only under a commercial agreement signed with Orchestrum
+> Technologies LLP. Use without one is not licensed and infringes Orchestrum Technologies LLP's
+> copyright; under section 5 of the [LICENSE](LICENSE), rights under the licence terminate
+> automatically. Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+
 The AgenticOrg platform is source-available under the
 [Orchestrum Personal Use License 1.0](LICENSE) (SPDX `LicenseRef-Orchestrum-Personal-Use-1.0`).
 The licensor is **Orchestrum Technologies LLP**.

@@ -2,6 +2,10 @@
 
 ## Unreleased - Release integration fixes
 
+- State that organisational use of the platform needs a signed commercial agreement with
+  Orchestrum Technologies LLP: a notice at the top of the README, COMMERCIAL-LICENSE.md and
+  the deployment and self-hosting guides, one warning-level log line at API start, and a
+  one-line notice on the sign-in and Settings pages. The licence terms are unchanged.
 - Require patched APT 3.0.4 packages in the hosted MCP and API runtimes and disable
   download retries while bootstrapping Debian builds. Keep the container scan
   severity policy and the runtime's unprivileged user unchanged.

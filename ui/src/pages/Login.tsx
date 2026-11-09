@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams, Link } from "react-router";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth, defaultLandingForRole, isMfaChallenge, type MfaChallenge } from "@/contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
+import LicenceNotice from "@/components/LicenceNotice";
 
 export default function Login() {
   const { login, loginWithGoogle, completeMfa } = useAuth();
@@ -282,6 +283,7 @@ export default function Login() {
             </Link>
           </div>
         </div>
+        <LicenceNotice className="mt-4 px-2 text-center" />
       </div>
     </div>
   );

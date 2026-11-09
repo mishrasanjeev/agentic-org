@@ -1,3 +1,5 @@
+> **Commercial agreement required.** An organisation may evaluate, test, pilot, host or deploy the AgenticOrg platform, including a self-managed deployment, only under a commercial agreement signed with Orchestrum Technologies LLP. Use without one is not licensed and infringes Orchestrum Technologies LLP's copyright; under section 5 of the licence, rights under it terminate automatically. Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) and read [licensing and commercial use](/docs/licensing). An individual's own personal use is free.
+
 ## Hosted versus institution-managed
 
 The hosted workspace and a self-managed deployment share product concepts, but operational responsibilities differ. A bank-managed environment must own network, identities, keys, database, backups, model/provider access, workers, updates, security monitoring and recovery. Self-hosting alone does not establish regulatory compliance or data residency.
