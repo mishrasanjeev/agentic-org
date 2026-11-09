@@ -149,7 +149,7 @@ dependencies = [
     # Insights tables as Parquet (core/insights/export.py).
     "pyarrow>=26.0.0",
     "pywebpush>=2.5.0",
-    "authlib>=1.9.1",
+    "authlib>=1.9.5",
     "reportlab>=4.5.1",
     "google-cloud-kms>=3.18.0",
     # SECURITY 2026-10-21: Pillow 13.0.0 fixes JPEG, TIFF and GIF decoder
