@@ -5,6 +5,7 @@
  * and 75th percentiles of the opted-in cohorts it belongs to, or why there are
  * none. An administrator opts the organisation in or out here.
  */
+import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { errorStatus, readErrorDetail } from "@/lib/insights/api";
@@ -16,7 +17,7 @@ const BUTTON =
 export const BENCHMARK_VIEWS = new Set(["executive", "finance", "operations"]);
 export const BENCHMARK_ROLES = new Set(["admin", "cfo", "coo"]);
 
-function cohortLabel(cohort: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
+function cohortLabel(cohort: string, t: TFunction): string {
   if (cohort === "all") return t("insightsBenchmarks.cohorts.all");
   if (cohort.startsWith("plan:")) return t("insightsBenchmarks.cohorts.plan", { plan: cohort.slice(5) });
   return cohort;
