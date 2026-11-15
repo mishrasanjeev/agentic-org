@@ -335,9 +335,19 @@ test.describe("the merchant onboarding desk, end to end", () => {
       }
       const decided = deliveries.find((d) => d.headers["agenticorg-event-type"] === "case.decided")!;
       expect(JSON.parse(decided.body)).toMatchObject({ event_type: "case.decided", event_id: decided.headers["agenticorg-event-id"] });
-      const outbox = await okJson<{ deliveries: { event_type: string; status: string }[] }>(
-        await page.request.get(`/api/v1/governed-cases/${run.case_ref}/push-deliveries`),
-      );
+      // The worker records the outcome after the partner has answered the push, so the
+      // receiver can see the request a moment before the outbox row says "delivered".
+      const readOutbox = async () =>
+        okJson<{ deliveries: { event_type: string; status: string }[] }>(
+          await page.request.get(`/api/v1/governed-cases/${run.case_ref}/push-deliveries`),
+        );
+      await expect
+        .poll(async () => (await readOutbox()).deliveries.find((d) => d.event_type === "case.decided")?.status, {
+          message: "the outbox records the decided push as delivered",
+          timeout: 30_000,
+        })
+        .toBe("delivered");
+      const outbox = await readOutbox();
       expect(outbox.deliveries.map((d) => d.event_type)).toEqual(expect.arrayContaining(["case.completed", "case.decided"]));
       expect(outbox.deliveries.find((d) => d.event_type === "case.decided")?.status).toBe("delivered");
 
