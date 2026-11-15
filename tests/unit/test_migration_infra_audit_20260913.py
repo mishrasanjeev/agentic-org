@@ -126,8 +126,8 @@ def test_v6z16_downgrade_keeps_rls_on_previously_protected_tables() -> None:
 def test_deploy_script_rolls_worker_and_beat_with_the_api_image() -> None:
     script = (REPO_ROOT / "scripts" / "deploy_cloud_run.sh").read_text(encoding="utf-8")
 
-    assert 'WORKER_SERVICE="${WORKER_SERVICE:-agenticorg-worker}"' in script
-    assert 'BEAT_SERVICE="${BEAT_SERVICE:-agenticorg-beat}"' in script
+    assert 'WORKER_SERVICE="${WORKER_SERVICE-agenticorg-worker}"' in script
+    assert 'BEAT_SERVICE="${BEAT_SERVICE-agenticorg-beat}"' in script
     assert 'deploy_background_service "$WORKER_SERVICE" "worker"' in script
     assert 'deploy_background_service "$BEAT_SERVICE" "beat"' in script
     # Background services roll on the API image with commit metadata so the

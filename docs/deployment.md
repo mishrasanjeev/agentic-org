@@ -95,6 +95,10 @@ Important behavior:
 - Worker and beat (`WORKER_SERVICE` / `BEAT_SERVICE`) roll on the API image
   with `--command=python --args=scripts/run_worker.py` (resp.
   `scripts/run_beat.py`) pinned, because the image's default CMD is uvicorn.
+  Set either to an empty string (`BEAT_SERVICE=""`) to leave that service
+  out of every step: the pre-flight check, traffic capture, staging, traffic
+  moves, rollback and the `--dry-run` plan. Use this for a pause-first Beat
+  handoff, so two schedulers never run at once.
 
 Logs: every process (API, worker, beat) emits one JSON object per line via
 `core/logging_config.py` (`AGENTICORG_LOG_FORMAT=json|console`,
