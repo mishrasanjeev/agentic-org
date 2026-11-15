@@ -82,7 +82,7 @@
     "markdown-it": "15.0.3",
     "picomatch": "^4.0.7",
     "postcss": "^8.5.32",
-    "tailwindcss": "^4.3.4",
+    "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"
