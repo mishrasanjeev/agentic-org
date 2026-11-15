@@ -149,6 +149,37 @@ describe("InsightsBiAccess", () => {
     expect(JSON.stringify(sessionStorage)).not.toContain(PASSWORD);
   });
 
+  it("keeps the one-time password and its copy state on screen while the list refreshes", async () => {
+    let finishRefresh: (value: { data: unknown }) => void = () => undefined;
+    mockGet
+      .mockResolvedValueOnce({ data: listBody() })
+      .mockReturnValueOnce(new Promise((resolve) => (finishRefresh = resolve)))
+      .mockResolvedValue({ data: listBody({ active_logins: 2 }) });
+    mockPost.mockResolvedValue({
+      data: {
+        role_name: "bi_000000b1_newnewnewn",
+        password: PASSWORD,
+        connection_string: `postgresql://bi_000000b1_newnewnewn:${PASSWORD}@10.20.0.7:5432/agenticorg?sslmode=verify-ca`,
+        created_at: "2026-11-01T10:00:00Z",
+        ...CONNECTION,
+      },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Create login" }));
+    // The refresh after the create is still pending: the panel must not give way to a loading page.
+    const panel = await screen.findByTestId("bi-secret");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(screen.queryByTestId("bi-loading")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Copy password" }));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+
+    finishRefresh({ data: listBody({ active_logins: 2 }) });
+    // Same panel, same state after the refreshed list arrives.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy());
+    expect(screen.getByTestId("bi-secret")).toBe(panel);
+    expect(screen.getByTestId("bi-password").textContent).toBe(PASSWORD);
+  });
+
   it("revokes only after a confirmation, and cancel does nothing", async () => {
     mockGet.mockResolvedValue({ data: listBody() });
     mockDelete.mockResolvedValue({ data: { role_name: "bi_000000b1_abcdefghij", revoked: true, result: "dropped" } });

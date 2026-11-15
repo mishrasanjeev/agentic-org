@@ -20,6 +20,7 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
         "brotli-libs>=1.2.1-r0",
         "curl>=8.23.0-r0",
         "libcurl>=8.23.0-r0",
+        "libxslt>=1.1.43-r4",
     ):
         assert f"'{package}'" in upgrade, f"{dockerfile}: missing security floor for {package}"
 

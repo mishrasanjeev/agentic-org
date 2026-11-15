@@ -50,7 +50,9 @@ export default function InsightsBiAccess() {
 
   useEffect(() => {
     let live = true;
-    setState({ kind: "loading" });
+    // A refresh after a create or revoke keeps the loaded page on screen, so the
+    // one-time password panel stays mounted (and keeps its copy state) meanwhile.
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
     biAccessApi
       .list()
       .then((data) => {

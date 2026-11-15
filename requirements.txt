@@ -40,10 +40,10 @@ pgvector==0.5.1
 
 # ─── Cache, Task Queue & Message Broker ──────────────────────────────────────
 redis[hiredis]==6.4.0
-celery[redis]==5.6.3
+celery[redis]==5.7.0
 
 # ─── Data Validation & Schemas ───────────────────────────────────────────────
-pydantic==2.14.2
+pydantic==2.14.3
 pydantic-settings==2.16.2
 jsonschema==4.26.0
 
@@ -60,7 +60,7 @@ grantex-agent-httpsig @ git+https://github.com/mishrasanjeev/grantex@f006cc82bf2
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
 mcp==1.30.0
-dnspython==2.9.1
+dnspython==2.9.2
 # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
 # canonicalisation and validation to the maintained SDK.
 twilio==9.12.0
@@ -74,13 +74,13 @@ anthropic==0.125.0
 openai==2.54.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
-langgraph==1.2.19
+langgraph==1.2.20
 langchain==1.4.7
-# The provider integrations below require core >=1.6.10.
-langchain-core==1.7.0
+# The provider integrations below require core >=1.7.5.
+langchain-core==1.7.7
 langchain-google-genai==4.4.2
-langchain-anthropic==1.7.7
-langchain-openai==1.7.2
+langchain-anthropic==1.7.10
+langchain-openai==1.7.4
 # Exact pins, kept in step with pyproject: the sealed checkpoint saver
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
 langgraph-checkpoint-postgres==3.2.0
@@ -89,9 +89,9 @@ langsmith==0.14.11
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
-google-cloud-secret-manager==2.31.0
+google-cloud-secret-manager==2.32.0
 google-api-python-client==2.201.0
-google-auth==2.62.0
+google-auth==2.62.1
 
 # ─── Observability & Monitoring ──────────────────────────────────────────────
 structlog==25.5.0
@@ -103,7 +103,7 @@ prometheus-client==0.26.0
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
 pypdf==6.21.4
-pypdfium2==5.14.0
+pypdfium2==5.15.0
 # CVE-2026-41066: keep python-docx/transitive XML parsing on patched lxml.
 lxml==6.1.3
 pyyaml==6.0.3
@@ -111,7 +111,7 @@ jinja2==3.1.6
 defusedxml==0.7.1
 fpdf2==2.8.9
 openpyxl==3.1.5
-pyarrow==26.0.0
+pyarrow==26.0.1
 
 # ─── Push Notifications ─────────────────────────────────────────────────────
 pywebpush==2.5.0

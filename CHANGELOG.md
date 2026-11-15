@@ -2,6 +2,15 @@
 
 ## Unreleased - Release integration fixes
 
+- Take the November dependency updates together: Celery 5.7, i18next 27 with
+  react-i18next 18, jsdom 31, Playwright 1.65, Vite 8.3.7 and the LangChain provider
+  integrations, which need `langchain-core` 1.7.5 or later (pinned at 1.7.7). The browser
+  runner images move to the matching Playwright 1.65.0 release.
+- Require the patched libxslt (1.1.43-r4) in both UI images, dnspython 2.9.2 in the API,
+  and Hono 4.13.18 with its Node server 2.1.8 in the MCP server lockfile. The scan
+  severity policy is unchanged.
+- Keep the Insights BI access page on screen while its list refreshes after a create or
+  revoke, so the one-time password panel no longer unmounts and loses its copy state.
 - State that organisational use of the platform needs a signed commercial agreement with
   Orchestrum Technologies LLP: a notice at the top of the README, COMMERCIAL-LICENSE.md and
   the deployment and self-hosting guides, one warning-level log line at API start, and a
