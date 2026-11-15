@@ -35,9 +35,11 @@ UI_SERVICE="${UI_SERVICE:-agenticorg-ui}"
 # Celery worker + beat run the same API image as separate Cloud Run services.
 # They must roll with every release: an old worker drops tasks the new API
 # enqueues ("Received unregistered task") and runs old code against the new
-# schema. Set either to "" to skip it (e.g. environments without workers).
-WORKER_SERVICE="${WORKER_SERVICE:-agenticorg-worker}"
-BEAT_SERVICE="${BEAT_SERVICE:-agenticorg-beat}"
+# schema. Set either to "" to skip it (e.g. environments without workers, or a
+# pause-first Beat handoff). The default applies only when the variable is
+# unset: "${VAR-default}", not "${VAR:-default}", so an empty value really skips.
+WORKER_SERVICE="${WORKER_SERVICE-agenticorg-worker}"
+BEAT_SERVICE="${BEAT_SERVICE-agenticorg-beat}"
 MIGRATE_JOB="${MIGRATE_JOB:-agenticorg-migrate}"
 HEALTH_URL="${HEALTH_URL:-https://app.agenticorg.ai/api/v1/health}"
 API_HEALTH_PATH="${API_HEALTH_PATH:-/api/v1/health}"

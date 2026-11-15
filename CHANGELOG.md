@@ -2,6 +2,10 @@
 
 ## Unreleased - Release integration fixes
 
+- Make `BEAT_SERVICE=""` and `WORKER_SERVICE=""` skip that service in
+  `scripts/deploy_cloud_run.sh`, as its usage text promised. An empty value used to fall
+  back to the default service name, so a pause-first Beat handoff still rolled Beat.
+  Unset variables still roll the default worker and beat services.
 - Take the November dependency updates together: Celery 5.7, i18next 27 with
   react-i18next 18, jsdom 31, Playwright 1.65, Vite 8.3.7 and the LangChain provider
   integrations, which need `langchain-core` 1.7.5 or later (pinned at 1.7.7). The browser

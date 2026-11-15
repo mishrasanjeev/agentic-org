@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -344,3 +347,135 @@ def test_script_refuses_success_when_public_health_reports_old_sha() -> None:
     assert script.index('poll_health_url "$HEALTH_URL" "public API" 30') < script.index(
         "DEPLOYED: API=$API_NEW_REVISION"
     )
+
+
+_FAKE_GCLOUD = """#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_GCLOUD_LOG"
+case "$*" in
+  *"run services describe"*"--format=json"*)
+    printf '{"status":{"traffic":[{"revisionName":"fake-00001","percent":100}],'
+    printf '"latestReadyRevisionName":"fake-00001"}}\n'
+    ;;
+  *"run services describe"*) echo "fake-00001" ;;
+  *) echo "fake gcloud refuses: $*" >&2; exit 97 ;;
+esac
+"""
+
+_REFUSING_TOOL = """#!/usr/bin/env bash
+echo "fake tool refuses: $*" >&2
+exit 97
+"""
+
+
+def _dry_run_plan(
+    tmp_path: Path, overrides: dict[str, str | None], traffic: str = "latest"
+) -> tuple[subprocess.CompletedProcess[str], str]:
+    """Run the real script with --dry-run against stub gcloud/docker/curl.
+
+    The stubs answer read-only ``services describe`` calls and refuse anything
+    else; the gcloud config dir and project are throwaway values, so nothing
+    can reach a real Cloud Run project.
+    """
+    git_bash = Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe"
+    bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
+    assert bash is not None
+    git_exe = shutil.which("git")
+    assert git_exe is not None
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.check_output([git_exe, *args], cwd=checkout, text=True).strip()  # noqa: S603
+
+    git("init", "-q")
+    git("config", "user.name", "Release Test")
+    git("config", "user.email", "release-test@example.invalid")
+    (checkout / "tracked.txt").write_text("baseline\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-qm", "baseline")
+    sha = git("rev-parse", "HEAD")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    for name, body in (("gcloud", _FAKE_GCLOUD), ("docker", _REFUSING_TOOL), ("curl", _REFUSING_TOOL)):
+        tool = fake_bin / name
+        tool.write_text(body, encoding="utf-8", newline="\n")
+        tool.chmod(0o755)
+    gcloud_log = tmp_path / "gcloud.log"
+    gcloud_log.touch()
+    gcloud_config = tmp_path / "gcloud-config"
+    gcloud_config.mkdir()
+
+    env = {k: v for k, v in os.environ.items() if k not in {"WORKER_SERVICE", "BEAT_SERVICE"}}
+    env.update(
+        {
+            "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+            "FAKE_GCLOUD_LOG": gcloud_log.as_posix(),
+            "CLOUDSDK_CONFIG": gcloud_config.as_posix(),
+            "GCP_PROJECT_ID": "dry-run-test-project",
+            "PYTHON_BIN": Path(sys.executable).as_posix(),
+        }
+    )
+    for key, value in overrides.items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+
+    result = subprocess.run(  # noqa: S603
+        [
+            bash,
+            (REPO_ROOT / "scripts" / "deploy_cloud_run.sh").as_posix(),
+            "--dry-run",
+            "--skip-build",
+            "--sha",
+            sha,
+            "--traffic",
+            traffic,
+        ],
+        cwd=checkout,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    return result, gcloud_log.read_text(encoding="utf-8")
+
+
+_BACKGROUND_SERVICES = {
+    "BEAT_SERVICE": ("agenticorg-beat", "beat svc    :"),
+    "WORKER_SERVICE": ("agenticorg-worker", "worker svc  :"),
+}
+
+
+@pytest.mark.timeout(180)
+@pytest.mark.parametrize(
+    ("skipped", "traffic"),
+    [
+        ((), "latest"),
+        (("BEAT_SERVICE",), "manual"),
+        (("WORKER_SERVICE",), "manual"),
+        (("BEAT_SERVICE", "WORKER_SERVICE"), "latest"),
+    ],
+)
+def test_dry_run_plan_skips_background_services_set_to_empty(
+    tmp_path: Path, skipped: tuple[str, ...], traffic: str
+) -> None:
+    """Unset rolls the default worker/beat; an empty value skips every step for it."""
+    overrides: dict[str, str | None] = {var: ("" if var in skipped else None) for var in _BACKGROUND_SERVICES}
+    result, gcloud_calls = _dry_run_plan(tmp_path, overrides, traffic=traffic)
+
+    assert result.returncode == 0, result.stderr
+    for variable, (default_name, plan_label) in _BACKGROUND_SERVICES.items():
+        if variable in skipped:
+            assert f"{plan_label} <skipped>" in result.stdout
+            assert default_name not in result.stdout
+            assert default_name not in gcloud_calls
+        else:
+            assert f"{plan_label} {default_name}" in result.stdout
+            assert f"[dry-run] would update {default_name} to " in result.stdout
+            assert f"run services describe {default_name} " in gcloud_calls
+            if traffic == "manual":
+                assert f'gcloud run services update "{default_name}"' in result.stdout
