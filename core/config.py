@@ -15,8 +15,6 @@ from pydantic import Field, model_validator
 from pydantic_core import from_json
 from pydantic_settings import BaseSettings
 
-from core.redis_resilience import MAX_HEALTH_CHECK_INTERVAL_SECONDS, connection_kwargs
-
 STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
 RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
 
@@ -236,6 +234,9 @@ def redis_connection_resilience_kwargs() -> dict[str, Any]:
     AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS is set; see
     ``core.redis_resilience``.
     """
+    # Imported here so images that copy only core/config.py (the model stub) still load it.
+    from core.redis_resilience import connection_kwargs
+
     configured_settings = globals().get("settings")
     return connection_kwargs(
         keepalive=bool(getattr(configured_settings, "redis_socket_keepalive", False)),
@@ -277,7 +278,8 @@ class Settings(BaseSettings):
     # before reusing it; the probe retry lets /api/v1/health retry one ping on a
     # fresh connection after a ConnectionError, inside the same 3 s budget.
     redis_socket_keepalive: bool = False
-    redis_health_check_interval_seconds: int = Field(default=0, ge=0, le=MAX_HEALTH_CHECK_INTERVAL_SECONDS)
+    # Upper bound equals core.redis_resilience.MAX_HEALTH_CHECK_INTERVAL_SECONDS.
+    redis_health_check_interval_seconds: int = Field(default=0, ge=0, le=300)
     redis_health_probe_retry: bool = False
 
     # Object Storage (GCS / S3-compatible)

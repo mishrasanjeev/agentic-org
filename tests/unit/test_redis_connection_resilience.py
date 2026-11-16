@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Opt-in Redis connection resilience: keepalive, idle health checks, health-probe retry.
 
 Production reaches Memorystore through a Serverless VPC Access connector, and
@@ -59,6 +60,21 @@ def test_settings_defaults_leave_resilience_off() -> None:
     assert fields["redis_socket_keepalive"].default is False
     assert fields["redis_health_check_interval_seconds"].default == 0
     assert fields["redis_health_probe_retry"].default is False
+
+
+def test_settings_interval_bound_matches_the_celery_parser() -> None:
+    from core.config import Settings
+    from core.redis_resilience import MAX_HEALTH_CHECK_INTERVAL_SECONDS
+
+    metadata = Settings.model_fields["redis_health_check_interval_seconds"].metadata
+    assert any(getattr(item, "le", None) == MAX_HEALTH_CHECK_INTERVAL_SECONDS for item in metadata)
+
+
+def test_config_module_does_not_import_the_resilience_module_at_load() -> None:
+    # The model stub image copies core/config.py without core/redis_resilience.py.
+    src = (REPO / "core" / "config.py").read_text(encoding="utf-8")
+    top_level = [line for line in src.splitlines() if line.startswith(("import ", "from "))]
+    assert not any("redis_resilience" in line for line in top_level)
 
 
 def test_resilience_kwargs_are_empty_by_default(monkeypatch: pytest.MonkeyPatch) -> None:

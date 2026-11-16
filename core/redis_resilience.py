@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Opt-in Redis connection resilience: TCP keepalive and idle health checks.
 
 Production reaches Memorystore through a Serverless VPC Access connector, and
