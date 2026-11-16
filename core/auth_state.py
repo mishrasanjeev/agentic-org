@@ -27,7 +27,13 @@ import jwt
 import redis.asyncio as aioredis
 from jwt import PyJWTError
 
-from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
+from core.config import (
+    is_strict_runtime_env,
+    redis_connection_resilience_kwargs,
+    redis_socket_timeout_kwargs,
+    redis_url_from_env,
+    settings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +62,7 @@ async def _get_redis() -> aioredis.Redis | None:
             url,
             decode_responses=True,
             **redis_socket_timeout_kwargs(),
+            **redis_connection_resilience_kwargs(),
         )
         await _redis.ping()
         return _redis

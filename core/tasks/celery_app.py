@@ -24,6 +24,7 @@ from celery.signals import (
     worker_process_shutdown,
 )
 
+from core.redis_resilience import celery_redis_options
 from observability import tracing
 from observability.streaming import observe_queue_wait, stamp_enqueued
 
@@ -115,6 +116,13 @@ app.conf.update(
         "core.tasks.rpa_tasks.*": {"queue": "rpa"},
     },
 )
+
+# Opt-in Redis keepalive and idle health checks for the broker and result
+# backend (core/redis_resilience.py). Read from the environment at import time,
+# like the broker URL above; empty, so Celery and kombu keep their defaults,
+# unless AGENTICORG_REDIS_SOCKET_KEEPALIVE or
+# AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS is set.
+app.conf.update(celery_redis_options(os.environ))
 
 # ── Beat schedule — periodic tasks ──────────────────────────────────
 app.conf.beat_schedule = {

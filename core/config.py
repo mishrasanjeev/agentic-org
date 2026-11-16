@@ -15,6 +15,8 @@ from pydantic import Field, model_validator
 from pydantic_core import from_json
 from pydantic_settings import BaseSettings
 
+from core.redis_resilience import MAX_HEALTH_CHECK_INTERVAL_SECONDS, connection_kwargs
+
 STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
 RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
 
@@ -226,6 +228,21 @@ def redis_socket_timeout_kwargs() -> dict[str, float]:
     }
 
 
+def redis_connection_resilience_kwargs() -> dict[str, Any]:
+    """Return opt-in keepalive and idle health-check kwargs for redis-py clients.
+
+    Kept separate from ``redis_socket_timeout_kwargs``, whose values callers
+    sum into a deadline. Empty unless AGENTICORG_REDIS_SOCKET_KEEPALIVE or
+    AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS is set; see
+    ``core.redis_resilience``.
+    """
+    configured_settings = globals().get("settings")
+    return connection_kwargs(
+        keepalive=bool(getattr(configured_settings, "redis_socket_keepalive", False)),
+        health_check_interval=int(getattr(configured_settings, "redis_health_check_interval_seconds", 0)),
+    )
+
+
 class Settings(BaseSettings):
     """Central configuration for AgenticOrg."""
 
@@ -254,6 +271,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_socket_connect_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
     redis_socket_timeout_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    # Opt-in connection resilience (core/redis_resilience.py), all off by default.
+    # Keepalive probes idle sockets so the VPC connector path does not drop them;
+    # a non-zero interval makes redis-py PING a connection idle longer than that
+    # before reusing it; the probe retry lets /api/v1/health retry one ping on a
+    # fresh connection after a ConnectionError, inside the same 3 s budget.
+    redis_socket_keepalive: bool = False
+    redis_health_check_interval_seconds: int = Field(default=0, ge=0, le=MAX_HEALTH_CHECK_INTERVAL_SECONDS)
+    redis_health_probe_retry: bool = False
 
     # Object Storage (GCS / S3-compatible)
     storage_bucket: str = "agenticorg-docs-dev"

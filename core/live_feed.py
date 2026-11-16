@@ -17,7 +17,7 @@ import redis.asyncio as aioredis
 import structlog
 from sqlalchemy import func, select, text
 
-from core.config import redis_socket_timeout_kwargs, settings
+from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs, settings
 
 logger = structlog.get_logger()
 
@@ -281,6 +281,7 @@ class _RedisFeedSubscription:
             self._redis_url,
             decode_responses=True,
             **redis_socket_timeout_kwargs(),
+            **redis_connection_resilience_kwargs(),
         )
         self._pubsub = self._redis.pubsub()
         await self._pubsub.subscribe(_channel(self._tenant_id))
@@ -368,6 +369,7 @@ class RedisFeedEventBroker:
                 self._redis_url,
                 decode_responses=True,
                 **redis_socket_timeout_kwargs(),
+                **redis_connection_resilience_kwargs(),
             )
         return self._redis
 

@@ -16,7 +16,7 @@ import core.database as database
 from api.deps import require_scope
 from api.route_metadata import route_meta
 from connectors.registry import ConnectorRegistry
-from core.config import redis_socket_timeout_kwargs, settings
+from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs, settings
 
 logger = structlog.get_logger()
 
@@ -62,6 +62,7 @@ def _get_health_redis_client() -> aioredis.Redis:
             decode_responses=True,
             max_connections=max(10, settings.db_pool_size + settings.db_max_overflow),
             **redis_socket_timeout_kwargs(),
+            **redis_connection_resilience_kwargs(),
         )
     return _health_redis_client
 
@@ -90,15 +91,37 @@ async def _db_health_status() -> str:
 
 
 async def _redis_health_status() -> str:
+    """PING Redis within the dependency timeout.
+
+    A pooled socket that the network path dropped while idle fails its next
+    command with ``ConnectionError``; redis-py then discards that connection.
+    With AGENTICORG_REDIS_HEALTH_PROBE_RETRY on, the probe tries once more on a
+    fresh connection within the same overall deadline. A slow ping (timeout) is
+    never retried, so the probe never takes longer than the timeout.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _DEPENDENCY_HC_TIMEOUT
     try:
         await asyncio.wait_for(
             _get_health_redis_client().ping(),
             timeout=_DEPENDENCY_HC_TIMEOUT,
         )
         return "healthy"
+    except aioredis.ConnectionError as exc:
+        remaining = deadline - loop.time()
+        if not settings.redis_health_probe_retry or remaining <= 0:
+            return f"unhealthy: {type(exc).__name__}"
     # enterprise-gate: broad-except-ok reason=readiness-redis-probe-fails-closed-unhealthy
     except Exception as exc:
         return f"unhealthy: {type(exc).__name__}"
+    try:
+        await asyncio.wait_for(_get_health_redis_client().ping(), timeout=remaining)
+    # enterprise-gate: broad-except-ok reason=readiness-redis-probe-retry-fails-closed-unhealthy
+    except Exception as exc:
+        logger.info("health_redis_probe_retry_failed", error_type=type(exc).__name__)
+        return f"unhealthy: {type(exc).__name__}"
+    logger.info("health_redis_probe_recovered_on_retry")
+    return "healthy"
 
 
 async def _critical_dependency_checks() -> dict[str, str]:

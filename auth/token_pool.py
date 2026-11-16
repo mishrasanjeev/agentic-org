@@ -193,13 +193,18 @@ class TokenPool:
 
     @staticmethod
     def _new_redis_client() -> aioredis.Redis:
-        from core.config import redis_socket_timeout_kwargs
+        from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs
 
+        # The revocation listener keeps its own 30 s health check; only the opt-in
+        # keepalive comes from the shared settings.
+        resilience = redis_connection_resilience_kwargs()
+        resilience.pop("health_check_interval", None)
         return aioredis.from_url(
             settings.redis_url,
             decode_responses=True,
             health_check_interval=30,
             **redis_socket_timeout_kwargs(),
+            **resilience,
         )
 
     def _redis_client(self) -> aioredis.Redis | None:

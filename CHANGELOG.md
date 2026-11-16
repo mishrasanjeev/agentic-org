@@ -2,6 +2,13 @@
 
 ## Unreleased - Release integration fixes
 
+- Add opt-in Redis connection resilience, all off by default: TCP keepalive
+  (`AGENTICORG_REDIS_SOCKET_KEEPALIVE`), an idle-connection health check
+  (`AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS`) for the API's shared clients and the
+  Celery broker and result backend, and one retry of the `/api/v1/health` Redis ping on a
+  fresh connection after a `ConnectionError` (`AGENTICORG_REDIS_HEALTH_PROBE_RETRY`),
+  inside the same 3 s budget. A slow ping is never retried. With nothing set, every client
+  and the Celery configuration are unchanged.
 - Make `BEAT_SERVICE=""` and `WORKER_SERVICE=""` skip that service in
   `scripts/deploy_cloud_run.sh`, as its usage text promised. An empty value used to fall
   back to the default service name, so a pause-first Beat handoff still rolled Beat.

@@ -100,6 +100,37 @@ Important behavior:
   moves, rollback and the `--dry-run` plan. Use this for a pause-first Beat
   handoff, so two schedulers never run at once.
 
+Redis connection resilience (opt-in, all off by default): production reaches
+Memorystore through the Serverless VPC Access connector, and an idle pooled
+socket is occasionally dropped on that path. The next command on it then fails
+with `ConnectionError`, which shows up as a single `redis: unhealthy` health read
+or a Celery broker that stalls for up to about 50 s before it reconnects. Three
+settings address this (`core/redis_resilience.py`):
+
+- `AGENTICORG_REDIS_SOCKET_KEEPALIVE=true` turns on TCP keepalive (first probe
+  after 30 s idle, then every 10 s, 3 probes) for the API's shared Redis clients
+  and the Celery broker; the result backend gets keepalive with the OS timings.
+- `AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS=<1-300>` makes redis-py PING a
+  connection that has been idle longer than this before reusing it, for the
+  API's shared clients and the Celery broker and result backend. `0` (the
+  default) keeps the current behaviour, including kombu's own 25 s broker check.
+  The token-pool revocation listener keeps its fixed 30 s check.
+- `AGENTICORG_REDIS_HEALTH_PROBE_RETRY=true` lets `/api/v1/health` retry the
+  Redis ping once on a fresh connection after a `ConnectionError`, within the
+  same 3 s budget. A slow ping is never retried.
+
+Turn them on at a deploy with `--update-env-vars` only, never `--set-env-vars`,
+on every service that talks to Redis (API, worker and beat):
+
+```bash
+gcloud run services update <svc> --project=perfect-period-305406 --region=asia-southeast1 \
+  --update-env-vars=AGENTICORG_REDIS_SOCKET_KEEPALIVE=true,AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS=15,AGENTICORG_REDIS_HEALTH_PROBE_RETRY=true
+```
+
+Changing Beat's environment creates a new Beat revision, so Beat needs the
+same pause-first handoff as a release. An invalid value stops the process at
+start with an error that names the variable.
+
 Logs: every process (API, worker, beat) emits one JSON object per line via
 `core/logging_config.py` (`AGENTICORG_LOG_FORMAT=json|console`,
 `AGENTICORG_LOG_LEVEL`). Each API log line carries the `request_id` echoed on

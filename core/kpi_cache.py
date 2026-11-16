@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
-from core.config import redis_socket_timeout_kwargs, settings
+from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs, settings
 from core.database import get_tenant_session
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ async def _get_redis():
             settings.redis_url,
             decode_responses=True,
             **redis_socket_timeout_kwargs(),
+            **redis_connection_resilience_kwargs(),
         )
         await client.ping()
         return client
