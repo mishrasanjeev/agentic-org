@@ -18,7 +18,13 @@ from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
-from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
+from core.config import (
+    is_strict_runtime_env,
+    redis_connection_resilience_kwargs,
+    redis_socket_timeout_kwargs,
+    redis_url_from_env,
+    settings,
+)
 from core.conversation import context as conversation_context
 from core.conversation import fallbacks as conversation_fallbacks
 from core.conversation import runtime as conversation_runtime
@@ -304,6 +310,7 @@ try:
         _redis_url,
         decode_responses=True,
         **redis_socket_timeout_kwargs(),
+        **redis_connection_resilience_kwargs(),
     )
 # enterprise-gate: broad-except-ok reason=chat-session-strict-runtime-refuses-memory-fallback-on-use
 except Exception:

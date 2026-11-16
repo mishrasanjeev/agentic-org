@@ -436,7 +436,12 @@ async def _run_with_private_resources(
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
-    from core.config import redis_socket_timeout_kwargs, redis_url_from_env, settings
+    from core.config import (
+        redis_connection_resilience_kwargs,
+        redis_socket_timeout_kwargs,
+        redis_url_from_env,
+        settings,
+    )
 
     engine = create_async_engine(settings.db_url, poolclass=NullPool)
     redis = None
@@ -462,6 +467,7 @@ async def _run_with_private_resources(
                 redis_url_from_env(default_db=0),
                 decode_responses=True,
                 **redis_socket_timeout_kwargs(),
+                **redis_connection_resilience_kwargs(),
             )
             await _warm_cache(redis, sub)
         # enterprise-gate: broad-except-ok reason=cache-warm-best-effort-after-durable-write

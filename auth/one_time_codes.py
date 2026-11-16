@@ -24,7 +24,7 @@ import redis.asyncio as aioredis
 from redis.asyncio.retry import Retry
 from redis.backoff import NoBackoff
 
-from core.config import redis_socket_timeout_kwargs
+from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs
 
 CodeKind = Literal["invite", "reset", "mfa"]
 
@@ -52,7 +52,11 @@ def _redis() -> aioredis.Redis:
         "REDIS_URL", "redis://localhost:6379/0"
     )
     return aioredis.from_url(
-        url, decode_responses=True, retry=Retry(NoBackoff(), 0), **redis_socket_timeout_kwargs()
+        url,
+        decode_responses=True,
+        retry=Retry(NoBackoff(), 0),
+        **redis_socket_timeout_kwargs(),
+        **redis_connection_resilience_kwargs(),
     )
 
 

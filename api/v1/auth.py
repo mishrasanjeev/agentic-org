@@ -33,6 +33,7 @@ from core import auth_state
 from core.auth_state import invalidate_user_session_state
 from core.config import (
     is_strict_runtime_env,
+    redis_connection_resilience_kwargs,
     redis_socket_timeout_kwargs,
     redis_url_from_env,
     settings,
@@ -377,6 +378,7 @@ async def _get_throttle_redis():
             url,
             decode_responses=True,
             **redis_socket_timeout_kwargs(),
+            **redis_connection_resilience_kwargs(),
         )
         await _throttle_redis.ping()
         return _throttle_redis

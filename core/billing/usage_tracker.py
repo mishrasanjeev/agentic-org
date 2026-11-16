@@ -44,12 +44,13 @@ def sync_redis_client():
         raise RuntimeError("redis package is not installed — run: pip install redis")
     with _sync_lock:
         if _sync_client is None:
-            from core.config import redis_socket_timeout_kwargs, redis_url_from_env
+            from core.config import redis_connection_resilience_kwargs, redis_socket_timeout_kwargs, redis_url_from_env
 
             _sync_client = _redis.from_url(
                 redis_url_from_env(default_db=0),
                 decode_responses=True,
                 **redis_socket_timeout_kwargs(),
+                **redis_connection_resilience_kwargs(),
             )
         return _sync_client
 
