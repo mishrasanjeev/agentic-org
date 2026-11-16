@@ -2,7 +2,7 @@
 # reproducible. Refresh via scripts/refresh_image_digests.sh after a
 # Renovate/Dependabot bump confirms upstream is safe.
 # python:3.14-slim @ 2026-05-01
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS builder
 WORKDIR /app
 # Build deps for patched Pillow and other C extensions; git for the
 # commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
@@ -36,7 +36,7 @@ RUN python -m playwright install chromium
 # smallest English model into the image so PII redaction actually runs.
 RUN python -m spacy download en_core_web_sm
 
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retries=0 \
     && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
