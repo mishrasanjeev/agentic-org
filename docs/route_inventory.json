@@ -8168,7 +8168,7 @@
     "public_exempt_reason": "public-readiness-probe-limited-db-redis-status",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.readiness.dependency_status",
-    "source_line": 185,
+    "source_line": 187,
     "tenant_required": false
   },
   {
@@ -8186,7 +8186,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 286,
+    "source_line": 288,
     "tenant_required": false
   },
   {
@@ -8204,7 +8204,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-diagnostics-read",
     "scope": "health.diagnostics.admin.sensitive.read",
-    "source_line": 401,
+    "source_line": 403,
     "tenant_required": false
   },
   {
@@ -8222,7 +8222,7 @@
     "public_exempt_reason": "public-liveness-probe-no-dependency-detail",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.liveness",
-    "source_line": 213,
+    "source_line": 215,
     "tenant_required": false
   },
   {
@@ -8240,7 +8240,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 336,
+    "source_line": 338,
     "tenant_required": false
   },
   {

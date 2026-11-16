@@ -268,6 +268,24 @@ async def test_health_probe_does_not_retry_a_redis_timeout(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
+async def test_health_probe_survives_a_patched_redis_module_and_mock_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Tests patch the module's ``aioredis`` and ``settings`` with mocks: the except
+    # clause must still name a real exception class, and a Mock attribute (truthy)
+    # must not turn the retry on.
+    from api.v1 import health
+
+    client = _Pinger(redis_exceptions.ConnectionError("reset"), True)
+    monkeypatch.setattr(health, "_get_health_redis_client", lambda: client)
+    monkeypatch.setattr(health, "aioredis", MagicMock())
+    monkeypatch.setattr(health, "settings", MagicMock())
+
+    assert await health._redis_health_status() == "unhealthy: ConnectionError"
+    assert client.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_health_probe_retry_stays_inside_the_dependency_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     from api.v1 import health
 

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 import redis.asyncio as aioredis
 import structlog
 from fastapi import APIRouter
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import text
 
 import core.database as database
@@ -107,9 +108,10 @@ async def _redis_health_status() -> str:
             timeout=_DEPENDENCY_HC_TIMEOUT,
         )
         return "healthy"
-    except aioredis.ConnectionError as exc:
+    except RedisConnectionError as exc:
         remaining = deadline - loop.time()
-        if not settings.redis_health_probe_retry or remaining <= 0:
+        # Only an explicit True turns the retry on.
+        if getattr(settings, "redis_health_probe_retry", False) is not True or remaining <= 0:
             return f"unhealthy: {type(exc).__name__}"
     # enterprise-gate: broad-except-ok reason=readiness-redis-probe-fails-closed-unhealthy
     except Exception as exc:
