@@ -75,7 +75,7 @@ dependencies = [
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
     # extra bundles libpq.
-    "psycopg[binary]>=3.3.6",
+    "psycopg[binary]>=3.3.9",
     "psycopg-pool>=3.3.3",
     "alembic>=1.20.1",
     "redis[hiredis]>=5.2.0",
