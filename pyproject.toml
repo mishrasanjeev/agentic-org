@@ -144,7 +144,7 @@ dependencies = [
     "pgvector>=0.5.1",
     "jsonschema>=4.23.0",
     "defusedxml>=0.7.1",
-    "fpdf2>=2.8.9",
+    "fpdf2>=2.9.0",
     "openpyxl>=3.1.0",
     # Insights tables as Parquet (core/insights/export.py).
     "pyarrow>=26.0.1",
