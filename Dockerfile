@@ -53,8 +53,8 @@ RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retri
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
     && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl-provider-legacy)" ge '3.5.7-1~deb13u3' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libreoffice-core)" ge '4:25.2.3-2+deb13u8' \
-    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' fonts-opensymbol)" ge '4:102.12+LibO25.2.3-2+deb13u8' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libreoffice-core)" ge '4:25.2.3-2+deb13u12' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' fonts-opensymbol)" ge '4:102.12+LibO25.2.3-2+deb13u12' \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
