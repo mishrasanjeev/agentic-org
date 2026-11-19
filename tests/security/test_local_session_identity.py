@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Same-second session issuance and backward-compatible local token validation."""
 
 import time
