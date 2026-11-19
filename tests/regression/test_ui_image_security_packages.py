@@ -35,8 +35,8 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
         ("libssl3t64", "3.5.7-1~deb13u3"),
         ("openssl", "3.5.7-1~deb13u3"),
         ("openssl-provider-legacy", "3.5.7-1~deb13u3"),
-        ("libreoffice-core", "4:25.2.3-2+deb13u8"),
-        ("fonts-opensymbol", "4:102.12+LibO25.2.3-2+deb13u8"),
+        ("libreoffice-core", "4:25.2.3-2+deb13u12"),
+        ("fonts-opensymbol", "4:102.12+LibO25.2.3-2+deb13u12"),
     ],
 )
 def test_api_runtime_rejects_cached_vulnerable_packages(package: str, minimum: str) -> None:

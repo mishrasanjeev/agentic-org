@@ -426,7 +426,7 @@ services:
   # Playwright runner for `make e2e`, against the console on this network.
   e2e:
     profiles: [e2e]
-    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
+    image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
     working_dir: /src
     environment:
       BASE_URL: http://ui
@@ -448,7 +448,7 @@ services:
   # while the console is still reached by service name on the stack's network.
   e2e-decisions:
     profiles: [e2e]
-    image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
+    image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
     working_dir: /src
     network_mode: "service:grantex"
     environment:

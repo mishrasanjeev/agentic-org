@@ -70,12 +70,12 @@ dependencies = [
     # Held to the 2.1 series to match requirements.txt: the tools image installs
     # these ranges, and 2.1.0's typing changes failed mypy until the code was
     # annotated for them (FINDINGS A-70), so the next minor moves deliberately.
-    "sqlalchemy[asyncio]>=2.1.6,<2.2",
+    "sqlalchemy[asyncio]>=2.1.8,<2.2",
     "asyncpg>=0.32.0",
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
     # extra bundles libpq.
-    "psycopg[binary]>=3.3.6",
+    "psycopg[binary]>=3.3.9",
     "psycopg-pool>=3.3.3",
     "alembic>=1.20.1",
     "redis[hiredis]>=5.2.0",
@@ -101,7 +101,7 @@ dependencies = [
     "openai>=2.54.0",
     "google-cloud-storage>=2.18.0",
     "google-cloud-secret-manager>=2.32.0",
-    "google-api-python-client>=2.201.0",
+    "google-api-python-client>=2.202.0",
     "google-auth>=2.62.1",
     "dnspython>=2.9.2",
     "structlog>=24.4.0",
@@ -111,7 +111,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.66b2",
     "wrapt>=1.17.3",
     "prometheus-client>=0.26.0",
-    "langgraph>=1.2.20",
+    "langgraph>=1.2.21",
     "langchain>=1.4.7",
     "langchain-google-genai>=4.4.2",
     "langchain-anthropic>=1.7.10",
@@ -144,14 +144,14 @@ dependencies = [
     "pgvector>=0.5.1",
     "jsonschema>=4.23.0",
     "defusedxml>=0.7.1",
-    "fpdf2>=2.8.9",
+    "fpdf2>=2.9.0",
     "openpyxl>=3.1.0",
     # Insights tables as Parquet (core/insights/export.py).
     "pyarrow>=26.0.1",
     "pywebpush>=2.5.0",
     "authlib>=1.9.5",
     "reportlab>=4.5.1",
-    "google-cloud-kms>=3.18.0",
+    "google-cloud-kms>=3.19.0",
     # SECURITY 2026-10-21: Pillow 13.0.0 fixes JPEG, TIFF and GIF decoder
     # advisories reachable through document and image OCR (core/rag/extractors.py,
     # core/idp/). Keep the patched floor direct so resolution cannot drift back.
@@ -185,7 +185,7 @@ v4 = [
     "preshed==3.0.13; python_version == '3.14'",
     # Browser RPA is a shipped runtime. Keep the Python driver in the
     # production extra; Dockerfile installs the matching Chromium binary.
-    "playwright>=1.64.1,<2",
+    "playwright>=1.65.1,<2",
 ]
 bge-m3 = [
     # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out
@@ -203,7 +203,7 @@ dev = [
     # supported redis transport requires redis<6.5.
     "testcontainers[postgres]>=4.15.0,<4.16.0",
     "factory-boy>=3.3.3",
-    "ruff>=0.17.3",
+    "ruff>=0.17.5",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.7.0",
