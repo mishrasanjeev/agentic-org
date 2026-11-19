@@ -9,7 +9,7 @@
  * caller is an active human administrator and audits every change). The CFO
  * reads the same page without the controls.
  */
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -424,7 +424,8 @@ function BaselineRow({
   const { t } = useTranslation();
   const [minutes, setMinutes] = useState(String(b.baseline_minutes));
   const [role, setRole] = useState(b.role);
-  useEffect(() => {
+  // Finish server-to-draft synchronization before the inputs become interactive.
+  useLayoutEffect(() => {
     setMinutes(String(b.baseline_minutes));
     setRole(b.role);
   }, [b.baseline_minutes, b.role]);
@@ -557,7 +558,7 @@ function RateRow({
 }) {
   const { t } = useTranslation();
   const [cost, setCost] = useState(String(r.hourly_cost));
-  useEffect(() => setCost(String(r.hourly_cost)), [r.hourly_cost]);
+  useLayoutEffect(() => setCost(String(r.hourly_cost)), [r.hourly_cost]);
   const dirty = Number(cost) !== r.hourly_cost;
   const valid = cost.trim() !== "" && Number(cost) >= 0;
   return (
