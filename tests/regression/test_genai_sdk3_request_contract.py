@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Exercise the installed SDK serializer against an in-process HTTP transport."""
 
+import importlib
 import json
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 from google import genai
 
@@ -12,9 +12,14 @@ from core.llm import router
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("transport_name", ["httpx", "httpx2"])
 @pytest.mark.parametrize(("configured", "expected"), [(None, "v1beta"), ("beta", "v1beta"), ("v1", "v1")])
-async def test_native_sdk_preserves_preview_default_and_explicit_version(monkeypatch, configured, expected):
+async def test_native_sdk_preserves_preview_default_and_explicit_version(
+    monkeypatch, transport_name, configured, expected
+):
+    http = importlib.import_module(transport_name)
     monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+    monkeypatch.delenv("GOOGLE_GENAI_USE_ENTERPRISE", raising=False)
     monkeypatch.delenv("GOOGLE_GENAI_API_VERSION", raising=False)
     if configured is not None:
         monkeypatch.setenv("GOOGLE_GENAI_API_VERSION", configured)
@@ -22,7 +27,7 @@ async def test_native_sdk_preserves_preview_default_and_explicit_version(monkeyp
 
     def reply(request):
         requests.append(request)
-        return httpx.Response(
+        return http.Response(
             200,
             json={
                 "candidates": [{"content": {"role": "model", "parts": [{"text": "synthetic result"}]}}],
@@ -30,11 +35,11 @@ async def test_native_sdk_preserves_preview_default_and_explicit_version(monkeyp
             },
         )
 
-    transport = httpx.MockTransport(reply)
+    transport = http.MockTransport(reply)
     sdk_factory = genai.Client
     clients = []
-    with httpx.Client(transport=transport) as sync_http:
-        async with httpx.AsyncClient(transport=transport) as async_http:
+    with http.Client(transport=transport) as sync_http:
+        async with http.AsyncClient(transport=transport) as async_http:
             def create(*, api_key, http_options):
                 client = sdk_factory(
                     api_key=api_key,
@@ -74,10 +79,21 @@ async def test_native_sdk_preserves_preview_default_and_explicit_version(monkeyp
     secret.assert_awaited_once_with("gemini", "00000000-0000-4000-8000-000000000001")
 
 
-@pytest.mark.parametrize("vertex", ["true", "1"])
+@pytest.mark.parametrize(
+    ("enterprise", "vertex", "expected"),
+    [
+        (None, "true", {}),
+        (None, "1", {}),
+        ("true", "false", {}),
+        ("false", "true", {"api_version": "v1beta"}),
+    ],
+)
 @pytest.mark.asyncio
-async def test_native_sdk_does_not_override_vertex_version(monkeypatch, vertex):
+async def test_native_sdk_respects_vertex_and_enterprise_precedence(monkeypatch, enterprise, vertex, expected):
     monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", vertex)
+    monkeypatch.delenv("GOOGLE_GENAI_USE_ENTERPRISE", raising=False)
+    if enterprise is not None:
+        monkeypatch.setenv("GOOGLE_GENAI_USE_ENTERPRISE", enterprise)
     monkeypatch.delenv("GOOGLE_GENAI_API_VERSION", raising=False)
     factory = AsyncMock()
     monkeypatch.setattr(router, "assert_under_gemini_cap", factory)
@@ -85,7 +101,7 @@ async def test_native_sdk_does_not_override_vertex_version(monkeypatch, vertex):
 
     def refuse_network(*, api_key, http_options):
         assert api_key == "synthetic-key"
-        assert http_options == {}
+        assert http_options == expected
         raise RuntimeError("synthetic transport boundary")
 
     monkeypatch.setattr(genai, "Client", refuse_network)

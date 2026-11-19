@@ -1027,7 +1027,8 @@ class LLMRouter:
         # SDK 3 defaults to v1, which does not serve the existing preview models.
         # Preserve the previous default without overriding explicit SDK settings.
         http_options = {}
-        if not os.getenv("GOOGLE_GENAI_API_VERSION") and os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() not in (
+        vertex = os.getenv("GOOGLE_GENAI_USE_ENTERPRISE", os.getenv("GOOGLE_GENAI_USE_VERTEXAI", ""))
+        if not os.getenv("GOOGLE_GENAI_API_VERSION") and vertex.lower() not in (
             "true",
             "1",
         ):

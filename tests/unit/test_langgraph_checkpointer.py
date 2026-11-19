@@ -287,6 +287,11 @@ def test_pinned_checkpoint_library_versions() -> None:
 
 UNVERIFIED = [
     (
+        {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.2"},
+        "langgraph-checkpoint-postgres is 3.1.3",
+    ),
+    ({"langgraph-checkpoint-postgres": "3.2.1", "langgraph-checkpoint": "4.3.0"}, "langgraph-checkpoint is 4.3.0"),
+    (
         {"langgraph-checkpoint-postgres": "3.2.2", "langgraph-checkpoint": "4.3.2"},
         "langgraph-checkpoint-postgres is 3.2.2",
     ),
