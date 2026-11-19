@@ -123,7 +123,9 @@ async def test_gemini_cap_refuses_once_recorded_router_spend_reaches_it(monkeypa
         monkeypatch.delenv("AGENTICORG_MODEL_MODE", raising=False)
         monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "1.0")
         monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", "0")
-        monkeypatch.setattr(genai, "Client", lambda api_key=None: SimpleNamespace(aio=SimpleNamespace(models=models)))
+        monkeypatch.setattr(
+            genai, "Client", lambda api_key=None, http_options=None: SimpleNamespace(aio=SimpleNamespace(models=models))
+        )
         monkeypatch.setattr(LLMRouter, "_provider_secret", AsyncMock(return_value="synthetic-key"))
         router = LLMRouter()
         messages = [{"role": "user", "content": "Summarise the synthetic ledger"}]
@@ -215,7 +217,9 @@ async def test_telegram_shopper_is_held_to_the_platform_cap_only(monkeypatch):
         monkeypatch.delenv("AGENTICORG_MODEL_MODE", raising=False)
         monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "0")
         monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", "0")
-        monkeypatch.setattr(genai, "Client", lambda api_key=None: SimpleNamespace(aio=SimpleNamespace(models=models)))
+        monkeypatch.setattr(
+            genai, "Client", lambda api_key=None, http_options=None: SimpleNamespace(aio=SimpleNamespace(models=models))
+        )
         monkeypatch.setattr(LLMRouter, "_provider_secret", AsyncMock(return_value="synthetic-key"))
         _controls(monkeypatch, True)
         router = LLMRouter()

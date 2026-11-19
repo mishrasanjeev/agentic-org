@@ -234,6 +234,50 @@ def test_paused_run_is_stored_encrypted_and_resumes_from_a_new_store(
     assert "over limit" in resumed["error"]
 
 
+def test_pool_concurrency_keeps_each_checkpoint_binding(scratch_schema: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from langgraph.graph import END, START, StateGraph
+
+    _apply_migration(scratch_schema)
+    _use_store(monkeypatch, scratch_schema)
+    configs = [{"configurable": {"thread_id": f"concurrent-{uuid.uuid4().hex}"}} for _ in range(8)]
+    values = [{"grant_token": f"synthetic-concurrent-grant-{i}", "completed": False} for i in range(8)]
+    builder = StateGraph(dict)
+    builder.add_node("mark", lambda state: {**state, "completed": True})
+    builder.add_edge(START, "mark")
+    builder.add_edge("mark", END)
+
+    async def write() -> None:
+        try:
+            graph = builder.compile(checkpointer=await cp.get_checkpointer())
+            results = await asyncio.gather(
+                *(graph.ainvoke(value, config) for value, config in zip(values, configs, strict=True))
+            )
+            assert results == [{**value, "completed": True} for value in values]
+        finally:
+            await cp.close_checkpointer()
+
+    async def read() -> None:
+        try:
+            graph = builder.compile(checkpointer=await cp.get_checkpointer())
+            states = await asyncio.gather(*(graph.aget_state(config) for config in configs))
+            assert [state.values for state in states] == [{**value, "completed": True} for value in values]
+        finally:
+            await cp.close_checkpointer()
+
+    _run(write())
+    _run(read())
+    with _sync_conn() as conn:
+        conn.execute(_in_schema("SET search_path TO {schema}", scratch_schema))
+        rows = conn.execute("SELECT checkpoint::text, checkpoint->'channel_values' FROM checkpoints").fetchall()
+        blobs = b"".join(
+            bytes(row[0]) for row in conn.execute("SELECT blob FROM checkpoint_blobs WHERE blob IS NOT NULL")
+        )
+    assert rows and all(row[1] == {} for row in rows)
+    for value in values:
+        assert value["grant_token"].encode() not in blobs
+        assert all(value["grant_token"] not in row[0] for row in rows)
+
+
 def test_unencrypted_checkpoint_rows_are_refused(
     scratch_schema: str, monkeypatch: pytest.MonkeyPatch, scripted_model: Any
 ) -> None:

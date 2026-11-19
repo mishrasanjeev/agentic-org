@@ -1024,7 +1024,15 @@ class LLMRouter:
         await assert_under_gemini_cap(tenant_id=tenant_id)
 
         api_key = await self._provider_secret("gemini", tenant_id)
-        client = genai.Client(api_key=api_key)
+        # SDK 3 defaults to v1, which does not serve the existing preview models.
+        # Preserve the previous default without overriding explicit SDK settings.
+        http_options = {}
+        if not os.getenv("GOOGLE_GENAI_API_VERSION") and os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() not in (
+            "true",
+            "1",
+        ):
+            http_options["api_version"] = "v1beta"
+        client = genai.Client(api_key=api_key, http_options=http_options)
 
         # Separate system instruction from conversation
         system_instruction = None
