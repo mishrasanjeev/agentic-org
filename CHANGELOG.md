@@ -2,6 +2,9 @@
 
 ## Unreleased - Release integration fixes
 
+- Give every newly issued local session a server-generated JWT ID, so logins
+  issued in the same second remain independently revocable. Existing sessions
+  without that optional claim remain valid under the same validation policy.
 - Add opt-in Redis connection resilience, all off by default: TCP keepalive
   (`AGENTICORG_REDIS_SOCKET_KEEPALIVE`), an idle-connection health check
   (`AGENTICORG_REDIS_HEALTH_CHECK_INTERVAL_SECONDS`) for the API's shared clients and the
