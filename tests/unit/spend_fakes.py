@@ -12,6 +12,7 @@ text statements (advisory locks, the ancestors query, the users checks).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.dialects import postgresql
@@ -67,17 +68,20 @@ def _value(element: Any) -> Any:
     raise NotImplementedError(repr(element))
 
 
-def matches(clause: Any, row: Any, resolved: dict[Any, tuple[str, Any, Any]] | None = None) -> bool:
-    """Evaluate a where clause against one row."""
+def _predicate(
+    clause: Any, resolved: dict[Any, tuple[str, Any, Any]] | None = None
+) -> Callable[[Any], bool]:
+    """Resolve the expression tree once for this execution, not for every row."""
     if resolved is None:
         resolved = {}
     if clause is None or isinstance(clause, True_):
-        return True
+        return lambda row: True
     if isinstance(clause, BooleanClauseList):
-        parts = [matches(part, row, resolved) for part in clause.clauses]
-        return any(parts) if clause.operator is operators.or_ else all(parts)
+        predicates = [_predicate(part, resolved) for part in clause.clauses]
+        combine = any if clause.operator is operators.or_ else all
+        return lambda row: combine([predicate(row) for predicate in predicates])
     if isinstance(clause, Grouping):
-        return matches(clause.element, row, resolved)
+        return _predicate(clause.element, resolved)
     if isinstance(clause, BinaryExpression):
         operands = resolved.get(clause)
         if operands is None:
@@ -87,7 +91,7 @@ def matches(clause: Any, row: Any, resolved: dict[Any, tuple[str, Any, Any]] | N
             operands = (clause.left.key, op, _value(clause.right))
             resolved[clause] = operands
         key, op, value = operands
-        return bool(op(getattr(row, key), value))
+        return lambda row: bool(op(getattr(row, key), value))
     raise NotImplementedError(str(clause))
 
 
@@ -274,9 +278,11 @@ class FakeSession:
     def _select(self, statement: Any) -> Result:
         table = statement.get_final_froms()[0]
         whereclause = statement.whereclause
-        # Bound values belong to this execution, never to a row or a later query.
-        resolved: dict[Any, tuple[str, Any, Any]] = {}
-        rows = [row for row in self.rows if row.__tablename__ == table.name and matches(whereclause, row, resolved)]
+        rows = self.of(table.name)
+        if rows:
+            # Compiling also checks every boolean branch, even one that cannot match.
+            predicate = _predicate(whereclause)
+            rows = [row for row in rows if predicate(row)]
         for clause in reversed(list(statement._order_by_clauses)):
             descending = isinstance(clause, UnaryExpression) and clause.modifier is operators.desc_op
             column = clause.element if isinstance(clause, UnaryExpression) else clause

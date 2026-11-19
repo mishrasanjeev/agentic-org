@@ -1328,6 +1328,50 @@ class TestImports:
 
 
 class TestFakeQuery:
+    def test_predicate_tree_is_compiled_once_per_query_not_per_row(self, monkeypatch):
+        from core.models.spend import SpendFxRate
+        from tests.unit import spend_fakes
+
+        store = FakeSession()
+        for tenant in (TENANT, OTHER_TENANT):
+            for currency in ("USD", "EUR"):
+                for day in (date(2026, 9, 30), date(2026, 10, 2)):
+                    store.add(
+                        SpendFxRate(tenant_id=tenant, currency=currency, rate_date=day, rate_to_inr=Decimal("80"))
+                    )
+        calls = []
+        original = spend_fakes._predicate
+
+        def tracked(clause, resolved=None):
+            calls.append(clause)
+            return original(clause, resolved)
+
+        monkeypatch.setattr(spend_fakes, "_predicate", tracked)
+        query = select(SpendFxRate).where(
+            SpendFxRate.tenant_id == TENANT,
+            SpendFxRate.currency == "USD",
+            SpendFxRate.rate_date <= T0.date(),
+        )
+        assert store._select(query).all() == [store.rows[0]]
+        assert len(calls) == 4  # one AND and three comparisons, irrespective of row count
+        store.rows[0].currency = "EUR"
+        assert store._select(query).all() == []
+        assert len(calls) == 8  # a new execution, with no cached rows or old field values
+
+    def test_boolean_branches_do_not_hide_unsupported_predicates(self):
+        from sqlalchemy import and_, or_
+
+        from core.models.spend import SpendFxRate
+
+        store = FakeSession()
+        store.add(SpendFxRate(tenant_id=TENANT, currency="USD", rate_date=T0.date(), rate_to_inr=Decimal("80")))
+        for predicate in (
+            and_(SpendFxRate.tenant_id == OTHER_TENANT, SpendFxRate.currency.like("U%")),
+            or_(SpendFxRate.tenant_id == TENANT, SpendFxRate.currency.like("U%")),
+        ):
+            with pytest.raises(NotImplementedError):
+                store._select(select(SpendFxRate).where(predicate))
+
     def test_bound_values_are_resolved_once_per_execution_without_stale_reuse(self):
         from core.models.spend import SpendFxRate
 
