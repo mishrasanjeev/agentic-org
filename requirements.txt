@@ -44,7 +44,7 @@ celery[redis]==5.7.0
 
 # ─── Data Validation & Schemas ───────────────────────────────────────────────
 pydantic==2.14.3
-pydantic-settings==2.16.2
+pydantic-settings==2.16.3
 jsonschema==4.26.0
 
 # ─── Authentication & Security ───────────────────────────────────────────────
