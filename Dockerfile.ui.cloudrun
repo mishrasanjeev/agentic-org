@@ -54,7 +54,8 @@ FROM nginx:alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df
 # CVE-2026-92392: require the curl release with the HTTP/2 upload fix.
 # CVE-2026-87636, CVE-2026-9947, CVE-2026-125350: require the patched libxslt;
 # the nginx:alpine base still ships 1.1.43-r3.
-RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0' 'pcre2>=10.49-r0' 'tiff>=4.7.2-r0' 'libx11>=1.8.14-r0' 'brotli-libs>=1.2.1-r0' 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0' 'libxslt>=1.1.43-r4'
+# CVE-2026-86144: require the patched libxml2 from the same signed repository.
+RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0' 'pcre2>=10.49-r0' 'tiff>=4.7.2-r0' 'libx11>=1.8.14-r0' 'brotli-libs>=1.2.1-r0' 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0' 'libxslt>=1.1.43-r4' 'libxml2>=2.13.9-r3'
 COPY --from=builder /app/ui/dist /usr/share/nginx/html
 COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'
