@@ -43,7 +43,7 @@ redis[hiredis]==6.4.0
 celery[redis]==5.7.0
 
 # ─── Data Validation & Schemas ───────────────────────────────────────────────
-pydantic==2.14.3
+pydantic==2.14.4
 pydantic-settings==2.16.3
 jsonschema==4.26.0
 
