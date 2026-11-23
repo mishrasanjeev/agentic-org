@@ -3,6 +3,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import BUILD_SNAPSHOT from "../content/publicPlanCatalog.generated.json";
 import Pricing from "../pages/Pricing";
 
 const apiMock = vi.hoisted(() => ({ get: vi.fn() }));
@@ -59,6 +60,17 @@ describe("Pricing", () => {
     expect(screen.getByText("Agent runs per month: 321")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/Priority support|Custom SLA|SSO/i);
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("renders the build snapshot of the catalog before the API answers", () => {
+    apiMock.get.mockReturnValueOnce(new Promise(() => {}));
+    renderPricing();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("plan-card")).toHaveLength(BUILD_SNAPSHOT.plan_count);
+    for (const plan of BUILD_SNAPSHOT.plans) {
+      expect(screen.getByRole("heading", { name: plan.display_name })).toBeInTheDocument();
+    }
+    expect(document.body).not.toHaveTextContent("Loading the complete billing catalog");
   });
 
   it("fails closed when the catalog request fails", async () => {

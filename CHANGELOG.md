@@ -2,6 +2,18 @@
 
 ## Unreleased - Release integration fixes
 
+- Prerender the public plans and the live product counts, so crawlers that do not run
+  JavaScript read them instead of "Loading the complete billing catalog..." and
+  "Unavailable". The pricing page now starts from a build snapshot of
+  `core/billing/catalog.py` (`ui/src/content/publicPlanCatalog.generated.json`, written by
+  `scripts/generate_public_plan_catalog.py` and pinned by a unit test); the live catalog
+  still replaces it, and a failed or partial response still fails closed. The prerender
+  reads `/api/v1/product-facts` once per build (`AGENTICORG_PRODUCT_FACTS_URL` overrides
+  it, `off` skips it), renders the counts, and writes them into each page as a
+  non-executable JSON block that the browser starts from; the live endpoint still
+  replaces them, and an endpoint failure falls back to the unavailable copy. An offline
+  build degrades with a warning, and the build now fails if a prerendered page carries
+  the pricing loading or failure banner, or an unavailable count while facts were seeded.
 - Give every newly issued local session a server-generated JWT ID, so logins
   issued in the same second remain independently revocable. Existing sessions
   without that optional claim remain valid under the same validation policy.

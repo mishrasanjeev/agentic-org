@@ -10,6 +10,15 @@ import {
   type PublicPlanCatalog,
 } from "@/lib/billingCatalog";
 import api from "@/lib/api";
+import planCatalogSnapshot from "@/content/publicPlanCatalog.generated.json";
+
+// Build snapshot of core/billing/catalog.py, written by
+// scripts/generate_public_plan_catalog.py and pinned to the catalog by a unit
+// test. It renders before the API answers, so the prerendered page carries
+// the plans. The live catalog replaces it, and a failed or partial response
+// still fails closed.
+const SNAPSHOT: unknown = planCatalogSnapshot;
+const BUILD_PLAN_CATALOG: PublicPlanCatalog | null = isPublicPlanCatalog(SNAPSHOT) ? SNAPSHOT : null;
 
 function CheckIcon() {
   return (
@@ -149,7 +158,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export default function Pricing() {
   const [showDemo, setShowDemo] = useState(false);
-  const [catalog, setCatalog] = useState<PublicPlanCatalog | null>(null);
+  const [catalog, setCatalog] = useState<PublicPlanCatalog | null>(BUILD_PLAN_CATALOG);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -224,14 +233,14 @@ export default function Pricing() {
 
       <main>
         <section className="-mt-6 px-4 pb-20">
-          {(loading || failed) && (
+          {((loading && !catalog) || failed) && (
             <p className="mx-auto mb-8 max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-center text-sm text-amber-900" role="status">
               {loading
                 ? "Loading the complete billing catalog..."
                 : "The complete billing catalog is unavailable. No plan offer is displayed; query the service again before relying on commercial terms."}
             </p>
           )}
-          {!loading && catalog && (
+          {catalog && (
             <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
               {plans.map((plan) => (
                 <article key={plan.plan_id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-lg" data-testid="plan-card">
