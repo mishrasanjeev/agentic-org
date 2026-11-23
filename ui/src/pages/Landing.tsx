@@ -440,6 +440,7 @@ export default function Landing() {
   const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "Unavailable";
   const toolsText = facts.tool_count > 0 ? `${facts.tool_count}` : "Unavailable";
   const versionText = facts.version ? `v${facts.version}` : "";
+  const countsKnown = facts.connector_count > 0 && facts.agent_count > 0 && facts.tool_count > 0;
 
   // Scroll to hash anchor on navigation (e.g. /#developers from another page)
   useEffect(() => {
@@ -928,7 +929,10 @@ export default function Landing() {
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One platform. Scoped agents. Observable workflows.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                The live runtime reports {agentsText} agent definitions, {connectorsText} connector definitions, and {toolsText} tool bindings across enterprise workflows. Availability and write access depend on tenant configuration, credentials, scopes, provider support, and approval policy.
+                {countsKnown
+                  ? `The live runtime reports ${agentsText} agent definitions, ${connectorsText} connector definitions, and ${toolsText} tool bindings across enterprise workflows.`
+                  : "The live runtime publishes its current agent, connector, and tool totals through the product facts endpoint."}{" "}
+                Availability and write access depend on tenant configuration, credentials, scopes, provider support, and approval policy.
               </p>
             </div>
           </FadeIn>
@@ -944,7 +948,7 @@ export default function Landing() {
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  {agentsText} runtime-registered agent definitions span Finance, HR, Marketing, Operations, Back Office, and Communications. Create or configure agents with explicit instructions, scoped tools, and tenant policy.
+                  {facts.agent_count > 0 ? `${agentsText} runtime-registered agent definitions span` : "Runtime-registered agent definitions span"} Finance, HR, Marketing, Operations, Back Office, and Communications. Create or configure agents with explicit instructions, scoped tools, and tenant policy.
                 </p>
               </div>
             </FadeIn>

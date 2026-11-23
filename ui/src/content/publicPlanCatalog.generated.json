@@ -1,0 +1,83 @@
+{
+  "schema_version": "agenticorg.billing-plans.v1",
+  "catalog_version": "2026-09-13.1",
+  "complete": true,
+  "plan_count": 3,
+  "plans": [
+    {
+      "plan_id": "free",
+      "display_name": "Free",
+      "display_order": 10,
+      "prices": [
+        {
+          "currency": "USD",
+          "amount_minor": 0,
+          "interval": "month"
+        },
+        {
+          "currency": "INR",
+          "amount_minor": 0,
+          "interval": "month"
+        }
+      ],
+      "limits": {
+        "agent_count": 3,
+        "agent_runs": 1000,
+        "agent_runs_interval": "month",
+        "storage_bytes": 1073741824
+      },
+      "signup_available": true,
+      "checkout_mode": "none"
+    },
+    {
+      "plan_id": "pro",
+      "display_name": "Pro",
+      "display_order": 20,
+      "prices": [
+        {
+          "currency": "USD",
+          "amount_minor": 9900,
+          "interval": "month"
+        },
+        {
+          "currency": "INR",
+          "amount_minor": 999900,
+          "interval": "month"
+        }
+      ],
+      "limits": {
+        "agent_count": 15,
+        "agent_runs": 10000,
+        "agent_runs_interval": "month",
+        "storage_bytes": 53687091200
+      },
+      "signup_available": false,
+      "checkout_mode": "hosted"
+    },
+    {
+      "plan_id": "enterprise",
+      "display_name": "Enterprise",
+      "display_order": 30,
+      "prices": [
+        {
+          "currency": "USD",
+          "amount_minor": 49900,
+          "interval": "month"
+        },
+        {
+          "currency": "INR",
+          "amount_minor": 4999900,
+          "interval": "month"
+        }
+      ],
+      "limits": {
+        "agent_count": null,
+        "agent_runs": null,
+        "agent_runs_interval": "month",
+        "storage_bytes": null
+      },
+      "signup_available": false,
+      "checkout_mode": "hosted"
+    }
+  ]
+}
