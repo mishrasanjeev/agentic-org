@@ -44,7 +44,7 @@ ENV VITE_NATIVE_CONNECTOR_PREFILL_ENABLED=$VITE_NATIVE_CONNECTOR_PREFILL_ENABLED
 RUN npm run build
 
 # nginx:alpine @ 2026-05-01
-FROM nginx:alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
+FROM nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
 # CVE-2026-93990: the base ships libexpat 2.8.4-r0 and no nginx:alpine digest
 # carries the fix yet. Upgrade in place, and fail the build if the fixed
 # package is unavailable. Drop this once the base digest carries 2.8.5-r0.
