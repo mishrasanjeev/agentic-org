@@ -518,12 +518,15 @@ async def test_a_totp_sign_in_session_carries_the_mfa_claim_and_nothing_else_cha
         ctx.stop()
     claims = _claims(result.access_token)
     assert claims[auth_mod.MFA_CLAIM] is True and auth_mod.session_completed_mfa(claims)
-    # Every other claim is exactly what a session without the second factor carries.
+    # Authorization claims stay identical; issuance metadata belongs to each session.
     plain = _claims(auth_mod.session_token_for(user))
     assert auth_mod.MFA_CLAIM not in plain and not auth_mod.session_completed_mfa(plain)
-    timing = {"iat", "exp"}
-    assert {k: v for k, v in claims.items() if k not in timing | {auth_mod.MFA_CLAIM}} == {
-        k: v for k, v in plain.items() if k not in timing
+    for session in (claims, plain):
+        assert isinstance(session["jti"], str) and len(session["jti"]) == 43
+    assert claims["jti"] != plain["jti"]
+    issuance = {"iat", "exp", "jti"}
+    assert {k: v for k, v in claims.items() if k not in issuance | {auth_mod.MFA_CLAIM}} == {
+        k: v for k, v in plain.items() if k not in issuance
     }
 
 

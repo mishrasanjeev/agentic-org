@@ -172,7 +172,7 @@ async def test_router_calls_gemini_with_tenant_credential(monkeypatch) -> None:
     )
 
     assert result.content == "generated"
-    client_factory.assert_called_once_with(api_key="synthetic-gemini-secret")
+    client_factory.assert_called_once_with(api_key="synthetic-gemini-secret", http_options={"api_version": "v1beta"})
     generate.assert_awaited_once()
 
 

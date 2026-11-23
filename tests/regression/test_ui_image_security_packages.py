@@ -21,6 +21,7 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
         "curl>=8.23.0-r0",
         "libcurl>=8.23.0-r0",
         "libxslt>=1.1.43-r4",
+        "libxml2>=2.13.9-r3",
     ):
         assert f"'{package}'" in upgrade, f"{dockerfile}: missing security floor for {package}"
 

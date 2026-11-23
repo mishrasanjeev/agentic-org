@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import time
 from typing import Any
 
@@ -26,7 +27,7 @@ JWKS_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 # ---------------------------------------------------------------------------
 # Token blacklist — Redis-backed
 #
-# Codex 2026-04-23 re-verification blocker E: the old implementation
+# 2026-04-23 re-verification blocker E: the old implementation
 # fell back to an in-memory dict when Redis was unavailable. That silently
 # broke blacklisting in any multi-replica deploy — a token revoked on
 # replica A still validated on replica B. For enterprise release, the
@@ -235,6 +236,8 @@ def create_access_token(data: dict, expires_minutes: int = 60) -> str:
         "aud": "agenticorg-tool-gateway",
         "iat": now,
         "exp": now + expires_minutes * 60,
+        # RFC 7519 section 4.1.7: same-second sessions must have distinct IDs.
+        "jti": secrets.token_urlsafe(32),
     }
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 

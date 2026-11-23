@@ -6,6 +6,7 @@
  * approvals page recording what a person has seen.
  */
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HelmetProvider } from "react-helmet-async";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -221,18 +222,45 @@ describe("InsightsValue", () => {
   });
 
   it("shows net saved and the waterfall once confirmed, and saves an edited baseline", async () => {
+    const user = userEvent.setup();
     route(valueResponse({}, true));
     mockPatch.mockResolvedValue({ data: {} });
     renderValue();
     expect(await screen.findByTestId("value-net")).toHaveTextContent("10,700");
     expect(screen.getByText("178.3%")).toBeInTheDocument();
     const row = screen.getByTestId("baseline-ap_processor");
-    fireEvent.change(within(row).getByLabelText("Minutes per task for ap_processor"), { target: { value: "20" } });
-    fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+    const input = within(row).getByLabelText("Minutes per task for ap_processor");
+    await user.clear(input);
+    expect(input).toHaveValue(null);
+    await user.type(input, "20");
+    expect(row).toBeInTheDocument();
+    expect(input).toHaveValue(20);
+    const save = await within(row).findByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    await user.click(save);
     await waitFor(() =>
       expect(mockPatch).toHaveBeenCalledWith("/insights/value/baselines/b1", { baseline_minutes: 20, role: "finance_associate" }),
     );
     expect(document.body.textContent).not.toMatch(/NaN|undefined|\[object Object\]/);
+  });
+
+  it("retains an hourly-rate edit after the initial server values arrive", async () => {
+    const user = userEvent.setup();
+    route(valueResponse({}, true));
+    mockPatch.mockResolvedValue({ data: {} });
+    renderValue();
+    expect(await screen.findByTestId("value-net")).toHaveTextContent("10,700");
+    const row = screen.getByTestId("rate-finance_associate");
+    const input = within(row).getByLabelText("Hourly cost for finance_associate");
+    await user.clear(input);
+    expect(input).toHaveValue(null);
+    await user.type(input, "200.5");
+    expect(row).toBeInTheDocument();
+    expect(input).toHaveValue(200.5);
+    const save = await within(row).findByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith("/insights/value/rates/r1", { hourly_cost: 200.5 }));
   });
 
   it("is read-only for the CFO and says who confirms", async () => {
