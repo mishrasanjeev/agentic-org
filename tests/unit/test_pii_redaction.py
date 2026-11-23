@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import re
 import time
 from multiprocessing.connection import Connection
@@ -82,6 +83,9 @@ def _scan_pattern_child(pattern: re.Pattern[str], text: str, connection: Connect
 
 
 def _measure_redaction_child(connection: Connection, start: Event) -> None:
+    if multiprocessing.parent_process() is None:
+        raise RuntimeError("PII measurement requires its dedicated child process")
+
     from core.pii.redactor import PIIRedactor
 
     try:
@@ -101,6 +105,9 @@ def _measure_redaction_child(connection: Connection, start: Event) -> None:
         connection.send((time.perf_counter() - began) / 10 * 1000)
     finally:
         connection.close()
+    # A completed sample must not wait for unrelated interpreter finalizers.
+    # Exceptions and failed pipe delivery never reach this success-only exit.
+    os._exit(0)
 
 
 # ---------------------------------------------------------------------------
@@ -504,3 +511,75 @@ class TestIndiaRecognizers:
         r = UPIRecognizer()
         entities = getattr(r, "supported_entities", None) or [getattr(r, "supported_entity", "")]
         assert "UPI" in entities
+
+
+class TestMeasurementWorkerLifecycle:
+    def test_worker_refuses_to_exit_the_parent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        connection, start = MagicMock(), MagicMock()
+        exit_worker = MagicMock(side_effect=AssertionError("must not exit the parent"))
+        monkeypatch.setattr(multiprocessing, "parent_process", lambda: None)
+        monkeypatch.setattr(os, "_exit", exit_worker)
+
+        with pytest.raises(RuntimeError, match="dedicated child process"):
+            _measure_redaction_child(connection, start)
+
+        connection.send.assert_not_called()
+        connection.close.assert_not_called()
+        start.wait.assert_not_called()
+        exit_worker.assert_not_called()
+
+    def test_success_exits_only_after_real_measurement_delivery_and_close(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class MeasurementComplete(BaseException):
+            pass
+
+        events: list[tuple[str, Any]] = []
+        connection, start = MagicMock(), MagicMock()
+        connection.send.side_effect = lambda value: events.append(("send", value))
+        connection.close.side_effect = lambda: events.append(("close", None))
+        start.wait.return_value = True
+        monkeypatch.setattr(multiprocessing, "parent_process", lambda: object())
+
+        def exit_worker(code: int) -> None:
+            events.append(("exit", code))
+            raise MeasurementComplete
+
+        monkeypatch.setattr(os, "_exit", exit_worker)
+        with pytest.raises(MeasurementComplete):
+            _measure_redaction_child(connection, start)
+
+        assert events[0] == ("send", {"ready": True})
+        assert events[1][0] == "send"
+        assert isinstance(events[1][1], float) and events[1][1] >= 0
+        assert events[2:] == [("close", None), ("exit", 0)]
+        start.wait.assert_called_once_with(timeout=20)
+
+    def test_failed_measurement_delivery_does_not_exit_success(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        connection, start, exit_worker = MagicMock(), MagicMock(), MagicMock()
+        connection.send.side_effect = [None, BrokenPipeError("measurement delivery failed")]
+        start.wait.return_value = True
+        monkeypatch.setattr(multiprocessing, "parent_process", lambda: object())
+        monkeypatch.setattr(os, "_exit", exit_worker)
+
+        with pytest.raises(BrokenPipeError, match="measurement delivery failed"):
+            _measure_redaction_child(connection, start)
+
+        connection.close.assert_called_once_with()
+        exit_worker.assert_not_called()
+
+    def test_failed_pipe_close_does_not_exit_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        connection, start, exit_worker = MagicMock(), MagicMock(), MagicMock()
+        connection.close.side_effect = OSError("measurement pipe close failed")
+        start.wait.return_value = True
+        monkeypatch.setattr(multiprocessing, "parent_process", lambda: object())
+        monkeypatch.setattr(os, "_exit", exit_worker)
+
+        with pytest.raises(OSError, match="measurement pipe close failed"):
+            _measure_redaction_child(connection, start)
+
+        assert connection.send.call_count == 2
+        connection.close.assert_called_once_with()
+        exit_worker.assert_not_called()
