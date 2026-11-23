@@ -23,7 +23,8 @@ import os
 import secrets
 import time
 import uuid
-from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -251,7 +252,7 @@ class _Case:
     target: object
     foreign: object
     key_id: uuid.UUID
-    api_token: str
+    api_token: str = field(repr=False)
     ip: str
 
     def token(self, user=None, **claims):
@@ -297,6 +298,17 @@ class _Case:
             return {user.id: {name: getattr(user, name) for name in fields} for user in users}
 
 
+@asynccontextmanager
+async def _case_auth_failure_scope(cache, ip):
+    keys = (f"auth:failures:{ip}", f"auth:blocked:{ip}")
+    # Never remove state that predates this synthetic case's ownership.
+    assert await cache.mget(*keys) == [None, None], "Replay IP already has authentication state"
+    try:
+        yield
+    finally:
+        await cache.delete(*keys)
+
+
 @pytest_asyncio.fixture(loop_scope="module")
 async def case(backend):
     from core import auth_state, database
@@ -338,8 +350,9 @@ async def case(backend):
     auth_state._mem_user_state.clear()
     instance = _Case(backend, *users, key_id, api_token, f"192.0.2.{secrets.randbelow(240) + 1}")
     try:
-        with database.session_factory_scope(lambda: backend.factory):
-            yield instance
+        async with _case_auth_failure_scope(backend.cache, instance.ip):
+            with database.session_factory_scope(lambda: backend.factory):
+                yield instance
     finally:
         async with async_sessionmaker(backend.owner)() as session:
             await session.execute(delete(APIKey).where(APIKey.id == key_id))
@@ -347,6 +360,41 @@ async def case(backend):
             await session.execute(delete(Tenant).where(Tenant.id.in_([tenant, foreign_tenant])))
             await session.commit()
         auth_state._mem_user_state.clear()
+
+
+async def test_replay_case_auth_failure_scope_cleans_only_owned_keys(backend):
+    from core import auth_state
+
+    ip = "192.0.2.241"
+    unrelated = "mfa-replay-unrelated:" + uuid.uuid4().hex
+    await backend.cache.set(unrelated, "preserve")
+    try:
+        async with _case_auth_failure_scope(backend.cache, ip):
+            assert not await auth_state.record_auth_failure(ip)
+            assert await backend.cache.get(f"auth:failures:{ip}") == "1"
+            await backend.cache.set(f"auth:blocked:{ip}", "case-owned")
+        assert await backend.cache.mget(f"auth:failures:{ip}", f"auth:blocked:{ip}") == [None, None]
+        assert await backend.cache.get(unrelated) == "preserve"
+    finally:
+        await backend.cache.delete(unrelated)
+
+
+async def test_replay_case_auth_failure_scope_refuses_preexisting_keys(backend):
+    ip = "192.0.2.242"
+    keys = (f"auth:failures:{ip}", f"auth:blocked:{ip}")
+    assert await backend.cache.mget(*keys) == [None, None]
+    await backend.cache.set(keys[0], "preexisting")
+    try:
+        with pytest.raises(AssertionError, match="already has authentication state"):
+            async with _case_auth_failure_scope(backend.cache, ip):
+                pytest.fail("Pre-existing authentication state must not be admitted")
+        assert await backend.cache.mget(*keys) == ["preexisting", None]
+    finally:
+        await backend.cache.delete(*keys)
+
+
+async def test_replay_case_repr_omits_api_token(case):
+    assert case.api_token not in repr(case)
 
 
 async def _owner_change(case, user, **values):
