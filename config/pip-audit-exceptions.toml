@@ -29,3 +29,9 @@ package = "grantex-agent-httpsig"
 reason = "Not published to PyPI; installed from a pinned commit of the Grantex repository. Its only dependency (cryptography) is audited here."
 owner = "@mishrasanjeev"
 expires = 2027-01-15
+
+[[skip]]
+package = "en-core-web-sm"
+reason = "spaCy English model, not published to PyPI; the API image installs the publisher's 3.8.0 release wheel pinned by SHA-256 in the Dockerfile. Its spacy dependency is audited here."
+owner = "@mishrasanjeev"
+expires = 2026-12-24
