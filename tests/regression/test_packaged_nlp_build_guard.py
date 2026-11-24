@@ -41,6 +41,21 @@ def test_runtime_probe_discards_only_its_generated_suffix_cache_in_the_same_run(
     ) in dockerfile
 
 
+def test_spacy_model_is_pinned_by_url_and_hash_and_its_audit_skip_is_dated():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    builder = dockerfile[:dockerfile.rindex("\nFROM ")]
+    assert "-m spacy download" not in dockerfile, "an unpinned model download resolves at build time"
+    pin = (
+        '"en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/'
+        'en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl'
+        '#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85"'
+    )
+    assert f"RUN pip install --no-cache-dir {pin}" in builder
+    skips = tomllib.loads((ROOT / "config" / "pip-audit-exceptions.toml").read_text(encoding="utf-8"))["skip"]
+    model = [entry for entry in skips if entry["package"] == "en-core-web-sm"]
+    assert len(model) == 1 and model[0]["owner"] and model[0]["expires"]
+
+
 @pytest.mark.parametrize("install_set", ["v4", "dev", "requirements-v4.txt"])
 def test_nlp_install_sets_pin_only_the_confirmed_python_314_compatibility(install_set):
     if install_set in {"v4", "dev"}:

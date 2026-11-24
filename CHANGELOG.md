@@ -2,6 +2,12 @@
 
 ## Unreleased - Release integration fixes
 
+- Install the spaCy English model in the API image from the publisher's 3.8.0 release
+  wheel pinned by URL and SHA-256, instead of `spacy download`, which resolved the model
+  at build time. The model is not on PyPI, so `scripts/run_pip_audit.py` cannot audit it;
+  a dated `[[skip]]` entry in `config/pip-audit-exceptions.toml` records that, and a
+  regression test keeps the pin and the entry together.
+
 - Prerender the public plans and the live product counts, so crawlers that do not run
   JavaScript read them instead of "Loading the complete billing catalog..." and
   "Unavailable". The pricing page now starts from a build snapshot of

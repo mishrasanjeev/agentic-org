@@ -34,7 +34,11 @@ RUN python -m playwright install chromium
 # detection. Without a language model the AnalyzerEngine constructor raises
 # OSError and every agent run 500s with "util.py:531 (OSError)". Bake the
 # smallest English model into the image so PII redaction actually runs.
-RUN python -m spacy download en_core_web_sm
+# The model is not on PyPI, so it is pinned to the publisher's release wheel by
+# URL and SHA-256 (pip verifies the hash) instead of resolving whatever
+# `spacy download` selects at build time. pip-audit cannot audit it; see the
+# dated [[skip]] entry in config/pip-audit-exceptions.toml.
+RUN pip install --no-cache-dir "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85"
 
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 RUN apt-get update -o Acquire::Retries=0 && apt-get upgrade -y -o Acquire::Retries=0 \
