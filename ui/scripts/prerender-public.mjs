@@ -44,6 +44,60 @@ export function visibleMarkup(rendered) {
   return document.body.innerHTML;
 }
 
+export const DEFAULT_PRODUCT_FACTS_URL = "https://app.agenticorg.ai/api/v1/product-facts";
+
+// Reads the live product facts for the build. Returns null (and the pages keep
+// their "Unavailable" copy) when the endpoint is off, unreachable, or returns
+// anything but fully populated facts, so an offline build still succeeds.
+// AGENTICORG_PRODUCT_FACTS_URL points the build at another environment;
+// "off" skips the request.
+export async function fetchProductFacts(parse, {
+  url = process.env.AGENTICORG_PRODUCT_FACTS_URL || DEFAULT_PRODUCT_FACTS_URL,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = 10_000,
+  warn = console.warn,
+} = {}) {
+  if (url === "off") return null;
+  try {
+    const response = await fetchImpl(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const facts = parse(await response.json());
+    if (!facts) throw new Error("response did not carry populated product facts");
+    return facts;
+  } catch (error) {
+    warn("Product facts not seeded from " + url + ": " + (error?.message || error));
+    return null;
+  }
+}
+
+// A non-executable JSON data block, so the page's CSP script hashes are unaffected.
+export function productFactsSeedTag(id, facts) {
+  return '<script type="application/json" id="' + id + '">' +
+    JSON.stringify(facts).replace(/</g, "\\u003c") + "</script>";
+}
+
+const ALWAYS_FORBIDDEN = [
+  ["the pricing loading banner", /Loading the complete billing catalog/],
+  ["the pricing failure banner", /complete billing catalog is unavailable/],
+];
+const FORBIDDEN_WHEN_FACTS_SEEDED = [
+  ["a pending version", /Version pending/],
+  ["an unavailable product count", />\s*Unavailable\s*</],
+];
+
+// Prerendered HTML is what crawlers read; it must never be a loading state.
+export function assertNoPlaceholders(markup, path, factsSeeded) {
+  const rules = factsSeeded ? [...ALWAYS_FORBIDDEN, ...FORBIDDEN_WHEN_FACTS_SEEDED] : ALWAYS_FORBIDDEN;
+  for (const [label, pattern] of rules) {
+    if (pattern.test(markup)) {
+      throw new Error("Prerendered " + path + " contains " + label);
+    }
+  }
+}
+
 export function evalsMarkup(route) {
   return renderToStaticMarkup(React.createElement("main", { className: "min-h-screen mx-auto max-w-5xl px-6 py-12" },
     React.createElement("h1", { className: "text-3xl font-bold" }, route.name),
@@ -66,10 +120,18 @@ export async function prerenderPublic(root = UI_ROOT) {
     logLevel: "error",
   });
   let count = 0;
+  let seedGlobal = null;
   try {
     const { default: App } = await server.ssrLoadModule("/src/App.tsx");
     const { AuthProvider } = await server.ssrLoadModule("/src/contexts/AuthContext.tsx");
     const { BrandingProvider } = await server.ssrLoadModule("/src/contexts/BrandingContext.tsx");
+    const productFactsModule = await server.ssrLoadModule("/src/lib/productFacts.ts");
+    const facts = await fetchProductFacts(productFactsModule.parseProductFacts);
+    if (facts) {
+      seedGlobal = productFactsModule.PRODUCT_FACTS_SEED_GLOBAL;
+      globalThis[seedGlobal] = facts;
+    }
+    const seedTag = facts ? productFactsSeedTag(productFactsModule.PRODUCT_FACTS_SEED_ID, facts) : "";
     for (const route of routes.filter((item) => item.index !== false)) {
       const markup = route.path === "/evals"
         ? evalsMarkup(route)
@@ -77,16 +139,19 @@ export async function prerenderPublic(root = UI_ROOT) {
       if ((markup.match(/<h1\b/gi) || []).length !== 1) {
         throw new Error("Public route did not render exactly one heading: " + route.path);
       }
+      assertNoPlaceholders(markup, route.path, Boolean(facts));
       for (const path of outputPathsForRoute(root, route, routes)) {
         const html = readFileSync(path, "utf8");
-        const next = html.replace(/<noscript>[\s\S]*?<\/noscript>\s*/, "")
+        let next = html.replace(/<noscript>[\s\S]*?<\/noscript>\s*/, "")
           .replace('<div id="root"></div>', '<div id="root">' + markup + "</div>");
+        if (seedTag) next = next.replace("</head>", "  " + seedTag + "\n</head>");
         if (next === html) throw new Error("Prerender insertion failed: " + path);
         writeFileSync(path, next, "utf8");
       }
       count += 1;
     }
   } finally {
+    if (seedGlobal) delete globalThis[seedGlobal];
     await server.close();
   }
   return count;
