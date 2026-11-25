@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import itertools
 import os
 import secrets
 import time
@@ -46,6 +47,11 @@ pytestmark = [
     pytest.mark.asyncio(loop_scope="module"), pytest.mark.ambient_redis,
     pytest.mark.real_flag_store, pytest.mark.real_flag_lookup,
 ]
+
+# The backend (and its Redis DB) lives for the whole module, so per-IP auth failure counters
+# from earlier cases are still inside their window when later cases run. Each case gets its
+# own documentation-range address so a later case never reads an earlier case's counter.
+_CASE_HOSTS = itertools.count(1)
 
 _TABLES = ("tenants", "companies", "departments", "users", "api_keys")
 _MFA_FIELDS = (
@@ -336,7 +342,9 @@ async def case(backend):
         ))
         await session.commit()
     auth_state._mem_user_state.clear()
-    instance = _Case(backend, *users, key_id, api_token, f"192.0.2.{secrets.randbelow(240) + 1}")
+    host = next(_CASE_HOSTS)
+    assert host < 255, "Ran out of distinct 192.0.2.0/24 client addresses for replay cases"
+    instance = _Case(backend, *users, key_id, api_token, f"192.0.2.{host}")
     try:
         with database.session_factory_scope(lambda: backend.factory):
             yield instance
