@@ -2,6 +2,16 @@
 
 ## Unreleased - Release integration fixes
 
+- Make the tool gateway's `execute` audit rows usable as evidence. A dispatched call's row
+  now names what authorised it (`authorized_by`: `grant`, `run_grant` or `legacy_scopes`)
+  and the `grant_id` of the grant verified for it (plus `run_grant_id` when the run's grant
+  differs); error rows carry the same. `input_hash` and `output_hash` are now the full
+  `sha256:` digest over the canonical JSON of what the connector received and returned,
+  the same digest the governed-case evidence `tool_call` records use, instead of the first
+  16 hex characters of a hash over the printed, PII-masked values. Digests now reach the row
+  unmasked through `AuditLogger.log(digests=...)`, which accepts only `sha256:` digests: the
+  PII masking patterns rewrote digit runs in about one digest in eight. Rows written
+  before this change keep the old 16-character values.
 - Prerender the public plans and the live product counts, so crawlers that do not run
   JavaScript read them instead of "Loading the complete billing catalog..." and
   "Unavailable". The pricing page now starts from a build snapshot of
