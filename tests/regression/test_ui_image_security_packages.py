@@ -57,6 +57,7 @@ def test_api_runtime_rejects_cached_vulnerable_packages(package: str, minimum: s
         ("apt", "3.0.4"),
         ("libapt-pkg7.0", "3.0.4"),
         ("zlib1g", "1:1.3.dfsg+really1.3.1-1+deb13u1"),
+        ("libzstd1", "1.5.7+dfsg-1+deb13u1"),
     ],
 )
 def test_mcp_runtime_requires_fixed_security_packages(package: str, minimum: str) -> None:
