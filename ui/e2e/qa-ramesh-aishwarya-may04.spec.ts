@@ -113,6 +113,9 @@ test("OAuth2 connector setup registers internally without external authorization
   await expect(page.getByPlaceholder(/refresh token/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Register Connector" }).click();
 
+  // The click returns before the create request reaches the route handler.
+  // The page goes back to the connector list only after that request succeeds.
+  await expect(page).toHaveURL(/\/dashboard\/connectors$/);
   expect(createBody).toMatchObject({
     name: "gmail",
     auth_type: "oauth2",
