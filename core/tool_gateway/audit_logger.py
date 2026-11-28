@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,6 +15,8 @@ from core.config import settings
 from core.governance.audit_chain_link import SIGNED_COLUMNS, canonical_audit_payload, canonical_value
 
 logger = structlog.get_logger()
+
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 # The signed columns and their serialisation live in core.governance.audit_chain_link,
 # which has no dependencies, so the offline ledger verifier can load them by path.
@@ -112,9 +116,20 @@ class AuditLogger:
         actor_id: str | None = None,
         trace_id: str | None = None,
         enforcement_action: str | None = None,
+        digests: Mapping[str, str] | None = None,
     ) -> None:
-        """Write an audit log entry. Never update or delete."""
+        """Write an audit log entry. Never update or delete.
+
+        ``details`` is PII-masked. ``digests`` (``sha256:`` plus 64 lower-case hex digits
+        each) is added to the details after masking, because the masking patterns rewrite
+        digit runs inside a digest; anything else there is refused with ``ValueError``.
+        """
         from core.tool_gateway.pii_masker import mask_pii
+
+        verbatim = dict(digests or {})
+        for key, value in verbatim.items():
+            if not isinstance(value, str) or not _DIGEST.fullmatch(value):
+                raise ValueError(f"audit digest {key!r} is not a sha256 digest")
 
         now = datetime.now(UTC)
         enriched_details = dict(details or {})
@@ -138,7 +153,7 @@ class AuditLogger:
             "resource_id": resource_id or tool_name,
             "action": action,
             "outcome": outcome,
-            "details": mask_pii(enriched_details),
+            "details": {**mask_pii(enriched_details), **verbatim},
             "trace_id": trace_id or "",
             "created_at": now.isoformat(),
         }

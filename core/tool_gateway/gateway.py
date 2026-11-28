@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import hashlib
 import inspect
 import time
 from collections.abc import Awaitable, Callable
@@ -30,6 +29,7 @@ from core.tool_gateway import registry as tool_registry
 from core.tool_gateway.audit_logger import AuditLogger
 from core.tool_gateway.idempotency import IdempotencyStore
 from core.tool_gateway.pii_masker import mask_pii
+from core.tool_gateway.provider_gateway import canonical_sha256
 from core.tool_gateway.rate_limiter import RateLimiter
 
 logger = structlog.get_logger()
@@ -267,8 +267,11 @@ class ToolGateway:
                     "governance": details,
                 }
 
-        # 1. Validate scope via Grantex enforce (manifest-based, offline JWT verification)
+        # 1. Validate scope via Grantex enforce: the grant JWT is verified against Grantex's
+        # JWKS, the tool against its manifest, and revocation as the client is configured.
         effective_token = grant_token or getattr(self, "_current_grant_token", None)
+        # What authorised the dispatch, for the execute audit row: the grant id is never the token.
+        authorization: dict[str, Any] = {"authorized_by": "", "grant_id": None}
         if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
             check = await check_run_grant(
                 run_grant,
@@ -305,6 +308,8 @@ class ToolGateway:
                         "sub_reason": check.denial.sub_reason,
                     }
                 }
+            if run_grant.grant_id:
+                authorization = {"authorized_by": "run_grant", "grant_id": run_grant.grant_id}
 
         if effective_token:
             from core.langgraph.grantex_auth import get_grantex_client
@@ -332,6 +337,11 @@ class ToolGateway:
                         details={"reason": result.reason},
                     )
                 return {"error": {"code": "E1007", "message": f"scope_denied: {result.reason}"}}
+            verified_grant_id = str(getattr(result, "grant_id", "") or "") or None
+            run_grant_id = authorization["grant_id"]
+            authorization = {"authorized_by": "grant", "grant_id": verified_grant_id or run_grant_id}
+            if run_grant_id and verified_grant_id and run_grant_id != verified_grant_id:
+                authorization["run_grant_id"] = run_grant_id
         elif agent_scopes:
             # Legacy fallback for HS256 tokens without Grantex
             resource = tool_name.split("_", 1)[-1] if "_" in tool_name else tool_name
@@ -373,6 +383,8 @@ class ToolGateway:
                         details={"reason": reason},
                     )
                 return {"error": {"code": code, "message": f"{action_type}: {reason}"}}
+            if not authorization["authorized_by"]:
+                authorization["authorized_by"] = "legacy_scopes"
         else:
             # A missing grant must never turn into an authorization bypass.
             # Legacy callers remain supported only when they provide an
@@ -460,7 +472,7 @@ class ToolGateway:
 
         # Execute with RAW params — connectors need the real values
         # (account numbers, emails, identifiers) to perform the business
-        # action. PII is masked ONLY for audit logging below.
+        # action. The audit row below carries only their digests.
         try:
             if registry_check is not None and registry_check.registration is not None:
                 # The registered envelope: a timeout, an output cap, the output schema, untrusted output.
@@ -474,12 +486,7 @@ class ToolGateway:
                 result = await connector.execute_tool(tool_name, params)
             latency_ms = int((time.monotonic() - start_time) * 1000)
 
-            # 5. Mask PII in params + result for audit/logging ONLY —
-            # never feed the masked version to the connector.
-            masked_params = mask_pii(params) if isinstance(params, dict) else params
-            masked_result = mask_pii(result) if isinstance(result, dict) else result
-
-            # 6. Store idempotency result (unmasked — it's server-side).
+            # 5. Store idempotency result (unmasked — it's server-side).
             # An error payload is not a completed side effect: release the
             # reservation so a retry with the same key can run.
             if scoped_idempotency_key and self.idempotency:
@@ -488,21 +495,19 @@ class ToolGateway:
                 else:
                     await self.idempotency.store(tenant_id, scoped_idempotency_key, result)
 
-            # 7. Audit log (masked)
+            # 6. Audit log. The hashes are SHA-256 over the canonical JSON of what the
+            # connector received and returned (the digest the governed-case evidence
+            # records use), so a row can be matched to its evidence ``tool_call``.
+            # Only digests and the grant id are recorded, never the values.
             if self.audit:
-                input_hash = hashlib.sha256(str(masked_params).encode()).hexdigest()[:16]
-                output_hash = hashlib.sha256(str(masked_result).encode()).hexdigest()[:16]
                 await self.audit.log(
                     tenant_id=tenant_id,
                     agent_id=agent_id,
                     tool_name=tool_name,
                     action="execute",
                     outcome="success",
-                    details={
-                        "latency_ms": latency_ms,
-                        "input_hash": input_hash,
-                        "output_hash": output_hash,
-                    },
+                    details={"latency_ms": latency_ms, **authorization},
+                    digests={"input_hash": canonical_sha256(params), "output_hash": canonical_sha256(result)},
                 )
 
             return result
@@ -518,7 +523,8 @@ class ToolGateway:
                     tool_name=tool_name,
                     action="execute",
                     outcome="error",
-                    details={"error": str(e), "latency_ms": latency_ms},
+                    details={"error": str(e), "latency_ms": latency_ms, **authorization},
+                    digests={"input_hash": canonical_sha256(params)},
                 )
             return {"error": {"code": "E1001", "message": str(e)}}
 

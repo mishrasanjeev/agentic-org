@@ -1477,8 +1477,8 @@ def sec07_tool_gateway(pdf: FuncSpecPdf) -> None:
     pdf.sub_title("7.5  Audit Logging")
     pdf.body(
         "Every tool execution is logged with: tool_name, agent_id, tenant_id, "
-        "input_hash (SHA256 of input, truncated to first 16 chars), output_hash "
-        "(SHA256 of output, truncated to first 16 chars), latency_ms, status, "
+        "input_hash and output_hash (sha256 over the canonical JSON of the input "
+        "and output), the grant id that authorised it, latency_ms, status, "
         "error_code (if any), timestamp. Logs are append-only with HMAC-SHA256 "
         "tamper detection and cannot be modified or deleted (WORM policy)."
     )
